@@ -59,6 +59,9 @@ class InAppUpdater {
             @JsonProperty("changelog") val changelog: String?,
         )
 
+        /** GitHub repo whose releases are offered as updates (the fork, not upstream). */
+        private const val UPDATE_REPO = "Techno453/QuickNovel"
+
         private val mapper = JsonMapper.builder().addModule(
             KotlinModule.Builder()
                 .withReflectionCacheSize(512)
@@ -73,7 +76,7 @@ class InAppUpdater {
 
         private suspend fun Activity.getAppUpdate(): Update {
             try {
-                val url = "https://api.github.com/repos/LagradOst/QuickNovel/releases/latest"
+                val url = "https://api.github.com/repos/$UPDATE_REPO/releases/latest"
                 val headers = mapOf("Accept" to "application/vnd.github.v3+json")
                 val response =
                     mapper.readValue<GithubRelease>(app.get(url, headers = headers).text)
