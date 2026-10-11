@@ -23,6 +23,7 @@ import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationEngine
+import com.lagradost.quicknovel.ui.common.TitleTranslation
 import com.lagradost.quicknovel.util.GoogleTranslate
 import com.mihon.common.preference.PreferenceData
 import com.mihon.presentation.settings.Preference
@@ -127,6 +128,7 @@ object TranslationSettings {
                 preference = titles,
                 onValueChanged = {
                     GoogleTranslate.clearCache()
+                    TitleTranslation.invalidate()
                     true
                 },
             ),

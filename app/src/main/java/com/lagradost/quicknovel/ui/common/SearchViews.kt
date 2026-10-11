@@ -245,8 +245,9 @@ fun SearchResponseRow(
                 .padding(10.dp)
                 .weight(1.0f)
         ) {
+            val displayName by rememberDisplayName(response)
             Text(
-                response.name,
+                displayName,
                 maxLines = 2,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 14.sp,
@@ -544,8 +545,9 @@ fun SearchResponseItem(
                 .padding(horizontal = 5.dp),
             contentAlignment = Alignment.Center
         ) {
+            val displayName by rememberDisplayName(response)
             Text(
-                text = response.name,
+                text = displayName,
                 fontSize = 13.sp,
                 lineHeight = 14.sp,
                 color = MaterialTheme.colorScheme.onBackground,
