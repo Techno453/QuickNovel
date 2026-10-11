@@ -23,7 +23,7 @@ class GlossaryAdapter(
     inner class ViewHolder(val binding: ItemGlossaryTermBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(term: GlossaryTerm) {
-            binding.termChinese.text = term.chinese
+            binding.termChinese.text = term.source
             binding.termEnglish.text = term.english
             binding.termCategory.text = term.category
             binding.termDescription.text = term.description.ifBlank { "" }

@@ -65,6 +65,9 @@ import com.lagradost.quicknovel.ui.toScroll
 import com.lagradost.quicknovel.ui.toUiText
 import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.translator.ChapterTranslationRepository
+import com.lagradost.quicknovel.translator.TranslationLanguages
+import com.lagradost.quicknovel.translator.TranslatorNovelId
 import com.lagradost.quicknovel.util.CoilImagesPlugin
 import com.lagradost.quicknovel.util.CoilImagesPlugin.CoilStore
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
@@ -219,8 +222,8 @@ abstract class AbstractBook {
 
     abstract fun author(): String?
 
-    /** Returns true if this book comes from a Chinese (zh) source. */
-    open fun isChineseSource(): Boolean = false
+    /** Returns true if this book comes from a translatable (zh/ja/ko) source. */
+    open fun isTranslatableSource(): Boolean = false
 }
 
 class QuickBook(val data: QuickStreamData) : AbstractBook() {
@@ -232,8 +235,8 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
         return data.meta.author
     }
 
-    override fun isChineseSource(): Boolean =
-        Apis.getApiFromNameNull(data.meta.apiName)?.lang == "zh"
+    override fun isTranslatableSource(): Boolean =
+        TranslationLanguages.isTranslatableApi(data.meta.apiName)
 
     override val canReload = true
 
@@ -256,18 +259,13 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     override suspend fun getChapterData(index: Int, reload: Boolean): String {
         val ctx = context ?: throw ErrorLoadingException("Invalid context")
 
-        // Check if a translation exists in the Room DB for Chinese sources
-        val api = com.lagradost.quicknovel.util.Apis.getApiFromNameNull(data.meta.apiName)
-        if (api?.lang == "zh" && !reload) {
-            val novelId = com.lagradost.quicknovel.translator.TranslatorNovelId.from(
-                data.meta.apiName, data.meta.name
-            )
-            val translationDao = com.lagradost.quicknovel.translator.db.TranslatorDatabase
-                .getInstance(ctx).translationDao()
-            val translated = translationDao.getTranslation(novelId, index)
-            if (translated != null) {
-                return translated.englishText
-            }
+        // Translatable (zh/ja/ko) sources: stored AI translation, or on-demand translation if enabled
+        val sourceLang = TranslationLanguages.langOfApi(data.meta.apiName)
+        if (sourceLang != null && !reload) {
+            val novelId = TranslatorNovelId.from(data.meta.apiName, data.meta.name)
+            ChapterTranslationRepository.getOrTranslate(ctx, novelId, index, sourceLang) {
+                ctx.getQuickChapter(data.meta, data.data[index], index, false)?.html
+            }?.let { return it }
         }
 
         return ctx.getQuickChapter(
@@ -350,8 +348,8 @@ class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBoo
 
     override val canReload = false
 
-    // novelId is only set when opened from the translation pipeline (Chinese source)
-    override fun isChineseSource(): Boolean = novelId != null
+    // novelId is only set when opened from the translation pipeline (zh/ja/ko source)
+    override fun isTranslatableSource(): Boolean = novelId != null
 
     override fun author(): String? {
         val author = data.metadata.authors.firstOrNull() ?: return null
@@ -381,11 +379,7 @@ class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBoo
         if (novelId != null && !reload) {
             val ctx = context
             if (ctx != null) {
-                val translated = com.lagradost.quicknovel.translator.db.TranslatorDatabase
-                    .getInstance(ctx).translationDao().getTranslation(novelId, index)
-                if (translated != null) {
-                    return translated.englishText
-                }
+                ChapterTranslationRepository.getCached(ctx, novelId, index)?.let { return it }
             }
         }
 

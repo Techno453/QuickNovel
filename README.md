@@ -22,6 +22,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://graycity.net
 - https://hiraethtranslation.com
 - https://indowebnovel.id
+- https://kakuyomu.jp (Japanese)
 - https://libread.com
 - https://lightnovelstranslations.com
 - https://lightnovelworld.org
@@ -33,6 +34,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://novelbuddy.com
 - https://novelfire.net
 - https://novelfull.com
+- https://novelpia.com (Korean, free episodes only)
 - https://novelsonline.org
 - https://novlove.com
 - https://pawread.com
@@ -49,6 +51,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://wtr-lab.com
 - https://wuxia.click
 - https://www.wuxiabox.com
+- https://www.69shuba.com (Chinese)
 
 **Screenshoots:**
 

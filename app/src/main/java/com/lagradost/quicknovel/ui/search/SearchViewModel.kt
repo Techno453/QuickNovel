@@ -11,6 +11,7 @@ import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.OnGoingSearch
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.mvvm.Resource
+import com.lagradost.quicknovel.translator.SearchQueryTranslator
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.amap
@@ -67,7 +68,10 @@ class SearchViewModel : ViewModel() {
                 (providersActive.isEmpty() || providersActive.contains(a.name))
             }.amap { a ->
                 if(!isActive) return@amap
-                currentList.add(OnGoingSearch(a.name, a.search(query)))
+                // AI-translated search: zh/ja/ko providers get the query translated into their
+                // language (setting "Translate search queries"); falls back to the original query.
+                val providerQuery = SearchQueryTranslator.translateQuery(query, a.api.lang)
+                currentList.add(OnGoingSearch(a.name, a.search(providerQuery)))
                 if (localSearchCounter == searchCounter) {
                     _currentSearch.postValue(currentList)
                 }
