@@ -42,7 +42,7 @@ class AddTermDialogFragment : DialogFragment() {
         binding.termCategorySpinner.adapter = adapter
 
         existingTerm?.let { term ->
-            binding.termChineseInput.setText(term.chinese)
+            binding.termChineseInput.setText(term.source)
             binding.termEnglishInput.setText(term.english)
             binding.termDescriptionInput.setText(term.description)
             val catIndex = CATEGORIES.indexOf(term.category)
@@ -53,17 +53,17 @@ class AddTermDialogFragment : DialogFragment() {
             .setTitle(if (existingTerm != null) "Edit Term" else "Add Glossary Term")
             .setView(binding.root)
             .setPositiveButton("Save") { _, _ ->
-                val chinese = binding.termChineseInput.text.toString().trim()
+                val sourceTerm = binding.termChineseInput.text.toString().trim()
                 val english = binding.termEnglishInput.text.toString().trim()
                 val category = CATEGORIES[binding.termCategorySpinner.selectedItemPosition]
                 val description = binding.termDescriptionInput.text.toString().trim()
 
-                if (chinese.isNotBlank() && english.isNotBlank()) {
+                if (sourceTerm.isNotBlank() && english.isNotBlank()) {
                     viewModel.addTerm(
                         GlossaryTerm(
                             id = if (existingTerm != null) existingTerm.id else 0,
                             novelId = viewModel.novelId,
-                            chinese = chinese,
+                            source = sourceTerm,
                             english = english,
                             category = category,
                             description = description

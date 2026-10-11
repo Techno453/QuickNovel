@@ -111,7 +111,7 @@ class GlossaryFragment : Fragment() {
     private fun confirmDelete(term: GlossaryTerm) {
         AlertDialog.Builder(requireContext())
             .setTitle("Delete Term")
-            .setMessage("Delete \"${term.chinese} → ${term.english}\"?")
+            .setMessage("Delete \"${term.source} → ${term.english}\"?")
             .setPositiveButton("Delete") { _, _ -> viewModel.deleteTerm(term) }
             .setNegativeButton("Cancel", null)
             .show()

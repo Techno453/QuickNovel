@@ -19,8 +19,8 @@ import kotlinx.coroutines.withContext
 
 class ChapterAdapter(
     val viewModel: ResultViewModel,
-    /** Whether this novel comes from a Chinese (zh) source. Updated once API is loaded. */
-    private var isChineseSource: Boolean = false
+    /** Whether this novel comes from a translatable (zh/ja/ko) source. Updated once API is loaded. */
+    private var isTranslatableSource: Boolean = false
 ) :
     NoStateAdapter<ChapterData>(
         diffCallback = BaseDiffCallback(
@@ -36,9 +36,9 @@ class ChapterAdapter(
     }
 
     /** Call this once the API is loaded so chapter names get translated if appropriate. */
-    fun setIsChineseSource(value: Boolean) {
-        if (isChineseSource != value) {
-            isChineseSource = value
+    fun setIsTranslatableSource(value: Boolean) {
+        if (isTranslatableSource != value) {
+            isTranslatableSource = value
             notifyItemRangeChanged(0, itemCount)
         }
     }
@@ -85,7 +85,7 @@ class ChapterAdapter(
             name.tag = null
 
             val ctx = name.context
-            if (isChineseSource && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
+            if (isTranslatableSource && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
                 val job = CoroutineScope(Dispatchers.Main).launch {
                     val translated = withContext(Dispatchers.IO) {
                         GoogleTranslate.translate(item.name)

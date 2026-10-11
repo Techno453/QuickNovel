@@ -76,6 +76,7 @@ import com.lagradost.quicknovel.util.UIHelper.setImage
 import com.lagradost.safefile.SafeFile
 import androidx.lifecycle.lifecycleScope
 import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.GoogleTranslate
 import kotlinx.coroutines.Dispatchers
@@ -674,8 +675,8 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
 
-                        val isZh = Apis.getApiFromNameNull(viewModel.apiName)?.lang == "zh"
-                        if (isZh && SecurePrefs.isGoogleTranslateTitlesEnabled(this@MainActivity)) {
+                        val isTranslatableSource = TranslationLanguages.isTranslatableApi(viewModel.apiName)
+                        if (isTranslatableSource && SecurePrefs.isGoogleTranslateTitlesEnabled(this@MainActivity)) {
                             lifecycleScope.launch {
                                 val translatedTitle = withContext(Dispatchers.IO) {
                                     GoogleTranslate.translate(d.name)
@@ -755,6 +756,9 @@ class MainActivity : AppCompatActivity() {
         ioSafe {
             runAutoUpdate()
         }
+
+        // Build the (slow) encrypted translator prefs off the main thread.
+        ioSafe { SecurePrefs.warmUp(this@MainActivity) }
 
         handleIntent(intent)
 

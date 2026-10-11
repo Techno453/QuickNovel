@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.HistoryResultCompactBinding
 import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.ui.NoStateAdapter
 import com.lagradost.quicknovel.ui.ViewHolderState
 import com.lagradost.quicknovel.util.Apis
@@ -66,8 +67,8 @@ class HistoryAdapter(private val viewModel: HistoryViewModel) :
             imageText.tag = null
 
             val ctx = imageText.context
-            val isZh = Apis.getApiFromNameNull(item.apiName)?.lang == "zh"
-            if (isZh && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
+            val isTranslatableSource = TranslationLanguages.isTranslatableApi(item.apiName)
+            if (isTranslatableSource && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
                 val job = CoroutineScope(Dispatchers.Main).launch {
                     val translated = withContext(Dispatchers.IO) {
                         GoogleTranslate.translate(item.name)

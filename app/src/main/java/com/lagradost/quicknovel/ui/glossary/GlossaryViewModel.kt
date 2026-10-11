@@ -70,7 +70,7 @@ class GlossaryViewModel(application: Application) : AndroidViewModel(application
             glossaryDao.upsertTerm(
                 GlossaryTerm(
                     novelId = novelId,
-                    chinese = pending.chinese,
+                    source = pending.source,
                     english = english,
                     category = category
                 )
@@ -113,7 +113,7 @@ class GlossaryViewModel(application: Application) : AndroidViewModel(application
             val terms = presets.map { preset ->
                 GlossaryTerm(
                     novelId = novelId,
-                    chinese = preset.chinese,
+                    source = preset.chinese,
                     english = preset.english,
                     category = preset.category
                 )

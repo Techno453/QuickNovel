@@ -68,7 +68,7 @@ class PendingTermsDialogFragment : DialogFragment() {
         override fun onBindViewHolder(holder: VH, position: Int) {
             val term = items[position]
             holder.binding.apply {
-                pendingChinese.text = term.chinese
+                pendingChinese.text = term.source
                 pendingEnglishInput.setText(term.suggestedEnglish)
 
                 val categories = AddTermDialogFragment.CATEGORIES

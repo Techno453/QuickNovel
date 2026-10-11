@@ -866,7 +866,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.chaptersTitles) { titles ->
             binding.readActionChapters.setOnClickListener {
-                val shouldTranslate = viewModel.book.isChineseSource() &&
+                val shouldTranslate = viewModel.book.isTranslatableSource() &&
                     SecurePrefs.isGoogleTranslateTitlesEnabled(this)
 
                 fun showChapterDialog(displayTitles: List<String>) {

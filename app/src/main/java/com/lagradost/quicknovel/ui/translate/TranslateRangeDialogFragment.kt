@@ -12,6 +12,7 @@ import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.databinding.DialogTranslateRangeBinding
 import com.lagradost.quicknovel.translator.CostEstimator
 import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.TranslationLanguages
 
 class TranslateRangeDialogFragment : DialogFragment() {
     private val viewModel: TranslateViewModel by activityViewModels()
@@ -50,6 +51,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
         val novelAuthor = arguments?.getString("novel_author")
         val novelName = arguments?.getString("novel_name")
         val chapters = pendingChapters ?: emptyList()
+        val sourceLang = TranslationLanguages.langOfApi(apiName) ?: TranslationLanguages.DEFAULT
 
         viewModel.loadTranslatedNums(novelId)
 
@@ -73,12 +75,8 @@ class TranslateRangeDialogFragment : DialogFragment() {
             binding.chaptersToTranslate.text = "Chapters to translate: $toTranslate"
 
             val model = SecurePrefs.getModel(ctx)
-            val (_, cost) = CostEstimator.estimateCostForChapters(toTranslate, model)
-            val modelDisplay = when (model) {
-                SecurePrefs.MODEL_GPT4O -> "gpt-4o"
-                else -> "gpt-4o-mini"
-            }
-            binding.estimatedCost.text = "Est. cost: ${CostEstimator.formatCost(cost)} ($modelDisplay)"
+            val estimate = CostEstimator.estimateForChapters(toTranslate, model, sourceLang)
+            binding.estimatedCost.text = "Est. cost: ${CostEstimator.formatEstimate(estimate)} — $model, ${TranslationLanguages.displayName(sourceLang)} → English"
         }
 
         viewModel.translatedChapterNums.observe(this) { updateEstimates() }
@@ -104,7 +102,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
                 }
 
                 if (SecurePrefs.getApiKey(ctx).isNullOrBlank()) {
-                    Toast.makeText(ctx, "Set your OpenAI API key in Settings → Translation first", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, "Set your API key in Settings → Translation first", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
 

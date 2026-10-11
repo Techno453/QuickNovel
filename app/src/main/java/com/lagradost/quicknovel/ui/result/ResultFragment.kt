@@ -48,6 +48,7 @@ import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
 import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.translator.TranslatorNovelId
 import com.lagradost.quicknovel.ui.glossary.GlossaryFragment
 import com.lagradost.quicknovel.ui.translate.TranslateRangeDialogFragment
@@ -213,16 +214,16 @@ class ResultFragment : Fragment() {
                     resultTitle.text = res.name
                     resultAuthor.text = res.author ?: getString(R.string.no_author)
 
-                    // Translate title if this is a Chinese source and the toggle is on
-                    val isZhForTitle = repo?.api?.lang == "zh"
-                    if (isZhForTitle && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
+                    // Translate title if this is a translatable (zh/ja/ko) source and the toggle is on
+                    val isTranslatableForTitle = TranslationLanguages.isTranslatable(repo?.api?.lang)
+                    if (isTranslatableForTitle && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
                         viewLifecycleOwner.lifecycleScope.launch {
                             val translated = withContext(Dispatchers.IO) { GoogleTranslate.translate(res.name) }
                             resultTitle.text = translated
                         }
                     }
-                    // Update chapter adapter with correct isChineseSource now that repo is known
-                    (chapterList.adapter as? ChapterAdapter)?.setIsChineseSource(isZhForTitle)
+                    // Update chapter adapter with correct source flag now that repo is known
+                    (chapterList.adapter as? ChapterAdapter)?.setIsTranslatableSource(isTranslatableForTitle)
 
                     resultRatingVotedCount.text = getString(R.string.no_data)
                     res.rating?.let { rating ->
@@ -346,9 +347,9 @@ class ResultFragment : Fragment() {
                         }
                         resultSynopsisText.text = syno.html()
 
-                        // Translate synopsis if this is a Chinese source and the toggle is on
-                        val isZhForSynopsis = repo?.api?.lang == "zh"
-                        if (isZhForSynopsis && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
+                        // Translate synopsis if this is a translatable (zh/ja/ko) source and the toggle is on
+                        val isTranslatableForSynopsis = TranslationLanguages.isTranslatable(repo?.api?.lang)
+                        if (isTranslatableForSynopsis && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
                             viewLifecycleOwner.lifecycleScope.launch {
                                 val translatedFull = withContext(Dispatchers.IO) {
                                     GoogleTranslate.translate(synopsis)
@@ -377,8 +378,8 @@ class ResultFragment : Fragment() {
                             if (res.data.size == 1) getString(R.string.chapter) else getString(R.string.chapters)
                         resultQuickstream.isVisible = true
                         resultTotalChapters.isVisible = true
-                        val isChineseSource = repo?.api?.lang == "zh" && SecurePrefs.isTranslationEnabled(requireContext())
-                        resultTranslateHolder.isVisible = isChineseSource
+                        val showTranslate = TranslationLanguages.isTranslatable(repo?.api?.lang) && SecurePrefs.isTranslationEnabled(requireContext())
+                        resultTranslateHolder.isVisible = showTranslate
                         if (res.data.isNotEmpty()) {
                             resultTotalChapters.text =
                                 getString(R.string.latest_format).format(res.data.last().name)
@@ -792,8 +793,8 @@ class ResultFragment : Fragment() {
 
         binding.chapterList.apply {
             setRecycledViewPool(ChapterAdapter.sharedPool)
-            val isZhSource = repo?.api?.lang == "zh"
-            val mainPageAdapter = ChapterAdapter(viewModel, isChineseSource = isZhSource)
+            val isTranslatableSource = TranslationLanguages.isTranslatable(repo?.api?.lang)
+            val mainPageAdapter = ChapterAdapter(viewModel, isTranslatableSource = isTranslatableSource)
             adapter = mainPageAdapter
             setHasFixedSize(true)
         }

@@ -117,33 +117,61 @@
 
     <PreferenceCategory
             android:key="translation"
-            android:title="Translation (Chinese → English)"
+            android:title="AI Translation (Chinese / Japanese / Korean → English)"
             app:isPreferenceVisible="true">
 
         <Preference
                 android:icon="@drawable/ic_baseline_translate_24"
                 android:key="openai_api_key_pref"
-                android:title="OpenAI API Key"
-                android:summary="Set your API key for AI translation" />
+                android:title="API Key"
+                android:summary="API key for the OpenAI-compatible translation backend" />
+
+        <Preference
+                android:icon="@drawable/ic_baseline_translate_24"
+                android:key="openai_base_url_pref"
+                android:title="API Base URL"
+                android:summary="https://api.openai.com/v1" />
 
         <Preference
                 android:icon="@drawable/ic_baseline_translate_24"
                 android:key="openai_model_pref"
                 android:title="Translation Model"
-                android:summary="gpt-4o-mini (fast, cheap) or gpt-4o (best quality)" />
+                android:summary="gpt-4o-mini (fast, cheap), gpt-4o (best quality) or a custom model" />
 
         <SwitchPreference
                 android:icon="@drawable/ic_baseline_translate_24"
                 android:key="translation_enabled_pref"
                 android:title="Enable Translation UI"
-                android:summary="Show Translate button for Chinese sources"
+                android:summary="Show Translate button for Chinese, Japanese and Korean sources"
                 app:defaultValue="true" />
+
+        <SwitchPreference
+                android:icon="@drawable/ic_baseline_translate_24"
+                android:key="translate_on_demand_pref"
+                android:title="Translate on demand while reading"
+                android:summary="Translate untranslated chapters with AI when you open them (uses your API key)"
+                app:defaultValue="false" />
 
         <SwitchPreference
                 android:icon="@drawable/ic_baseline_translate_24"
                 android:key="gtranslate_titles_pref"
                 android:title="Auto-translate Titles &amp; Synopses"
                 android:summary="Use Google Translate (free) for search titles, chapter names, and synopses"
+                app:defaultValue="false" />
+
+        <SwitchPreference
+                android:icon="@drawable/search_icon"
+                android:key="translate_search_queries_pref"
+                android:title="Translate search queries"
+                android:summary="Search Chinese, Japanese and Korean sources with your query translated into their language"
+                app:defaultValue="true" />
+
+        <SwitchPreference
+                android:icon="@drawable/search_icon"
+                android:key="ai_search_queries_pref"
+                android:dependency="translate_search_queries_pref"
+                android:title="Use AI for search queries"
+                android:summary="Translate queries with the AI model instead of Google Translate (better for novel titles)"
                 app:defaultValue="false" />
 
     </PreferenceCategory>

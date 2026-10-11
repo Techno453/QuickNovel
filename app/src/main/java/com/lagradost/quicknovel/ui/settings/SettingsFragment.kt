@@ -568,73 +568,152 @@ class SettingsFragment : PreferenceFragmentCompat() {
             return@setOnPreferenceChangeListener true
         }*/
 
-        // Translation settings
+        // Translation settings (stored in translator SecurePrefs, not the default prefs)
+        val tPrefs = com.lagradost.quicknovel.translator.SecurePrefs
+        val llm = com.lagradost.quicknovel.translator.LlmConfig
+
+        fun textInputDialog(
+            ctx: android.content.Context,
+            title: String,
+            current: String,
+            hint: String,
+            inputType: Int = android.text.InputType.TYPE_CLASS_TEXT,
+            configure: (AlertDialog.Builder.(android.widget.EditText) -> Unit)? = null,
+            onSave: (String) -> Unit
+        ) {
+            val editText = android.widget.EditText(ctx)
+            editText.setText(current)
+            editText.inputType = inputType
+            editText.hint = hint
+            val builder = AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
+                .setTitle(title)
+                .setView(editText)
+                .setPositiveButton("Save") { _, _ -> onSave(editText.text.toString().trim()) }
+                .setNegativeButton(R.string.cancel, null)
+            configure?.invoke(builder, editText)
+            builder.show()
+        }
+
+        val baseUrlPref = findPreference<androidx.preference.Preference>("openai_base_url_pref")
+        val modelPref = findPreference<androidx.preference.Preference>("openai_model_pref")
+
+        fun refreshTranslationSummaries() {
+            val ctx = context ?: return
+            baseUrlPref?.summary = tPrefs.getBaseUrl(ctx)
+            modelPref?.summary = tPrefs.getModel(ctx).let { model ->
+                if (com.lagradost.quicknovel.translator.CostEstimator.isKnownModel(model)) model
+                else "$model (custom — cost estimates unavailable)"
+            }
+        }
+        refreshTranslationSummaries()
+
         findPreference<androidx.preference.Preference>("openai_api_key_pref")?.setOnPreferenceClickListener { pref ->
             val ctx = pref.context
-            val currentKey = com.lagradost.quicknovel.translator.SecurePrefs.getApiKey(ctx) ?: ""
-            val editText = android.widget.EditText(ctx)
-            editText.setText(currentKey)
-            editText.inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            editText.hint = "sk-..."
-
-            AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
-                .setTitle("OpenAI API Key")
-                .setView(editText)
-                .setPositiveButton("Save") { _, _ ->
-                    val key = editText.text.toString().trim()
-                    com.lagradost.quicknovel.translator.SecurePrefs.setApiKey(ctx, key)
-                    showToast(if (key.isNotBlank()) "API key saved" else "API key cleared")
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .setNeutralButton("Verify") { _, _ ->
-                    val key = editText.text.toString().trim()
-                    if (key.isBlank()) { showToast("Enter an API key first"); return@setNeutralButton }
-                    ioSafe {
-                        val model = com.lagradost.quicknovel.translator.SecurePrefs.getModel(ctx)
-                        val engine = com.lagradost.quicknovel.translator.TranslationEngine(key, model)
-                        val valid = engine.testApiKey()
-                        showToast(if (valid) "API key is valid!" else "Invalid API key")
+            textInputDialog(
+                ctx, "API Key", tPrefs.getApiKey(ctx) ?: "", "sk-...",
+                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                configure = { editText ->
+                    setNeutralButton("Verify") { _, _ ->
+                        val key = editText.text.toString().trim()
+                        if (key.isBlank()) {
+                            showToast("Enter an API key first"); return@setNeutralButton
+                        }
+                        ioSafe {
+                            val engine = com.lagradost.quicknovel.translator.TranslationEngine(
+                                apiKey = key,
+                                model = tPrefs.getModel(ctx),
+                                baseUrl = tPrefs.getBaseUrl(ctx)
+                            )
+                            val error = engine.verify()
+                            showToast(if (error == null) "API key is valid!" else "Verification failed: $error")
+                        }
                     }
                 }
-                .show()
+            ) { key ->
+                tPrefs.setApiKey(ctx, key)
+                showToast(if (key.isNotBlank()) "API key saved" else "API key cleared")
+            }
             true
         }
 
-        findPreference<androidx.preference.Preference>("openai_model_pref")?.setOnPreferenceClickListener { pref ->
+        baseUrlPref?.setOnPreferenceClickListener { pref ->
             val ctx = pref.context
-            val models = listOf(
-                "gpt-4o-mini" to "gpt-4o-mini (\$ — fast & cheap)",
-                "gpt-4o" to "gpt-4o (\$\$\$ — best quality)"
-            )
-            val current = com.lagradost.quicknovel.translator.SecurePrefs.getModel(ctx)
-            val currentIdx = models.indexOfFirst { it.first == current }.coerceAtLeast(0)
+            textInputDialog(
+                ctx, "API Base URL (OpenAI-compatible)", tPrefs.getBaseUrl(ctx), llm.DEFAULT_BASE_URL,
+                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI,
+                configure = {
+                    setNeutralButton("Default") { _, _ ->
+                        tPrefs.setBaseUrl(ctx, null)
+                        refreshTranslationSummaries()
+                    }
+                }
+            ) { url ->
+                tPrefs.setBaseUrl(ctx, url)
+                refreshTranslationSummaries()
+                showToast("Base URL: ${tPrefs.getBaseUrl(ctx)}")
+            }
+            true
+        }
+
+        modelPref?.setOnPreferenceClickListener { pref ->
+            val ctx = pref.context
+            val presets = llm.MODEL_PRESETS
+            val current = tPrefs.getModel(ctx)
+            val presetIdx = presets.indexOfFirst { it.first == current }
+            val labels = presets.map { it.second } +
+                    ("Custom…" + if (presetIdx < 0) " ($current)" else "")
+            val currentIdx = if (presetIdx >= 0) presetIdx else presets.size
 
             activity?.showBottomDialog(
-                models.map { it.second }, currentIdx,
+                labels, currentIdx,
                 "Translation Model", false, {}
             ) { idx ->
-                com.lagradost.quicknovel.translator.SecurePrefs.setModel(ctx, models[idx].first)
+                if (idx < presets.size) {
+                    tPrefs.setModel(ctx, presets[idx].first)
+                    refreshTranslationSummaries()
+                } else {
+                    textInputDialog(
+                        ctx, "Custom model name", if (presetIdx < 0) current else "",
+                        "e.g. gpt-4.1-mini, deepseek-chat, qwen-plus"
+                    ) { model ->
+                        if (model.isNotBlank()) tPrefs.setModel(ctx, model)
+                        refreshTranslationSummaries()
+                    }
+                }
             }
             true
         }
 
-        findPreference<androidx.preference.SwitchPreference>("translation_enabled_pref")
-            ?.setOnPreferenceChangeListener { _, newValue ->
-                val ctx = context ?: return@setOnPreferenceChangeListener true
-                com.lagradost.quicknovel.translator.SecurePrefs.setTranslationEnabled(ctx, newValue as Boolean)
-                true
-            }
-
-        findPreference<androidx.preference.SwitchPreference>("gtranslate_titles_pref")?.apply {
-            val ctx = context
-            // Sync the switch state from SecurePrefs (EncryptedSharedPreferences, not default prefs)
-            isChecked = com.lagradost.quicknovel.translator.SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)
-            setOnPreferenceChangeListener { _, newValue ->
-                com.lagradost.quicknovel.translator.SecurePrefs.setGoogleTranslateTitlesEnabled(ctx, newValue as Boolean)
-                com.lagradost.quicknovel.util.GoogleTranslate.clearCache()
-                true
+        fun bindSecureSwitch(
+            key: String,
+            get: (android.content.Context) -> Boolean,
+            set: (android.content.Context, Boolean) -> Unit,
+            onChanged: (() -> Unit)? = null
+        ) {
+            findPreference<androidx.preference.SwitchPreference>(key)?.apply {
+                val ctx = context
+                // Sync the switch from SecurePrefs (the source of truth)
+                isChecked = get(ctx)
+                setOnPreferenceChangeListener { _, newValue ->
+                    set(ctx, newValue as Boolean)
+                    onChanged?.invoke()
+                    true
+                }
             }
         }
+
+        bindSecureSwitch("translation_enabled_pref", tPrefs::isTranslationEnabled, tPrefs::setTranslationEnabled)
+        bindSecureSwitch("translate_on_demand_pref", tPrefs::isTranslateOnDemandEnabled, tPrefs::setTranslateOnDemandEnabled)
+        bindSecureSwitch(
+            "gtranslate_titles_pref",
+            tPrefs::isGoogleTranslateTitlesEnabled,
+            tPrefs::setGoogleTranslateTitlesEnabled
+        ) { com.lagradost.quicknovel.util.GoogleTranslate.clearCache() }
+        bindSecureSwitch("translate_search_queries_pref", tPrefs::isTranslateSearchEnabled, tPrefs::setTranslateSearchEnabled)
+        bindSecureSwitch(
+            "ai_search_queries_pref",
+            tPrefs::isAiSearchEnabled,
+            tPrefs::setAiSearchEnabled
+        ) { com.lagradost.quicknovel.translator.SearchQueryTranslator.clearCache() }
     }
 }

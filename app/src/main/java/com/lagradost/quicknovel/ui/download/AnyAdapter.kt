@@ -24,6 +24,7 @@ import com.lagradost.quicknovel.ui.BaseDiffCallback
 import com.lagradost.quicknovel.ui.NoStateAdapter
 import com.lagradost.quicknovel.ui.ViewHolderState
 import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.ResultCached
@@ -130,8 +131,8 @@ class AnyAdapter(
         imageText.tag = null
         imageText.text = name
         val ctx = imageText.context
-        val isZh = Apis.getApiFromNameNull(apiName)?.lang == "zh"
-        if (isZh && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
+        val isTranslatableSource = TranslationLanguages.isTranslatableApi(apiName)
+        if (isTranslatableSource && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
             val job = CoroutineScope(Dispatchers.Main).launch {
                 val translated = withContext(Dispatchers.IO) { GoogleTranslate.translate(name) }
                 if (imageText.tag === this.coroutineContext[Job]) {
