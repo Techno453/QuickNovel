@@ -370,6 +370,7 @@ object SettingScreen : SearchableSettings {
                     downloads,
                 )
             ),
+            TranslationSettings.preferenceGroup(),
             Preference.PreferenceGroup(
                 title = stringResource(R.string.info),
                 preferenceItems = persistentListOf(
