@@ -14,6 +14,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://graycity.net
 - https://hiraethtranslation.com
 - https://indowebnovel.id
+- https://kakuyomu.jp (Japanese)
 - https://kolnovel.com
 - https://libread.com
 - https://meionovels.com
@@ -21,6 +22,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://www.mtlnovels.com
 - https://novelbin.com
 - https://novelfull.com
+- https://novelpia.com (Korean, free episodes only)
 - https://novelsonline.org
 - https://pawread.com
 - https://readfrom.net
@@ -29,6 +31,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://sakuranovel.id
 - https://www.scribblehub.com
 - https://wtr-lab.com
+- https://www.69shuba.com (Chinese)
 
 **Screenshoots:**
 

@@ -11,6 +11,8 @@ import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.providers.AllNovelProvider
 import com.lagradost.quicknovel.providers.chinese.BiqugeProvider
+import com.lagradost.quicknovel.providers.japanese.KakuyomuProvider
+import com.lagradost.quicknovel.providers.korean.NovelpiaProvider
 import com.lagradost.quicknovel.providers.AnnasArchive
 import com.lagradost.quicknovel.providers.BestLightNovelProvider
 import com.lagradost.quicknovel.providers.FreewebnovelProvider
@@ -80,7 +82,9 @@ class Apis {
             // WattpadProvider(), // they have randomized the css classes
             WtrLabProvider(),
             PawReadProver(),
-            BiqugeProvider()
+            BiqugeProvider(),
+            KakuyomuProvider(),
+            NovelpiaProvider(),
         ).sortedBy { it.name }
 
         fun getApiFromName(name: String): APIRepository {
@@ -207,6 +211,8 @@ class Apis {
             val hashSet = HashSet<String>()
             hashSet.add("en")
             hashSet.add("zh")
+            hashSet.add("ja")
+            hashSet.add("ko")
             val list = settingsManager.getStringSet(
                 this.getString(R.string.provider_lang_key),
                 hashSet.toMutableSet()

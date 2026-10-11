@@ -15,6 +15,7 @@ import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.cleanChapterText
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.extractChineseTitle
+import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.paragraphs
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.textWithEncoding
 import com.lagradost.quicknovel.setStatus
 import com.lagradost.quicknovel.util.Coroutines.main
@@ -22,7 +23,9 @@ import kotlinx.coroutines.delay
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Entities
 import java.net.URLEncoder
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Provider for 69shuba.com — a GBK-encoded biquge-family Chinese novel site.
@@ -46,14 +49,13 @@ import java.net.URLEncoder
  * then reading the resulting verify cookie from CookieManager for the OkHttp POST.
  *
  * Cloudflare rate-limiting: CF triggers a JS challenge after ~30 rapid chapter requests.
- * We avoid it by pausing 20 s every 30 chapters so CF's sliding window resets.
+ * See the "Rate limiting" section below for how we stay under it.
  */
 class BiqugeProvider : MainAPI() {
     override val name = "Biquge (Chinese)"
     override val mainUrl = "https://www.69shuba.com"
     override val lang = "zh"
     override val hasMainPage = true
-    override val usesCloudFlareKiller = false
 
     private val headers = mapOf(
         "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
@@ -82,37 +84,34 @@ class BiqugeProvider : MainAPI() {
         "Romance"         to "10"
     )
 
-    // ─── Rate-limiting to avoid Cloudflare JS challenge ───────────────────────────
+    // ─── Rate limiting ───────────────────────────────────────────────────────────
+    //
+    // Cloudflare in front of 69shuba serves a JS challenge after ~30 rapid chapter requests.
+    // Two layers keep us under that:
+    //  * rateLimitTime: the framework holds rateLimitMutex around every downloader
+    //    loadHtml() call and waits this long after each chapter, so bulk downloads are serial
+    //    and spaced. We must not lock rateLimitMutex ourselves — the downloader already holds
+    //    it while calling loadHtml(), and kotlinx Mutex is not re-entrant.
+    //  * A burst pause inside loadHtml(): every CF_BURST_SIZE chapters fetched by *any*
+    //    caller (reader, downloader, translation service) we sleep CF_BURST_PAUSE_MS so
+    //    Cloudflare's sliding window drains. The counter is atomic because those callers run
+    //    on different coroutines/threads.
 
-    /** How many chapter fetches have been made in the current burst. */
-    private var chapterFetchCount = 0
+    override val rateLimitTime = 1000L
 
-    /** Pause every this many chapters to avoid CF's sliding-window bot detection. */
-    private val cfPauseEvery = 10
+    private val chapterFetchCount = AtomicInteger(0)
 
-    /** How long to pause (ms) when we hit the rate limit. */
-    private val cfPauseMs = 0L//13_000L //5:15
-
-    /**
-     * Call before every chapter OkHttp request.
-     * Every [cfPauseEvery] calls this inserts a [cfPauseMs] delay so Cloudflare's
-     * sliding-window request counter resets before we'd trigger a JS challenge.
-     */
     private suspend fun rateLimitDelay() {
-        chapterFetchCount++
-        if (chapterFetchCount % cfPauseEvery == 0) {
-            Log.i("BiqugeProvider", "Rate-limit pause after $chapterFetchCount chapters " +
-                "(${cfPauseMs / 1000}s to avoid CF challenge)")
-            delay(cfPauseMs)
+        val n = chapterFetchCount.incrementAndGet()
+        if (n % CF_BURST_SIZE == 0) {
+            Log.i(TAG, "Rate-limit pause after $n chapters (${CF_BURST_PAUSE_MS / 1000}s)")
+            delay(CF_BURST_PAUSE_MS)
         }
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────────
 
     private suspend fun get(url: String) = app.get(url, headers = headers)
-
-    private suspend fun post(url: String, body: okhttp3.RequestBody, extraHeaders: Map<String, String> = emptyMap()) =
-        app.post(url, headers = headers + extraHeaders, requestBody = body)
 
     /** Parse SearchResponse list from any book-listing page. */
     private fun parseBookList(document: org.jsoup.nodes.Document): List<SearchResponse> {
@@ -380,26 +379,56 @@ class BiqugeProvider : MainAPI() {
 
         var html = get(url).textWithEncoding()
         if (isCfBlocked(html)) {
-            Log.w("BiqugeProvider", "CF block detected — waiting 30s before retry: $url")
-            chapterFetchCount = 0  // reset rate-limit counter after a block
-            delay(20_000L)
+            Log.w(TAG, "CF block detected — waiting ${CF_BLOCK_RETRY_MS / 1000}s before retry: $url")
+            chapterFetchCount.set(0) // start a fresh burst window after the cool-down
+            delay(CF_BLOCK_RETRY_MS)
             html = get(url).textWithEncoding()
             if (isCfBlocked(html)) {
-                Log.e("BiqugeProvider", "CF block persists after retry: $url")
+                Log.e(TAG, "CF block persists after retry: $url")
                 return null
             }
         }
 
-        val doc = Jsoup.parse(html, url)
+        return parseChapterHtml(html, url)
+    }
 
-        val contentEl =
-            doc.selectFirst("div.txtnav")
-            ?: doc.selectFirst("div#content")
-            ?: doc.selectFirst("div.showtxt")
-            ?: doc.selectFirst("div#chaptercontent")
-            ?: doc.selectFirst("div.read-content")
-            ?: doc.body().children().maxByOrNull { it.text().length }
+    companion object {
+        private const val TAG = "BiqugeProvider"
 
-        return contentEl?.text()?.cleanChapterText()?.ifBlank { null }
+        /** Pause after this many chapter fetches (any caller). */
+        private const val CF_BURST_SIZE = 25
+
+        /** Length of the burst pause — long enough for Cloudflare's window to drain. */
+        private const val CF_BURST_PAUSE_MS = 8_000L
+
+        /** Cool-down before retrying a chapter that hit a Cloudflare block page. */
+        private const val CF_BLOCK_RETRY_MS = 20_000L
+
+        /**
+         * Extracts chapter text as reader HTML: one `<p>` per paragraph (the same shape other
+         * providers such as WtrLab return), paragraphs separated by a blank line so plain-text
+         * consumers can still split on "\n\n". Pure, so it is covered by a JVM unit test.
+         */
+        fun parseChapterHtml(html: String, url: String): String? {
+            val doc = Jsoup.parse(html, url)
+            val contentEl =
+                doc.selectFirst("div.txtnav")
+                    ?: doc.selectFirst("div#content")
+                    ?: doc.selectFirst("div.showtxt")
+                    ?: doc.selectFirst("div#chaptercontent")
+                    ?: doc.selectFirst("div.read-content")
+                    ?: doc.body().children().maxByOrNull { it.text().length }
+                    ?: return null
+
+            // 69shuba puts the heading, an info line, ad slots and nav inside div.txtnav.
+            contentEl.select("h1, .txtinfo, #txtright, .bottom-ad, .contentadv, .page1, script, style, ins")
+                .remove()
+
+            return contentEl.paragraphs()
+                .map { it.cleanChapterText() }
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n") { "<p>${Entities.escape(it)}</p>" }
+                .ifBlank { null }
+        }
     }
 }
