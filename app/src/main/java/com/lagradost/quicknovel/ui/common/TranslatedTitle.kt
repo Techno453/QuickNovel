@@ -1,35 +1,22 @@
 package com.lagradost.quicknovel.ui.common
 
-import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
 import com.lagradost.quicknovel.translator.SecurePrefs
-import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.util.GoogleTranslate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** UI-level (Google Translate) title translation for Compose lists. */
 object TitleTranslation {
-    /** Whether titles coming from a provider with this language should be machine-translated. */
-    fun needsTranslation(lang: String?): Boolean = lang == "zh"
-
-    fun needsTranslationForApi(apiName: String): Boolean =
-        needsTranslation(Apis.getApiFromNameNull(apiName)?.lang)
-
-    @Volatile
-    private var enabledCache: Boolean? = null
-
-    /** Call when the "auto-translate titles" setting changes. */
-    fun invalidate() {
-        enabledCache = null
-    }
-
-    /** Reads the (encrypted) setting once and caches it; call off the main thread. */
-    fun isEnabled(context: Context): Boolean =
-        enabledCache ?: SecurePrefs.isGoogleTranslateTitlesEnabled(context).also { enabledCache = it }
+    /**
+     * Source language whose titles should be machine-translated for this provider, or null.
+     * Gated on [TranslationLanguages] (zh/ja/ko).
+     */
+    fun sourceLangForApi(apiName: String): String? = TranslationLanguages.langOfApi(apiName)
 }
 
 /**
@@ -41,9 +28,16 @@ fun rememberDisplayName(response: ImmutableSearchResponse): State<String> {
     val context = LocalContext.current.applicationContext
     return produceState(initialValue = response.name, response.name, response.apiName) {
         value = response.name
-        if (!TitleTranslation.needsTranslationForApi(response.apiName)) return@produceState
-        val enabled = withContext(Dispatchers.IO) { TitleTranslation.isEnabled(context) }
+        val lang = TitleTranslation.sourceLangForApi(response.apiName) ?: return@produceState
+        // First read may load the encrypted prefs, so keep it off the main thread.
+        val enabled = withContext(Dispatchers.IO) {
+            SecurePrefs.isGoogleTranslateTitlesEnabled(context)
+        }
         if (!enabled) return@produceState
-        value = GoogleTranslate.translate(response.name)
+        value = GoogleTranslate.translateTo(
+            response.name,
+            from = TranslationLanguages.googleCode(lang),
+            to = "en"
+        )
     }
 }
