@@ -11,6 +11,7 @@ import com.lagradost.cloudstream4.state.SingleActiveQuery
 import com.lagradost.cloudstream4.state.StateContainer
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.translator.SearchQueryTranslator
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.mainpage.FilterQuery
@@ -201,7 +202,10 @@ class HomeViewModel2 : ViewModel(),
             )
         }
         apis.cmap { api ->
-            APIRepository(api).searchResult(query).onSuccess { value ->
+            // AI-translated search: zh/ja/ko providers get the query translated into their
+            // language ("Translate search queries" setting); falls back to the original query.
+            val providerQuery = SearchQueryTranslator.translateQuery(query, api.lang)
+            APIRepository(api).searchResult(providerQuery).onSuccess { value ->
                 val row = SearchRow(name = api.name, items = value.toImmutableList())
                 updateState {
                     if (value.isEmpty()) {
