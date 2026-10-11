@@ -1,7 +1,9 @@
 package com.lagradost.quicknovel.providers.chinese
 
 import com.lagradost.nicehttp.NiceResponse
-import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
+import org.jsoup.nodes.TextNode
 
 /**
  * Utility extensions for Chinese novel providers.
@@ -101,6 +103,36 @@ object ChineseProviderUtils {
         text = text.trim()
 
         return text
+    }
+
+    /**
+     * Splits an element's text into paragraphs, honouring `<br>` and block elements (`<p>`,
+     * `<div>`) as line breaks — unlike [Element.text], which collapses everything into one
+     * line. Leading/trailing ASCII, ideographic (U+3000), em (U+2003) and no-break spaces are
+     * trimmed and blank lines dropped.
+     */
+    fun Element.paragraphs(): List<String> {
+        val sb = StringBuilder()
+        fun walk(node: Node) {
+            when (node) {
+                is TextNode -> sb.append(node.wholeText)
+                is Element -> {
+                    val tag = node.normalName()
+                    if (tag == "br") {
+                        sb.append('\n')
+                        return
+                    }
+                    val block = tag == "p" || tag == "div" || tag.length == 2 && tag[0] == 'h' && tag[1].isDigit()
+                    if (block) sb.append('\n')
+                    node.childNodes().forEach { walk(it) }
+                    if (block) sb.append('\n')
+                }
+            }
+        }
+        childNodes().forEach { walk(it) }
+        return sb.split('\n')
+            .map { line -> line.trim { it.isWhitespace() || it == '　' || it == ' ' || it == ' ' } }
+            .filter { it.isNotEmpty() }
     }
 
     /**
