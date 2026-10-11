@@ -48,8 +48,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- WorkManager's SystemForegroundService must declare the same foregroundServiceType
-             that we pass in ForegroundInfo, otherwise Android throws IllegalArgumentException. -->
+        <!-- Android 14+ rejects startForeground with a type that is not declared here -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
@@ -71,6 +70,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation"
             android:exported="true">
 
@@ -92,11 +92,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
 
                 <data
-                    android:host="www.reddit.com"
-                    android:pathPrefix="/r/"
-                    android:scheme="https" />
-
-                <data
                     android:host="allnovel.org"
                     android:pathPrefix="/"
                     android:scheme="https" />
@@ -109,7 +104,27 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
+                    android:host="chrysanthemumgarden.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="www.fanmtl.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="fenrirealm.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="free.kolnovel.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
                     android:host="freewebnovel.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="fucknovelpia.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -125,11 +140,19 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="kolnovel.com"
+                    android:host="libread.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="libread.com"
+                    android:host="lightnovelstranslations.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="lightnovelworld.org"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="lnmtl.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -137,15 +160,23 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="risenovel.com"
+                    android:host="mtlnovel.me"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="www.mtlnovels.com"
+                    android:host="www.nobadnovel.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
                     android:host="novelbin.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="novelbuddy.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="novelfire.net"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -154,6 +185,10 @@
                     android:scheme="https" />
                 <data
                     android:host="novelsonline.org"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="novlove.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -169,6 +204,22 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
+                    android:host="readonlinefreebook.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="www.reddit.com"
+                    android:pathPrefix="/r/"
+                    android:scheme="https" />
+                <data
+                    android:host="rewayat.club"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="risenovel.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
                     android:host="www.royalroad.com"
                     android:pathPrefix="/fiction"
                     android:scheme="https" />
@@ -181,7 +232,23 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
+                    android:host="www.skynovels.net"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="www.sonicmtl.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
                     android:host="wtr-lab.com"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="wuxia.click"
+                    android:pathPrefix="/"
+                    android:scheme="https" />
+                <data
+                    android:host="www.wuxiabox.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
             </intent-filter>

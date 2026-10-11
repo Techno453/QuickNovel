@@ -1,57 +1,149 @@
 package com.lagradost.quicknovel.ui.settings
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.edit
-import androidx.core.net.toUri
-import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
+import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
-import androidx.recyclerview.widget.LinearLayoutManager
+import com.lagradost.cloudstream4.BaseComposeFragment
 import com.lagradost.quicknovel.APIRepository.Companion.providersActive
-import com.lagradost.quicknovel.CommonActivity
-import com.lagradost.quicknovel.CommonActivity.showToast
-import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.databinding.LogcatBinding
-import com.lagradost.quicknovel.mvvm.logError
-import com.lagradost.quicknovel.mvvm.safe
-import com.lagradost.quicknovel.ui.download.AnyAdapter
-import com.lagradost.quicknovel.ui.history.HistoryAdapter
-import com.lagradost.quicknovel.ui.txt
+import com.lagradost.quicknovel.compose.LaunchedEffectSkipFirst
 import com.lagradost.quicknovel.util.Apis.Companion.apis
-import com.lagradost.quicknovel.util.Apis.Companion.getApiProviderLangSettings
 import com.lagradost.quicknovel.util.Apis.Companion.getApiSettings
-import com.lagradost.quicknovel.util.BackupUtils.backup
-import com.lagradost.quicknovel.util.BackupUtils.restorePrompt
-import com.lagradost.quicknovel.util.BackupUtils.setupStream
-import com.lagradost.quicknovel.util.Coroutines.ioSafe
-import com.lagradost.quicknovel.util.InAppUpdater.Companion.runAutoUpdate
-import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
-import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showMultiDialog
 import com.lagradost.quicknovel.util.SubtitleHelper
-import com.lagradost.quicknovel.util.GoogleTranslate
-import com.lagradost.quicknovel.util.UIHelper.clipboardHelper
-import com.lagradost.quicknovel.util.UIHelper.dismissSafe
-import com.lagradost.safefile.MediaFileContentType
-import com.lagradost.safefile.SafeFile
-import java.io.BufferedReader
-import java.io.File
-import java.io.InputStreamReader
-import java.io.OutputStream
-import java.lang.System.currentTimeMillis
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.mihon.common.preference.AndroidPreferenceStore
+import com.mihon.presentation.settings.SearchableSettings
+import com.mihon.presentation.settings.collectAsState
 
+class SettingsFragment : BaseComposeFragment(), SearchableSettings by SettingScreen {
+    @Composable
+    override fun Content() {
+        val store = AndroidPreferenceStore(LocalContext.current)
+        val locale by store.getString(
+            stringResource(R.string.locale_key),
+            "en",
+        ).collectAsState()
+        val theme by store.getString(
+            stringResource(R.string.theme_key),
+            "AmoledLight",
+        ).collectAsState()
+        val color by store.getString(
+            stringResource(R.string.primary_color_key),
+            "Normal",
+        ).collectAsState()
+
+        //val context = LocalContext.current
+        //val scope = currentRecomposeScope
+
+        LaunchedEffectSkipFirst(locale) {
+            //setLocale(context, locale)
+            //scope.invalidate()
+            activity?.recreate()
+        }
+        LaunchedEffectSkipFirst(theme) {
+            activity?.recreate()
+        }
+        LaunchedEffectSkipFirst(color) {
+            activity?.recreate()
+        }
+        super.Content()
+    }
+
+
+    companion object {
+        /*
+                fun getDefaultDir(context: Context): SafeFile? {
+                    // See https://www.py4u.net/discuss/614761
+                    return SafeFile.fromMedia(
+                        context, MediaFileContentType.Downloads
+                    )?.gotoDirectory("Epub")
+                }
+
+                /**
+                 * Turns a string to an UniFile. Used for stored string paths such as settings.
+                 * Should only be used to get a download path.
+                 * */
+                private fun basePathToFile(context: Context, path: String?): SafeFile? {
+                    return when {
+                        path.isNullOrBlank() -> getDefaultDir(context)
+                        path.startsWith("content://") -> SafeFile.fromUri(context, path.toUri())
+                        else -> SafeFile.fromFilePath(
+                            context,
+                            path.removePrefix(Environment.getExternalStorageDirectory().path).removePrefix(
+                                File.separator
+                            ).removeSuffix(File.separator) + File.separator
+                        )
+                    }
+                }
+
+                /**
+                 * Base path where downloaded things should be stored, changes depending on settings.
+                 * Returns the file and a string to be stored for future file retrieval.
+                 * UniFile.filePath is not sufficient for storage.
+                 * */
+                fun Context.getBasePath(): Pair<SafeFile?, String?> {
+                    val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
+                    val basePathSetting =
+                        settingsManager.getString(getString(R.string.download_path_key), null)
+                    return basePathToFile(this, basePathSetting) to basePathSetting
+                }
+
+                fun getDownloadDirs(context: Context?): List<String> {
+                    return safe {
+                        context?.let { ctx ->
+                            val defaultDir = getDefaultDir(ctx)?.filePath()
+
+                            val first = listOf(defaultDir)
+                            (try {
+                                //val currentDir = ctx.getBasePath().let { it.first?.filePath() ?: it.second }
+
+                                (first + ctx.getExternalFilesDirs("").mapNotNull { it.path })
+                            } catch (e: Exception) {
+                                first
+                            }).filterNotNull().distinct()
+                        }
+                    } ?: emptyList()
+                }*/
+
+        fun showSearchProviders(context: Context?) {
+            if (context == null) return
+            val apiNames = apis.map { it.name }
+            val displayNames = apis.map {
+                val flag = SubtitleHelper.getFlagFromIso(it.lang) ?: "🌐"
+                "$flag ${it.name}"
+            }
+            context.apply {
+                val active = getApiSettings()
+                showMultiDialog(
+                    displayNames,
+                    apiNames.mapIndexed { index, s -> index to active.contains(s) }
+                        .filter { it.second }.map { it.first }.toList(),
+                    getString(R.string.search_providers),
+                    {}) { list ->
+                    val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
+                    settingsManager.edit {
+                        putStringSet(
+                            getString(R.string.search_providers_list_key),
+                            list.map { apiNames[it] }.toSet()
+                        )
+                    }
+                    providersActive = getApiSettings()
+                }
+            }
+        }
+    }
+}/*
 class SettingsFragment : PreferenceFragmentCompat() {
     private fun PreferenceFragmentCompat?.getPref(id: Int): Preference? {
         if (this == null) return null
@@ -87,89 +179,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
             Triple("", "English", "en"),
             Triple("", "Türkçe", "tr"),
             Triple("", "Español", "es"),
+            Triple("", "Русский", "ru"),
             /* end language list */
         ).sortedBy { it.second.lowercase() } //ye, we go alphabetical, so ppl don't put their lang on top
 
-        fun showSearchProviders(context: Context?) {
-            if (context == null) return
-            val apiNames = apis.map { it.name }
-
-            context.apply {
-                val active = getApiSettings()
-                showMultiDialog(
-                    apiNames,
-                    apiNames.mapIndexed { index, s -> index to active.contains(s) }
-                        .filter { it.second }
-                        .map { it.first }.toList(),
-                    getString(R.string.search_providers),
-                    {}) { list ->
-                    val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
-                    settingsManager.edit {
-                        putStringSet(
-                            getString(R.string.search_providers_list_key),
-                            list.map { apiNames[it] }.toSet()
-                        )
-                    }
-                    providersActive = getApiSettings()
-                }
-            }
-        }
-
-        fun getDefaultDir(context: Context): SafeFile? {
-            // See https://www.py4u.net/discuss/614761
-            return SafeFile.fromMedia(
-                context, MediaFileContentType.Downloads
-            )?.gotoDirectory("Epub")
-        }
-
-        /**
-         * Turns a string to an UniFile. Used for stored string paths such as settings.
-         * Should only be used to get a download path.
-         * */
-        private fun basePathToFile(context: Context, path: String?): SafeFile? {
-            return when {
-                path.isNullOrBlank() -> getDefaultDir(context)
-                path.startsWith("content://") -> SafeFile.fromUri(context, path.toUri())
-                else -> SafeFile.fromFilePath(
-                    context,
-                    path.removePrefix(Environment.getExternalStorageDirectory().path).removePrefix(
-                        File.separator
-                    ).removeSuffix(File.separator) + File.separator
-                )
-            }
-        }
 
 
-        /**
-         * Base path where downloaded things should be stored, changes depending on settings.
-         * Returns the file and a string to be stored for future file retrieval.
-         * UniFile.filePath is not sufficient for storage.
-         * */
-        fun Context.getBasePath(): Pair<SafeFile?, String?> {
-            val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
-            val basePathSetting =
-                settingsManager.getString(getString(R.string.download_path_key), null)
-            return basePathToFile(this, basePathSetting) to basePathSetting
-        }
 
-        fun getDownloadDirs(context: Context?): List<String> {
-            return safe {
-                context?.let { ctx ->
-                    val defaultDir = getDefaultDir(ctx)?.filePath()
 
-                    val first = listOf(defaultDir)
-                    (try {
-                        val currentDir = ctx.getBasePath().let { it.first?.filePath() ?: it.second }
-
-                        (first +
-                                ctx.getExternalFilesDirs("").mapNotNull { it.path } +
-                                currentDir)
-                    } catch (e: Exception) {
-                        first
-                    }).filterNotNull().distinct()
-                }
-            } ?: emptyList()
-        }
     }
 
     // Open file picker
@@ -323,8 +340,8 @@ class SettingsFragment : PreferenceFragmentCompat() {
                     if (fullName.isNullOrEmpty()) {
                         return@mapNotNull null
                     }
-
-                    it to fullName
+                    val flag = SubtitleHelper.getFlagFromIso(it) ?: "🌐"
+                    it to "$flag $fullName"
                 }
 
                 context?.showMultiDialog(
@@ -433,8 +450,8 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 false,
                 {}) {
                 try {
-                    AnyAdapter.sharedPool.clear()
-                    HistoryAdapter.sharedPool.clear()
+                    //AnyAdapter.sharedPool.clear()
+                    //HistoryAdapter.sharedPool.clear()
 
                     settingsManager.edit {
                         putString(getString(R.string.theme_key), prefValues[it])
@@ -567,74 +584,5 @@ class SettingsFragment : PreferenceFragmentCompat() {
             MainActivity.activeAPI = MainActivity.getApiFromName(newValue.toString())
             return@setOnPreferenceChangeListener true
         }*/
-
-        // Translation settings
-        findPreference<androidx.preference.Preference>("openai_api_key_pref")?.setOnPreferenceClickListener { pref ->
-            val ctx = pref.context
-            val currentKey = com.lagradost.quicknovel.translator.SecurePrefs.getApiKey(ctx) ?: ""
-            val editText = android.widget.EditText(ctx)
-            editText.setText(currentKey)
-            editText.inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            editText.hint = "sk-..."
-
-            AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
-                .setTitle("OpenAI API Key")
-                .setView(editText)
-                .setPositiveButton("Save") { _, _ ->
-                    val key = editText.text.toString().trim()
-                    com.lagradost.quicknovel.translator.SecurePrefs.setApiKey(ctx, key)
-                    showToast(if (key.isNotBlank()) "API key saved" else "API key cleared")
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .setNeutralButton("Verify") { _, _ ->
-                    val key = editText.text.toString().trim()
-                    if (key.isBlank()) { showToast("Enter an API key first"); return@setNeutralButton }
-                    ioSafe {
-                        val model = com.lagradost.quicknovel.translator.SecurePrefs.getModel(ctx)
-                        val engine = com.lagradost.quicknovel.translator.TranslationEngine(key, model)
-                        val valid = engine.testApiKey()
-                        showToast(if (valid) "API key is valid!" else "Invalid API key")
-                    }
-                }
-                .show()
-            true
-        }
-
-        findPreference<androidx.preference.Preference>("openai_model_pref")?.setOnPreferenceClickListener { pref ->
-            val ctx = pref.context
-            val models = listOf(
-                "gpt-4o-mini" to "gpt-4o-mini (\$ — fast & cheap)",
-                "gpt-4o" to "gpt-4o (\$\$\$ — best quality)"
-            )
-            val current = com.lagradost.quicknovel.translator.SecurePrefs.getModel(ctx)
-            val currentIdx = models.indexOfFirst { it.first == current }.coerceAtLeast(0)
-
-            activity?.showBottomDialog(
-                models.map { it.second }, currentIdx,
-                "Translation Model", false, {}
-            ) { idx ->
-                com.lagradost.quicknovel.translator.SecurePrefs.setModel(ctx, models[idx].first)
-            }
-            true
-        }
-
-        findPreference<androidx.preference.SwitchPreference>("translation_enabled_pref")
-            ?.setOnPreferenceChangeListener { _, newValue ->
-                val ctx = context ?: return@setOnPreferenceChangeListener true
-                com.lagradost.quicknovel.translator.SecurePrefs.setTranslationEnabled(ctx, newValue as Boolean)
-                true
-            }
-
-        findPreference<androidx.preference.SwitchPreference>("gtranslate_titles_pref")?.apply {
-            val ctx = context
-            // Sync the switch state from SecurePrefs (EncryptedSharedPreferences, not default prefs)
-            isChecked = com.lagradost.quicknovel.translator.SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)
-            setOnPreferenceChangeListener { _, newValue ->
-                com.lagradost.quicknovel.translator.SecurePrefs.setGoogleTranslateTitlesEnabled(ctx, newValue as Boolean)
-                com.lagradost.quicknovel.util.GoogleTranslate.clearCache()
-                true
-            }
-        }
     }
-}
+}*/

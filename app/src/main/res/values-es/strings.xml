@@ -38,7 +38,6 @@
     <string name="advanced_search">Búsqueda avanzada</string>
     <string name="advanced_search_desc">Muestra los resultados de búsqueda separados por proveedor</string>
     <string name="search_providers">Proveedores</string>
-    <string name="search_roviders">Proveedores</string>
     <string name="change_providers_descript">Cambiar proveedor</string>
     <string name="poster_open_source_descript">Ver fuente original</string>
     <string name="back_to_search">Volver a buscar</string>
@@ -86,7 +85,7 @@
 
     <!-- Estados de Lectura (Bookmark) -->
     <string name="type_reading">Leyendo</string>
-    <string name="type_on_hold">En espera</string>
+    <string name="type_on_hold">Postergado</string>
     <string name="type_completed">Completado</string>
     <string name="type_dropped">Abandonado</string>
     <string name="type_plan_to_read">Planeo leer</string>
@@ -101,8 +100,9 @@
     <string name="reload_chapter_format">Recargando capítulo %s</string>
     <string name="latest_format">Último: %s</string>
     <string name="chapter_format" formatted="true">Capítulo %s</string>
-    <string name="read_display_settings">Ajustes de pantalla</string>
-    <string name="read_text_size">Tamaño de texto</string>
+    <string name="read_display_settings">Pantalla</string>
+    <string name="tab_translation">Traductor</string>
+    <string name="read_text_size">Texto</string>
     <string name="bigger_font">Fuente más grande</string>
     <string name="smaller_font">Fuente más pequeña</string>
     <string name="reader_font">Fuente del lector</string>
@@ -170,6 +170,7 @@
     <string name="download_ml">Descargar modelo de traducción</string>
     <string name="download_ml_long">Para traducir localmente se necesita descargar el modelo (~30MB)</string>
     <string name="translating">Traduciendo: </string>
+    <string name="toWhatLanguague">-></string>
     <string name="unable_to_download_language">No se pudo descargar el lenguaje</string>
 
 
@@ -198,7 +199,7 @@
     <!-- Copias de Seguridad (Backup) -->
     <string name="backup_settings">Copia de seguridad</string>
     <string name="restore_settings">Restaurar datos desde copia de seguridad</string>
-    <string name="backup_success">Copia de seguridad realizada con éxito</string>
+    <string name="backup_success">Copia de seguridad realizada con éxito %s</string>
     <string name="backup_failed">Fallo al respaldar, verifique permisos de almacenamiento</string>
     <string name="restore_success">Copia de seguridad cargada con éxito</string>
     <string name="restore_failed_format" formatted="true">Error al restaurar desde %s</string>
@@ -250,6 +251,7 @@
     <string name="quickstream_novel_text">Leer en línea</string>
     <string name="stream_read">Leer en línea</string>
     <string name="permission_error">Se nececitan permisos</string>
+    <string name="unable_to_inflate">ERROR: la ui no se creó correctamente, por favor REPORTAR INMEDIATAMENTE %s</string>
 
 
     <!-- Diálogos de Confirmación -->
@@ -294,6 +296,6 @@
     <string name="cannot_conect">No se pudo conectar al servidor, inténtalo de nuevo más tarde.</string>
     <string name="error_loading">"Error al cargar, por favor inténtalo de nuevo más tarde."</string>
     <string name="operation_no_implemented">" Esta operación no está implementada."</string>
-    <string name="conection_error">Error de conección.</string>
+    <string name="conection_error">Error de conexión.</string>
     <string name="unknown">Desconocido</string>
 </resources>

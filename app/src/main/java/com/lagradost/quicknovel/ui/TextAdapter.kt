@@ -22,6 +22,7 @@ import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.FailedSpanned
 import com.lagradost.quicknovel.LoadingSpanned
 import com.lagradost.quicknovel.MLException
+import com.lagradost.quicknovel.QuickBook
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.ReadActivityViewModel
 import com.lagradost.quicknovel.SpanDisplay
@@ -36,6 +37,7 @@ import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
 import com.lagradost.quicknovel.databinding.SingleSeparatorBinding
 import com.lagradost.quicknovel.databinding.SingleTextBinding
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.showImage
@@ -414,35 +416,54 @@ class TextAdapter(
             if (scrollVisibility.adapterPosition < 0 || scrollVisibility.adapterPosition >= itemCount) return emptyList()
             val viewHolder = scrollVisibility.viewHolder
             if (viewHolder !is ViewHolderState<*>) return emptyList()
+
             val binding = viewHolder.view
-            if (binding !is SingleTextBinding) return emptyList()
-            val span = getItem(scrollVisibility.adapterPosition)
-            if (span !is TextSpan) return emptyList()
+            val item = getItem(scrollVisibility.adapterPosition)
 
-            val outLocation = IntArray(2)
-            binding.root.getLocationInWindow(outLocation)
-            val y = outLocation[1] + binding.root.paddingTop
+            // Case 1: Image
+            if (binding is SingleImageBinding && item is TextSpan) {
+                val outLocation = IntArray(2)
+                binding.root.getLocationInWindow(outLocation)
+                val y = outLocation[1]
 
-            //val paddingTop =
-            //val paddingBottom = binding.root.paddingBottom
-
-
-            val list = arrayListOf<TextVisualLine>()
-            binding.root.layout.apply {
-                for (i in 0 until lineCount) {
-                    list.add(
-                        TextVisualLine(
-                            startChar = span.start + getLineStart(i),
-                            endChar = span.start + getLineEnd(i),
-                            innerIndex = span.innerIndex,
-                            index = span.index,
-                            top = getLineTop(i) + y,//+paddingTop,
-                            bottom = getLineBottom(i) + y//+paddingBottom
-                        )
+                return listOf(
+                    TextVisualLine(
+                        startChar = item.start,
+                        endChar = item.start + 1,
+                        innerIndex = item.innerIndex,
+                        index = item.index,
+                        top = y,
+                        bottom = y + binding.root.height
                     )
-                }
+                )
             }
-            return list
+
+            // Case 2: Text
+            if (binding is SingleTextBinding && item is TextSpan) {
+                val outLocation = IntArray(2)
+                binding.root.getLocationInWindow(outLocation)
+                val y = outLocation[1] + binding.root.paddingTop
+
+                val list = arrayListOf<TextVisualLine>()
+                binding.root.layout?.apply {
+                    for (i in 0 until lineCount) {
+                        list.add(
+                            TextVisualLine(
+                                startChar = item.start + getLineStart(i),
+                                endChar = item.start + getLineEnd(i),
+                                innerIndex = item.innerIndex,
+                                index = item.index,
+                                top = getLineTop(i) + y,
+                                bottom = getLineBottom(i) + y
+                            )
+                        )
+                    }
+                }
+                return list
+            }
+
+            /* Other cases (Loading, Separators, etc.) */
+            return emptyList()
         } catch (t: Throwable) {
             return emptyList()
         }
@@ -583,12 +604,12 @@ class TextAdapter(
         }
     }
 
-    private fun bindImage(binding: ViewBinding, img: AsyncDrawable) {
+    private fun bindImage(binding: ViewBinding, img: AsyncDrawable, requireCloudFlare:Boolean) {
         if (binding !is SingleImageBinding) return
         val url = img.destination
         if (binding.root.url == url) return
         binding.root.url = url // don't reload if already set
-        UIHelper.bindImage(binding.root, img)
+        UIHelper.bindImage(binding.root, img, requireCloudFlare)
     }
 
     private fun bindText(binding: ViewBinding, obj: TextSpan, config: TextConfig) {
@@ -599,13 +620,20 @@ class TextAdapter(
 
             is SingleImageBinding -> {
                 val img = obj.text.getSpans<AsyncDrawableSpan>(0, obj.text.length)[0]
-                bindImage(binding, img.drawable)
+                val book = viewModel.book
+                val requireCloudFlare = if (book is QuickBook) {
+                    Apis.getApiFromNameNull(book.data.meta.apiName)?.usesCloudFlareKiller == true
+                } else {
+                    false
+                }
+
+                bindImage(binding, img.drawable, requireCloudFlare)
 
                 binding.root.setOnClickListener { root ->
                     if (root !is TextImageView) {
                         return@setOnClickListener
                     }
-                    showImage(root.context, img.drawable)
+                    showImage(root.context, img.drawable, requireCloudFlare)
                 }
 
                 /*val size = 300.toPx

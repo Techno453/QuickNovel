@@ -1,21 +1,14 @@
 package com.lagradost.quicknovel.providers
 
-import android.R.id.input
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.module.kotlin.readValue
-import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
-import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
-import org.bouncycastle.asn1.x500.style.RFC4519Style.c
-import org.jsoup.Jsoup
 
 class MtlNovelProvider : MainAPI() {
     override val name = "MtlNovel"
@@ -25,13 +18,6 @@ class MtlNovelProvider : MainAPI() {
     override val iconId = R.drawable.icon_mtlnovel
 
     override val iconBackgroundId = R.color.wuxiaWorldOnlineColor
-
-    fun fixImage(url: String?): String? {
-        return url?.replace(
-            "https://mtlnovel.me/",
-            "https://mtlnovel.me/wp-content/uploads/"
-        )
-    }
 
     override val tags = listOf(
         "All" to "",
@@ -143,7 +129,7 @@ class MtlNovelProvider : MainAPI() {
 
             posterUrl = fixUrlNull(document.selectFirst("div.content-main-image img")?.attr("src"))
 
-            tags = lis.getOrNull(5)?.select("a")?.map { it.text() }
+            tags = lis.getOrNull(3)?.select("a")?.map { it.text() }
 
             synopsis = document.selectFirst("div.m-card.text-break")?.ownText()
 
@@ -154,29 +140,22 @@ class MtlNovelProvider : MainAPI() {
                 ?.toFloat()
                 ?.times(200)
                 ?.toInt()
+            related = getRelated(url.substringAfter("info/").removeSuffix("/"))
         }
+    }
 
+    suspend fun getRelated(slug:String): List<SearchResponse> {
+        val url = "$mainUrl/ajax/list/?type=related&slug=$slug"
+        val document = app.get(url).document
+        return document.select("div.novel-box").mapNotNull { element ->
+            val href = element.selectFirst("a")?.attr("href") ?: return@mapNotNull null
+            val title = element.selectFirst("h3")?.text() ?: return@mapNotNull null
+            newSearchResponse(
+                name = title,
+                url = href
+            ) {
+                posterUrl = fixUrlNull(element.selectFirst("img")?.attr("src"))
+            }
+        }
     }
 }
-
-
-private data class SearchResults(
-    @get:JsonProperty("items") val items: List<Item>? = null
-) {
-    companion object {
-        fun fromJson(json: String) = mapper.readValue<SearchResults>(json)
-    }
-}
-
-private data class Item(
-    @get:JsonProperty("query") val query: String? = null,
-    @get:JsonProperty("results") val results: List<Result>? = null
-)
-
-private data class Result(
-    @get:JsonProperty("title") val title: String? = null,
-    @get:JsonProperty("permalink") val permalink: String? = null,
-    @get:JsonProperty("thumbnail") val thumbnail: String? = null,
-    @get:JsonProperty("shortname") val shortname: String? = null,
-    @get:JsonProperty("cn") val cn: String? = null
-)

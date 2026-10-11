@@ -1,10 +1,15 @@
+plugins {
+    alias(libs.plugins.compose.compiler)
+}
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
 apply plugin: 'com.google.devtools.ksp'
 
+apply(plugin: "org.jetbrains.kotlin.plugin.compose")
+
 android {
-    compileSdkVersion 35
+    compileSdkVersion 37
     //buildToolsVersion "30.0.3"
 
     dependenciesInfo {
@@ -20,10 +25,10 @@ android {
 
     defaultConfig {
         applicationId "com.lagradost.quicknovel"
-        minSdkVersion 21
-        targetSdkVersion 35
+        minSdkVersion 23
+        targetSdkVersion 37
         versionCode 56
-        versionName "3.4.3"
+        versionName "3.8.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -44,14 +49,16 @@ android {
     }
 
     buildFeatures.buildConfig true
+    buildFeatures.compose true
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_9
-        targetCompatibility JavaVersion.VERSION_1_9
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_9.toString()
+        jvmTarget = JavaVersion.VERSION_11.toString()
+        freeCompilerArgs = ['-XXLanguage:+PropertyParamAnnotationDefaultTargetMode']
     }
     namespace 'com.lagradost.quicknovel'
 }
@@ -70,7 +77,8 @@ dependencies {
     implementation 'androidx.core:core-ktx:1.16.0'
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
-    implementation 'org.jsoup:jsoup:1.21.2'
+    implementation libs.ui.text
+    implementation 'org.jsoup:jsoup:1.22.2'
     implementation 'androidx.navigation:navigation-fragment-ktx:2.9.6'
     implementation 'androidx.navigation:navigation-ui-ktx:2.9.6'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
@@ -98,13 +106,15 @@ dependencies {
 
     implementation("com.google.android.material:material:1.13.0")
 
-    implementation 'androidx.media:media:1.7.1'
-    implementation 'com.github.LagradOst:SafeFile:a926e7615a' // To Prevent the URI File Fu*kery
+    implementation 'androidx.media:media:1.7.1' // Media session aka notification
+    //implementation 'com.github.LagradOst:SafeFile:a926e7615a' // To Prevent the URI File Fu*kery
     implementation 'com.jaredrummler:colorpicker:1.1.0'
 
-    implementation 'com.github.Blatzar:NiceHttp:0.4.16'
-    implementation "io.coil-kt.coil3:coil:3.3.0"
-    implementation "io.coil-kt.coil3:coil-network-okhttp:3.3.0"
+    // Custom fork for storage with android 23
+    implementation "com.github.lagradost:simplestorage:3ed3a412b701106b4ee11ac230d21bda365f4833"
+
+    implementation 'com.github.Blatzar:NiceHttp:0.4.18'
+    implementation "io.coil-kt.coil3:coil:3.5.0"
 
     //implementation "io.noties.markwon:image-coil:4.6.2" we need to fork this
     implementation "io.noties.markwon:core:4.6.2"
@@ -117,12 +127,26 @@ dependencies {
     //to read PDFs
     implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
 
+    // Compose
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.resources)
+    implementation(libs.compose.runtime)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.ui.tooling)
+    implementation(libs.kotlinx.collections.immutable)
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.coil3.coil.compose)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.activity.compose)
+    implementation(libs.kotlinx.io.core)
+
     // Room DB for translation storage
-    def room_version = "2.7.0"
-    implementation "androidx.room:room-runtime:$room_version"
-    implementation "androidx.room:room-ktx:$room_version"
-    ksp "androidx.room:room-compiler:$room_version"
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
     // Encrypted prefs for OpenAI API key
-    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+    implementation(libs.security.crypto)
 }

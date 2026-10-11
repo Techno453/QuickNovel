@@ -1,9 +1,11 @@
 package com.lagradost.quicknovel
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -23,6 +25,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavOptions
 import androidx.navigation.fragment.NavHostFragment
 import androidx.preference.PreferenceManager
+import com.anggrayudi.storage.StorageFile
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -51,16 +54,16 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.mvvm.safe
+import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.providers.RedditProvider
 import com.lagradost.quicknovel.ui.ReadType
+import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
-import com.lagradost.quicknovel.ui.search.SearchFragment
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiSettings
 import com.lagradost.quicknovel.util.Apis.Companion.printProviders
-import com.lagradost.quicknovel.util.BackupUtils.setUpBackup
 import com.lagradost.quicknovel.util.Coroutines
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.main
@@ -69,11 +72,11 @@ import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.dismissSafe
+import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
 import com.lagradost.quicknovel.util.UIHelper.getResourceColor
 import com.lagradost.quicknovel.util.UIHelper.html
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.setImage
-import com.lagradost.safefile.SafeFile
 import androidx.lifecycle.lifecycleScope
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.util.Apis
@@ -100,6 +103,14 @@ class MainActivity : AppCompatActivity() {
             mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName)
         }
 
+        fun loadPreviewPage(searchResponse: ImmutableSearchResponse) {
+            if (searchResponse.id == null) {
+                mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName)
+            } else {
+                mainActivity?.loadPopup(searchResponse)
+            }
+        }
+
         fun loadPreviewPage(card: DownloadFragment.DownloadDataLoaded) {
             mainActivity?.loadPopup(card)
         }
@@ -112,11 +123,15 @@ class MainActivity : AppCompatActivity() {
             mainActivity?.openEpubPicker()
         }
 
+        fun importEpubs() {
+            mainActivity?.openEpubPickers()
+        }
+
         var app = Requests(
             OkHttpClient()
                 .newBuilder()
                 .ignoreAllSSLErrors()
-                .readTimeout(50L, TimeUnit.SECONDS)//to online translations
+                .readTimeout(30L, TimeUnit.SECONDS)
                 .build(),
             responseParser = object : ResponseParser {
                 val mapper: ObjectMapper = jacksonObjectMapper().configure(
@@ -144,6 +159,16 @@ class MainActivity : AppCompatActivity() {
             defaultHeaders = mapOf("user-agent" to USER_AGENT)
         }
 
+        val appWithInterceptor by lazy {
+            Requests(
+                baseClient = app.baseClient.newBuilder()
+                    .addInterceptor(CloudflareKiller())
+                    .build(),
+                responseParser = app.responseParser
+            ).apply {
+                defaultHeaders = app.defaultHeaders
+            }
+        }
 
         // === API ===
         lateinit var navOptions: NavOptions
@@ -165,7 +190,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun FragmentActivity.loadResult(url: String, apiName: String, startAction: Int = 0) {
-            SearchFragment.currentDialog?.dismiss()
+            // SearchFragment.currentDialog?.dismiss()
             runOnUiThread {
                 this.navigate(
                     R.id.global_to_navigation_results,
@@ -192,7 +217,7 @@ class MainActivity : AppCompatActivity() {
             for (api in apis) {
                 if (url.contains(api.mainUrl)) {
                     loadResult(url, api.name)
-                    return false
+                    return true
                 }
             }
 
@@ -332,6 +357,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun loadPopup(
+        result: ImmutableSearchResponse,
+    ) {
+        viewModel.initState(result)
+    }
+
+    fun loadPopup(
         resultCached: ResultCached,
     ) {
         viewModel.initState(resultCached)
@@ -348,45 +379,52 @@ class MainActivity : AppCompatActivity() {
         viewModel.initState(apiName, url)
     }
 
+    fun importUri(uri: Uri) = safe {
+        val ctx: Context = this
+
+        safe {
+            ctx.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+
+        val file = StorageFile.from(ctx, uri)
+        val fileName = file?.name
+        val mimeType = file?.mimeType //ctx.contentResolver.getType(uri)
+        println("Loaded epub file. Selected URI path: $uri - Name: $fileName with type $mimeType")
+
+        ioSafe {
+            try {
+                if (mimeType == "application/pdf" || fileName?.endsWith(".pdf") == true) {
+                    BookDownloader2.downloadPDFWorkThread(uri, ctx)
+                } else {
+                    BookDownloader2.downloadWorkThread(uri, ctx)
+                }
+            } catch (t: Throwable) {
+                logError(t)
+                showToast(t.message)
+            }
+        }
+    }
+
+    private val epubPathsPicker =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            uris.forEach { uri ->
+                importUri(uri)
+            }
+        }
 
     //imports area -------------------------------
     private val epubPathPicker =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            safe {
-                // It lies, it can be null if file manager quits.
-                if (uri == null) return@safe
-                val ctx = this
-
-                // RW perms for the path
-                ctx.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-
-                val file = SafeFile.fromUri(ctx, uri)
-                val fileName = file?.name()
-
-                val mimeType = ctx.contentResolver.getType(uri)
-                println("Loaded epub file. Selected URI path: $uri - Name: $fileName")
-
-                ioSafe {
-                    try {
-                        if (mimeType == "application/pdf" || fileName?.endsWith(".pdf") == true) {
-                            BookDownloader2.downloadPDFWorkThread(uri, ctx)
-                        }
-                        else{
-                            BookDownloader2.downloadWorkThread(uri, ctx)
-                        }
-                    } catch (t : Throwable) {
-                        logError(t)
-                        showToast(t.message)
-                    }
-                }
-            }
+            // It lies, it can be null if file manager quits.
+            if (uri == null) return@registerForActivityResult
+            importUri(uri)
         }
 
     private fun openEpubPicker() {
-        try {
+        safe {
             epubPathPicker.launch(
                 arrayOf(
                     //"text/plain",
@@ -396,8 +434,19 @@ class MainActivity : AppCompatActivity() {
                     "application/epub+zip",
                 )
             )
-        } catch (e: Exception) {
-            logError(e)
+        }
+    }
+    private fun openEpubPickers() {
+        safe {
+            epubPathsPicker.launch(
+                arrayOf(
+                    //"text/plain",
+                    //"text/str",
+                    //"application/octet-stream",
+                    "application/pdf",
+                    "application/epub+zip",
+                )
+            )
         }
     }
 
@@ -467,7 +516,7 @@ class MainActivity : AppCompatActivity() {
         loadResultFromUrl(data)
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         handleIntent(intent)
         super.onNewIntent(intent)
     }
@@ -509,8 +558,6 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding!!.root)
 
-        setUpBackup()
-
         val navHostFragment =
             supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
@@ -536,6 +583,12 @@ class MainActivity : AppCompatActivity() {
         val rippleColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.1f))
         navView.itemRippleColor = rippleColor
         navView.itemActiveIndicatorColor = rippleColor
+
+        fixSystemBarsPadding(
+            navView, heightResId = R.dimen.nav_view_height,
+            padTop = false,
+            overlayCutout = false
+        )
 
         navView.setOnItemSelectedListener { item ->
             onNavDestinationSelected(
@@ -636,12 +689,16 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         readMore.setOnClickListener {
-                            loadResult(d.url, viewModel.apiName)
-                            hidePreviewPopupDialog()
+                            if(!d.isImported) {
+                                loadResult(d.url, viewModel.apiName)
+                                hidePreviewPopupDialog()
+                            }
                         }
 
-                        readMore.isVisible = viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
-                        bookmark.isVisible = viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
+                        readMore.isVisible =
+                            viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
+                        bookmark.isVisible =
+                            viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
 
                         resultviewPreviewLoading.isVisible = false
                         resultviewPreviewResult.isVisible = true
@@ -649,20 +706,24 @@ class MainActivity : AppCompatActivity() {
                         resultviewPreviewPoster.apply {
                             setImage(d.downloadImage())
                             setOnClickListener {
-                                loadResult(d.url, viewModel.apiName)
-                                hidePreviewPopupDialog()
+                                if(!d.isImported) {
+                                    loadResult(d.url, viewModel.apiName)
+                                    hidePreviewPopupDialog()
+                                }
                             }
                         }
 
                         resultviewPreviewTitle.text = d.name
 
                         resultviewPreviewMoreInfo.setOnClickListener {
-                            loadResult(d.url, viewModel.apiName)
-                            hidePreviewPopupDialog()
+                            if(!d.isImported) {
+                                loadResult(d.url, viewModel.apiName)
+                                hidePreviewPopupDialog()
+                            }
                         }
 
-                        val synopsisText = d.synopsis ?: getString(R.string.no_data)
-                        resultviewPreviewDescription.text = synopsisText
+                        resultviewPreviewDescription.text =
+                            d.synopsis?.html() ?: getString(R.string.no_data)
 
                         resultviewPreviewDescription.setOnClickListener { view ->
                             view.context?.let { ctx ->
@@ -686,7 +747,7 @@ class MainActivity : AppCompatActivity() {
                                     val translatedSynopsis = withContext(Dispatchers.IO) {
                                         GoogleTranslate.translate(synopsis)
                                     }
-                                    resultviewPreviewDescription.text = translatedSynopsis
+                                    resultviewPreviewDescription.text = translatedSynopsis.html()
                                     resultviewPreviewDescription.setOnClickListener { view ->
                                         view.context?.let { ctx ->
                                             val builder: AlertDialog.Builder =
@@ -715,7 +776,8 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         if (d is StreamResponse) {
-                            resultviewPreviewMetaChapters.text = "${d.data.size} ${getString(R.string.chapter_sort)}"
+                            resultviewPreviewMetaChapters.text =
+                                "${d.data.size} ${getString(R.string.chapter_sort)}"
                             resultviewPreviewMetaChapters.isVisible = d.data.isNotEmpty()
                             resultviewPreviewMetaChapters.setOnClickListener {
                                 loadResult(d.url, viewModel.apiName)

@@ -11,3 +11,4 @@
 .claude/
 # Windows redirect artifact
 nul
+.kotlin/

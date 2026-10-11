@@ -4,6 +4,7 @@ import android.Manifest.permission.POST_NOTIFICATIONS
 import android.Manifest.permission.READ_EXTERNAL_STORAGE
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.app.Activity
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -17,27 +18,29 @@ import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.annotation.WorkerThread
+import androidx.compose.runtime.Immutable
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.graphics.scale
 import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
-import androidx.work.ListenableWorker
 import coil3.Extras
 import coil3.SingletonImageLoader
 import coil3.asDrawable
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import com.anggrayudi.storage.StorageFile
 import com.lagradost.quicknovel.BaseApplication.Companion.context
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
@@ -50,18 +53,19 @@ import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
 import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.getDirectory
+import com.lagradost.quicknovel.BookDownloader2Helper.getGeneralCSStyleForEPUBs
+import com.lagradost.quicknovel.BookDownloader2Helper.getSafeByteArray
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.DataStore.mapper
-import com.lagradost.quicknovel.DownloadFileWorkManager.Companion.viewModel
 import com.lagradost.quicknovel.ImageDownloader.getImageBitmapFromUrl
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.extractors.ExtractorApi
+import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.ReadType
+import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
-import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
-import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getDefaultDir
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromNameOrNull
 import com.lagradost.quicknovel.util.AppUtils.textToHtmlChapter
@@ -71,36 +75,48 @@ import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.pmap
-import com.lagradost.safefile.SafeFile
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripperByArea
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import me.ag2s.epublib.domain.Author
 import me.ag2s.epublib.domain.EpubBook
-import me.ag2s.epublib.domain.MediaType
 import me.ag2s.epublib.domain.MediaTypes
 import me.ag2s.epublib.domain.Resource
 import me.ag2s.epublib.domain.TOCReference
 import me.ag2s.epublib.epub.EpubReader
 import me.ag2s.epublib.epub.EpubWriter
 import me.ag2s.epublib.util.zip.AndroidZipFile
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.Entities
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.OutputStream
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 enum class DownloadActionType {
     Pause,
@@ -161,6 +177,21 @@ data class QuickStreamData(
     val data: MutableList<ChapterData>,
 )
 
+data class WaitOrCancel(
+    val channel: Channel<Unit> = Channel<Unit>(capacity = 1, BufferOverflow.DROP_OLDEST),
+) {
+    /** Returns true if we recived a cancel message */
+    suspend fun delay(time: Duration): Boolean {
+        return withTimeoutOrNull(time) {
+            channel.receive()
+        } != null
+    }
+
+    fun notifyEvent() {
+        channel.trySend(Unit)
+    }
+}
+
 object BookDownloader2Helper {
     const val IMPORT_SOURCE = "Download"
     const val IMPORT_SOURCE_PDF = "importsourcepdf"
@@ -187,6 +218,137 @@ object BookDownloader2Helper {
         return "${getDirectory(apiName, author, name)}${fs}poster.jpg".replace("$fs$fs", "$fs")
     }
 
+    fun getGeneralCSStyleForEPUBs(): Resource {
+        val cssContent = """
+            body {
+              display: block;
+              font-size: 1em;
+              padding-left: 0;
+              padding-right: 0;
+              margin: 0 5pt;
+            }
+            p {
+              display: block;
+              margin: 1em 0;
+            }
+            @page {
+              margin-bottom: 5pt;
+              margin-top: 5pt;
+            }
+        """.trimIndent()
+        return Resource(
+            "style.css",
+            cssContent.toByteArray(),
+            "style.css",
+            MediaTypes.CSS
+        )
+    }
+
+
+    /**
+     * Calculates the largest power-of-two inSampleSize that keeps the image
+     * dimensions larger than or equal to the requested dimensions.
+     */
+    private fun calculateInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int,
+        reqHeight: Int
+    ): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
+    //to show images
+    /**
+     * Decodes a Bitmap from a File path with a maximum resolution constraint.
+     * It uses inJustDecodeBounds to avoid loading the full image into RAM.
+     */
+    fun decodeSafeBitmap(
+        path: String? = null,
+        data: ByteArray? = null,
+        maxRes: Int = 1200,
+        config: Bitmap.Config = Bitmap.Config.ARGB_8888
+    ): Bitmap? {
+        return try {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+
+            val finalData = when {
+                path != null -> {
+                    BitmapFactory.decodeFile(path, options)
+                    null
+                }
+
+                data != null -> {
+                    BitmapFactory.decodeByteArray(data, 0, data.size, options)
+                    data
+                }
+
+                else -> return null
+            }
+
+            options.inSampleSize = calculateInSampleSize(options, maxRes, maxRes)
+            options.inJustDecodeBounds = false
+            options.inPreferredConfig = config
+
+            when {
+                path != null -> BitmapFactory.decodeFile(path, options)
+                finalData != null -> BitmapFactory.decodeByteArray(
+                    finalData,
+                    0,
+                    finalData.size,
+                    options
+                )
+
+                else -> null
+            }
+        } catch (e: Exception) {
+            logError(e)
+            null
+        }
+    }
+
+    /**
+     *  Loads a Bitmap from disk for display.
+     */
+    fun decodeSafeBitmap(path: String, maxRes: Int = 1200): Bitmap? {
+        return decodeSafeBitmap(path = path, maxRes = maxRes, config = Bitmap.Config.ARGB_8888)
+    }
+
+
+    //to save images
+    /**
+     * Checks if a ByteArray image is too large and downsamples it if necessary.
+     * This prevents saving massive bitmaps that crash the Canvas later.
+     */
+    fun getSafeByteArray(data: ByteArray, maxRes: Int = 1200): ByteArray {
+        // If the image is already small, don't waste CPU
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(data, 0, data.size, options)
+        if (options.outWidth <= maxRes && options.outHeight <= maxRes) return data
+
+        // Process and re-compress
+        val bitmap = decodeSafeBitmap(data = data, maxRes = maxRes, config = Bitmap.Config.RGB_565)
+            ?: return data
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+        val result = outputStream.toByteArray()
+        bitmap.recycle()
+        return result
+    }
+
+    //to get covers
+    /**
+     * Loads a book img from local storage, downsampling it to prevent memory issues
+     * and caching it in memory for fast access.
+     */
     private val cachedBitmaps = hashMapOf<String, Bitmap>()
     fun getCachedBitmap(
         activity: Activity?,
@@ -194,26 +356,18 @@ object BookDownloader2Helper {
         author: String?,
         name: String
     ): Bitmap? {
-        try {
-            val filePath = getFilenameIMG(
-                sanitizeFilename(apiName),
-                sanitizeFilename(author ?: ""),
-                sanitizeFilename(name)
-            )
+        val filePath = getFilenameIMG(
+            sanitizeFilename(apiName),
+            sanitizeFilename(author ?: ""),
+            sanitizeFilename(name)
+        )
+        cachedBitmaps[filePath]?.let { return it }
 
-            val existing = cachedBitmaps.get(filePath)
-            if (existing != null) return existing
-            if (activity == null) return null
+        val file = File(activity?.filesDir, filePath.trimStart(File.separatorChar))
+        if (!file.exists()) return null
 
-            val file = activity.filesDir.toString() + filePath
-            val data = File(file).readBytes()
-            val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-            cachedBitmaps[filePath] = bitmap
-
-            return bitmap
-        } catch (t: Throwable) {
-            logError(t)
-            return null
+        return decodeSafeBitmap(file.absolutePath)?.also {
+            cachedBitmaps[filePath] = it
         }
     }
 
@@ -228,7 +382,7 @@ object BookDownloader2Helper {
         return generateId(apiName, load.author, load.name)
     }
 
-    fun Activity.checkWrite(): Boolean {
+    fun Context.checkWrite(): Boolean {
         return (ContextCompat.checkSelfPermission(
             this,
             WRITE_EXTERNAL_STORAGE
@@ -260,34 +414,8 @@ object BookDownloader2Helper {
         }
     }
 
-    fun hasEpub(activity: Activity?, name: String): Boolean {
-        if (activity == null) return false
-
-        if (!activity.checkWrite()) {
-            activity.requestRW()
-            return false
-        }
-
-        val relativePath = (Environment.DIRECTORY_DOWNLOADS + "${fs}Epub${fs}")
-        val displayName = "${sanitizeFilename(name)}.epub"
-
-        if (isScopedStorage()) {
-            val cr = activity.contentResolver ?: return false
-            val fileUri =
-                cr.getExistingDownloadUriOrNullQ(relativePath, displayName) ?: return false
-            val fileLength = cr.getFileLength(fileUri) ?: return false
-            return fileLength != 0L
-        } else {
-            val normalPath =
-                "${Environment.getExternalStorageDirectory()}${fs}$relativePath$displayName"
-
-            val bookFile = File(normalPath)
-            return bookFile.exists()
-        }
-    }
-
     fun copyAllData(
-        activity: Activity?,
+        context: Context?,
         fromAuthor: String?,
         fromName: String,
         fromApiName: String,
@@ -295,7 +423,7 @@ object BookDownloader2Helper {
         toName: String,
         toApiName: String
     ) {
-        if (activity == null) return
+        if (context == null) return
         val sFromApiName = sanitizeFilename(fromApiName)
         val sFromAuthor = if (fromAuthor == null) "" else sanitizeFilename(fromAuthor)
         val sFromName = sanitizeFilename(fromName)
@@ -309,18 +437,18 @@ object BookDownloader2Helper {
 
         val fromDir =
             File(
-                activity.filesDir.toString() + getDirectory(sFromApiName, sFromAuthor, sFromName)
+                context.filesDir.toString() + getDirectory(sFromApiName, sFromAuthor, sFromName)
             )
         val toDir =
             File(
-                activity.filesDir.toString() + getDirectory(sToApiName, sToAuthor, sToName)
+                context.filesDir.toString() + getDirectory(sToApiName, sToAuthor, sToName)
             )
         toDir.mkdirs()
         fromDir.copyRecursively(toDir, overwrite = false)
     }
 
-    fun deleteNovel(activity: Activity?, author: String?, name: String, apiName: String) {
-        if (activity == null) return
+    fun deleteNovel(context: Context?, author: String?, name: String, apiName: String) {
+        if (context == null) return
         try {
             val sApiName = sanitizeFilename(apiName)
             val sAuthor = if (author == null) "" else sanitizeFilename(author)
@@ -329,7 +457,7 @@ object BookDownloader2Helper {
 
             val dir =
                 File(
-                    activity.filesDir.toString() + getDirectory(sApiName, sAuthor, sName)
+                    context.filesDir.toString() + getDirectory(sApiName, sAuthor, sName)
                 )
 
             removeKey(DOWNLOAD_SIZE, id.toString())
@@ -454,6 +582,7 @@ object BookDownloader2Helper {
             val total = getKey<Int>(DOWNLOAD_TOTAL, id.toString()) ?: return null
             return DownloadProgress(count.toLong(), total.toLong(), downloaded.toLong())
         } catch (e: Exception) {
+            logError(e)
             return null
         }
     }
@@ -525,7 +654,10 @@ object BookDownloader2Helper {
         forceReload: Boolean
     ): LoadedChapter? {
         val path = getFilePath(meta, index)
-        downloadIndividualChapter(path, getApiFromName(meta.apiName), chapter, forceReload)
+        downloadIndividualChapter(
+            path, getApiFromName(meta.apiName), chapter, forceReload,
+            worker = WaitOrCancel()
+        )
         return getChapter(path, index, getStripHtml(), false)
     }
 
@@ -553,54 +685,6 @@ object BookDownloader2Helper {
         }
     }
 
-    @Throws
-    fun openEpub(activity: Activity?, name: String, openInApp: Boolean? = null, apiName: String? = null) {
-        if (activity == null) throw IOException("No activity")
-
-        if (!activity.checkWrite()) {
-            activity.requestRW()
-            return
-        }
-
-        val settingsManager = PreferenceManager.getDefaultSharedPreferences(activity)
-        val subDir =
-            activity.getBasePath().first ?: getDefaultDir(activity) ?: throw IOException("No file")
-        val displayName = "${sanitizeFilename(name)}.epub"
-        val foundFile = subDir.findFileOrThrow(displayName)
-
-        val externalReader = settingsManager.getBoolean(
-            activity.getString(R.string.external_reader_key),
-            true
-        )
-        if (openInApp ?: !externalReader) {
-            val myIntent = Intent(activity, ReadActivity2::class.java)
-            myIntent.setDataAndType(foundFile.uriOrThrow(), "application/epub+zip")
-            if (apiName != null) {
-                myIntent.putExtra("apiName", apiName)
-                myIntent.putExtra("novelName", name)
-            }
-            activity.startActivity(myIntent)
-            return
-        }
-
-        val intent = Intent().apply {
-            action = Intent.ACTION_VIEW
-            addFlags(
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-                        or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-                        or Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        }
-
-        val type = "application/epub+zip"
-        intent.setDataAndType(
-            foundFile.uriOrThrow(), type
-        )
-        activity.startActivity(intent)
-        //this.startActivityForResult(intent,1337) // SEE @moonreader
-    }
-
     private fun Context.getStripHtml(): Boolean {
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
         return (settingsManager.getBoolean(this.getString(R.string.remove_external_key), true))
@@ -619,6 +703,9 @@ object BookDownloader2Helper {
         return externalReader && !authorsNotes
     }
 
+    val chapterRegex = Regex("Chapter \\d+", RegexOption.IGNORE_CASE)
+    val translatorRegex = Regex("Translator:.*?Editor:.*", RegexOption.IGNORE_CASE)
+
     private fun getChapter(
         filepath: String,
         index: Int,
@@ -626,23 +713,60 @@ object BookDownloader2Helper {
         stripAuthorNotes: Boolean
     ): LoadedChapter? {
         val rFile = File(filepath)
-        if (rFile.exists()) {
-            val text = rFile.readText()
-            val firstChar = text.indexOf('\n')
-            if (firstChar == -1) {
-                return null
-            } // Invalid File
-            val title = text.substring(0, firstChar)
-            val data = text.substring(firstChar + 1)
-            val html = if (!stripHtml) data else stripHtml(
-                data,
-                title,
-                index,
-                stripAuthorNotes
-            )
-            return LoadedChapter(title, html)
+        if (!rFile.exists()) return null
+
+        val text = rFile.readText()
+        val firstChar = text.indexOf('\n')
+        if (firstChar == -1) {
+            return null
+        } // Invalid File
+
+        val title = text.substring(0, firstChar)
+        val data = text.substring(firstChar + 1)
+        val document = Jsoup.parse(data)
+
+        document.outputSettings().apply {
+            //translate <br> to <br />, <img> to <img... /> etc.
+            syntax(Document.OutputSettings.Syntax.xml)
+            //translate special characters to their Unicode equivalent in xhtml
+            escapeMode(Entities.EscapeMode.xhtml)
         }
-        return null
+
+        if (stripAuthorNotes) {
+            document.select("div.qnauthornotecontainer").remove()
+        }
+
+        // We do not want to create a nested <body> will cause some readers to fail
+        val body: Element = document.selectFirst("body") ?: document
+
+        // Strip the first line if it is useless
+        val trimTitle = title.trim()
+        for (first in arrayOf("p", "h1", "h2", "h3", "h4", "h5")) {
+            val firstText = body.selectFirst(first) ?: continue
+            val text = firstText.text().trim()
+
+            // Do not apply filtering on multiline text as that might contain other info
+            if (text.contains('\n')) {
+                continue
+            }
+
+            if (
+                text.equals(trimTitle, true)
+                || text.matches(chapterRegex)
+                || text.matches(translatorRegex)
+            ) {
+                firstText.remove()
+                break
+            }
+        }
+
+        return LoadedChapter(title, body.html())
+    }
+
+    enum class DownloadResult {
+        Cancel,
+        Failure,
+        Success
     }
 
     suspend fun downloadIndividualChapter(
@@ -650,88 +774,97 @@ object BookDownloader2Helper {
         api: APIRepository,
         data: ChapterData,
         forceReload: Boolean = false,
-        maxTries: Int = 5
-    ): Boolean = withContext(Dispatchers.IO) {
+        maxTries: Int = 5,
+        worker: WaitOrCancel,
+    ): DownloadResult = withContext(Dispatchers.IO) {
         val rFile = File(filepath)
         if (rFile.exists() && rFile.length() > 0 && !forceReload) {
-            return@withContext true
+            return@withContext DownloadResult.Success
         }
         rFile.parentFile?.mkdirs()
         if (rFile.isDirectory) rFile.delete()
         val rateLimit = api.rateLimitTime > 0
+        val rateTime = if (api.rateLimitTime > 0) {
+            api.rateLimitTime.milliseconds
+        } else {
+            Duration.ZERO
+        }
         for (i in 0..maxTries) {
-            if (rateLimit) {
-                api.api.rateLimitMutex.lock()
-            }
-            try {
-                val page = api.loadHtml(data.url)
+            val work = async {
+                try {
+                    if (rateLimit) {
+                        api.api.rateLimitMutex.lock()
+                    }
+                    val page = api.loadHtml(data.url)
 
-                if (!page.isNullOrBlank()) {
-                    rFile.createNewFile() // only create the file when actually needed
-                    rFile.writeText("${data.name}\n${page}")
-                    if (api.rateLimitTime > 0) {
-                        delay(api.rateLimitTime)
+                    if (!page.isNullOrBlank()) {
+                        rFile.createNewFile() // only create the file when actually needed
+                        rFile.writeText("${data.name}\n${page}")
+                        if (api.rateLimitTime > 0) {
+                            worker.delay(rateTime)
+                        }
+                        return@async DownloadResult.Success
+                    } else {
+                        if (worker.delay((1000L * (i + 1)).milliseconds + rateTime)) {
+                            return@async DownloadResult.Cancel
+                        }
                     }
-                    return@withContext true
-                } else {
-                    delay(5000) // ERROR
-                    if (api.rateLimitTime > 0) {
-                        delay(api.rateLimitTime)
+                } catch (_: CancellationException) {
+                    return@async DownloadResult.Cancel
+                } catch (e: Exception) {
+                    logError(e)
+                    if (worker.delay((1000L * (i + 1)).milliseconds)) {
+                        return@async DownloadResult.Cancel
+                    }
+                } finally {
+                    if (rateLimit) {
+                        api.api.rateLimitMutex.unlock()
                     }
                 }
-            } finally {
-                if (rateLimit) {
-                    api.api.rateLimitMutex.unlock()
+                return@async DownloadResult.Failure
+            }
+            val exit: DownloadResult = select {
+                work.onAwait { x -> x }
+                worker.channel.onReceive {
+                    work.cancel()
+                    return@onReceive DownloadResult.Cancel
                 }
+            }
+            when (exit) {
+                DownloadResult.Cancel -> return@withContext DownloadResult.Cancel
+                DownloadResult.Failure -> continue
+                DownloadResult.Success -> return@withContext DownloadResult.Success
             }
         }
-        return@withContext false
+        return@withContext DownloadResult.Failure
     }
 
     @WorkerThread
     @Throws
     fun turnToEpub(
-        activity: Activity?,
-        author: String?,
-        name: String,
         apiName: String,
-        synopsis: String?
+        name: String,
+        author: String?,
+        synopsis: String?,
+        activity: Activity,
+        fileStream: OutputStream,
     ) {
-        if (activity == null) throw ErrorLoadingException("No activity")
-        if (!activity.checkWrite()) {
-            activity.requestRW()
-            return
-        }
-
         try {
             val sApiName = sanitizeFilename(apiName)
             val sAuthor = if (author == null) "" else sanitizeFilename(author)
             val sName = sanitizeFilename(name)
-            val id = "$sApiName$sAuthor$sName".hashCode()
-
-            val subDir = activity.getBasePath().first ?: getDefaultDir(activity)
-            ?: throw IOException("No file")
-
-            //val subDir = baseFile.gotoDirectoryOrThrow("Epub", createMissingDirectories = true)
-            val displayName = "${sanitizeFilename(name)}.epub"
-
-            //val relativePath = (Environment.DIRECTORY_DOWNLOADS + "${fs}Epub${fs}")
-            subDir.findFile(displayName)?.delete()
-            val file = subDir.createFileOrThrow(displayName)
-
-            val fileStream =
-                file.openOutputStream(append = false) ?: throw IOException("No outputfile")
+            val id = generateId(apiName, author, name)
 
             val epubFile = File(
                 activity.filesDir.toString() + getDirectory(sApiName, sAuthor, sName),
                 LOCAL_EPUB
             )
             if (epubFile.exists() && epubFile.length() > LOCAL_EPUB_MIN_SIZE) {
-                fileStream.write(epubFile.readBytes())
-
+                epubFile.inputStream().use { input ->
+                    input.copyTo(fileStream)
+                }
                 setKey(DOWNLOAD_EPUB_SIZE, id.toString(), 1)
             } else {
-
                 val book = EpubBook()
                 val metadata = book.metadata
                 if (author != null) {
@@ -748,7 +881,7 @@ object BookDownloader2Helper {
                     activity.filesDir.toString() + getFilenameIMG(sApiName, sAuthor, sName)
                 val pFile = File(posterFilepath)
                 if (pFile.exists()) {
-                    book.coverImage = Resource(pFile.readBytes(), MediaType("cover", ".jpg"))
+                    book.coverImage = Resource(getSafeByteArray(pFile.readBytes()), pFile.name)
                 }
 
                 val stripHtml = activity.getStripHtml()
@@ -761,8 +894,9 @@ object BookDownloader2Helper {
                     fileName.nameWithoutExtension.toIntOrNull() ?: return@mapNotNull null
                 }?.filter { x -> x >= start }?.sorted()
 
-                chapters?.pmap { threadIndex ->
+                book.resources.add(getGeneralCSStyleForEPUBs())
 
+                chapters?.pmap { threadIndex ->
                     val filepath =
                         head + getFilename(
                             sApiName,
@@ -775,8 +909,8 @@ object BookDownloader2Helper {
                     Triple(
                         Resource(
                             "id$threadIndex",
-                            chap.html.toByteArray(),
-                            "chapter$threadIndex.html",
+                            packageAsXHtml(chap.title, chap.html).toByteArray(),
+                            "chapter${threadIndex}.html",
                             MediaTypes.XHTML
                         ),
                         threadIndex,
@@ -801,10 +935,11 @@ object BookDownloader2Helper {
                 epubWriter.write(book, fileStream)
                 setKey(DOWNLOAD_EPUB_SIZE, id.toString(), largestChapter)
             }
-            fileStream.close()
         } catch (e: Exception) {
             logError(e)
             throw e
+        } finally {
+            fileStream.close()
         }
     }
 }
@@ -834,7 +969,7 @@ object NotificationHelper {
         }
     }
 
-    private fun Context.createNotificationChannel() {
+    fun Context.createNotificationChannel() {
         hasCreatedNotChanel = true
         // Create the NotificationChannel, but only on API 26+ because
         // the NotificationChannel class is new and not in the support library
@@ -850,6 +985,34 @@ object NotificationHelper {
                 this.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
+    }
+
+    // The id is fixed so the foreground notification is replaced, not stacked, per worker
+    const val FOREGROUND_NOTIFICATION_ID = 6660
+
+    fun buildForegroundNotification(context: Context): Notification {
+        if (!hasCreatedNotChanel) {
+            context.createNotificationChannel()
+        }
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_baseline_autorenew_24)
+            .setContentTitle(context.getString(R.string.app_name))
+            .setContentText(context.getString(R.string.download_in_progress))
+            .setOngoing(true)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(pendingIntent)
+            .build()
     }
 
     fun etaToString(etaMs: Long?): String {
@@ -869,180 +1032,141 @@ object NotificationHelper {
 
     suspend fun createNotification(
         context: Context?,
-        source: String,
+        source: String?,
         id: Int,
-        load: LoadResponse,
+        name: String,
+        posterUrl: String? = null,
         stateProgressState: DownloadProgressState,
-        showNotification: Boolean,
-        progressInBytes: Boolean,
+        progressInBytes: Boolean = true,
+        isActionable: Boolean = true,
+        isStreamNovel: Boolean = true,
     ) {
         if (context == null) return
         val state = stateProgressState.state
-        var timeFormat = ""
-        if (state == DownloadState.IsDownloading) { // ETA
-            timeFormat = etaToString(stateProgressState.etaMs)
+        val timeFormat = if (state == DownloadState.IsDownloading) etaToString(
+            stateProgressState.etaMs
+        ) else ""
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            data = source?.toUri()
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
 
-        if (showNotification) {
-            val intent = Intent(context, MainActivity::class.java).apply {
-                data = source.toUri()
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context, 0, intent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+        )
 
-            val pendingIntent: PendingIntent = PendingIntent.getActivity(
-                context, 0, intent,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                    PendingIntent.FLAG_MUTABLE else 0
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setAutoCancel(true)
+            .setColorized(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setColor(context.colorFromAttribute(R.attr.colorPrimary))
+            .setContentTitle(name)
+            .setContentIntent(pendingIntent)
+
+
+        val extraText = if (stateProgressState.total > 1) {
+            val unit = if (progressInBytes) "Kb" else ""
+            val div = if (progressInBytes) 1024 else 1
+
+            if (isStreamNovel)
+                "${stateProgressState.progress} / ${stateProgressState.total}"
+            else
+                "${stateProgressState.progress / div} $unit / ${stateProgressState.total / div}${if (unit.isNotEmpty()) " $unit" else ""}"
+        } else ""
+
+        val statusText = when (state) {
+            DownloadState.IsDone -> "Download Done"
+            DownloadState.IsDownloading -> "Downloading $extraText"
+            DownloadState.IsPaused -> "Paused $extraText"
+            DownloadState.IsFailed -> "Error $extraText"
+            DownloadState.IsStopped -> "Stopped $extraText"
+            else -> ""
+        }
+        builder.setContentText(statusText)
+
+        builder.setSmallIcon(
+            when (state) {
+                DownloadState.IsDone -> R.drawable.rddone
+                DownloadState.IsDownloading -> R.drawable.rdload
+                DownloadState.IsPaused -> R.drawable.rdpause
+                else -> R.drawable.rderror
+            }
+        )
+
+
+        if (state == DownloadState.IsDownloading || state == DownloadState.IsPaused) {
+            builder.setProgress(
+                stateProgressState.total.toInt(),
+                stateProgressState.progress.toInt(),
+                stateProgressState.total <= 1
             )
-            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setAutoCancel(true)
-                .setColorized(true)
-                .setAutoCancel(true)
-                .setOnlyAlertOnce(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setColor(context.colorFromAttribute(R.attr.colorPrimary))
-                .setContentText(
-                    if (stateProgressState.total > 1) {
-                        val extra = if (progressInBytes) {
-                            val bytesToKiloBytes = 1024
-                            "${stateProgressState.progress / bytesToKiloBytes} Kb/${stateProgressState.total / bytesToKiloBytes} Kb"
-                        } else {
-                            "${stateProgressState.progress}/${stateProgressState.total}"
-                        }
+            if (timeFormat.isNotEmpty()) builder.setSubText("$timeFormat remaining")
+        }
 
-                        when (state) {
-                            DownloadState.IsDone -> "Download Done - ${load.name}"
-                            DownloadState.IsDownloading -> "Downloading ${load.name} - $extra"
-                            DownloadState.IsPaused -> "Paused ${load.name} - $extra"
-                            DownloadState.IsFailed -> "Error ${load.name} - $extra"
-                            DownloadState.IsStopped -> "Stopped ${load.name} - $extra"
-                            else -> throw NotImplementedError()
-                        }
-                    } else {
-                        when (state) {
-                            DownloadState.IsDone -> "Download Done - ${load.name}"
-                            DownloadState.IsDownloading -> "Downloading ${load.name}"
-                            DownloadState.IsPaused -> "Paused ${load.name}"
-                            DownloadState.IsFailed -> "Error ${load.name}"
-                            DownloadState.IsStopped -> "Stopped ${load.name}"
-                            else -> throw NotImplementedError()
-                        }
-                    }
-                )
-                .setSmallIcon(
-                    when (state) {
-                        DownloadState.IsDone -> R.drawable.rddone
-                        DownloadState.IsDownloading -> R.drawable.rdload
-                        DownloadState.IsPaused -> R.drawable.rdpause
-                        DownloadState.IsFailed -> R.drawable.rderror
-                        DownloadState.IsStopped -> R.drawable.rderror
-                        else -> throw NotImplementedError()
-                    }
-                )
-                .setContentIntent(pendingIntent)
 
-            if (state == DownloadState.IsDownloading && stateProgressState.total > 2) {
-                builder.setSubText("$timeFormat remaining")
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && posterUrl != null) {
+            context.getImageBitmapFromUrl(posterUrl)?.let { builder.setLargeIcon(it) }
+        }
 
-            if (state == DownloadState.IsDownloading || state == DownloadState.IsPaused) {
-                builder.setProgress(
-                    stateProgressState.total.toInt(),
-                    stateProgressState.progress.toInt(),
-                    stateProgressState.total <= 1
-                )
-            }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                load.posterUrl?.let { url ->
-                    val poster = context.getImageBitmapFromUrl(url)
-                    if (poster != null)
-                        builder.setLargeIcon(poster)
-                }
-            }
+        if (isActionable && (state == DownloadState.IsDownloading || state == DownloadState.IsPaused)) {
+            val actionTypes = if (state == DownloadState.IsDownloading)
+                listOf(DownloadActionType.Pause, DownloadActionType.Stop)
+            else
+                listOf(DownloadActionType.Resume, DownloadActionType.Stop)
 
-            if ((state == DownloadState.IsDownloading || state == DownloadState.IsPaused) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val actionTypes: MutableList<DownloadActionType> = ArrayList()
-                // INIT
-                if (state == DownloadState.IsDownloading) {
-                    actionTypes.add(DownloadActionType.Pause)
-                    actionTypes.add(DownloadActionType.Stop)
+            actionTypes.forEachIndexed { index, action ->
+                val resultIntent = Intent(context, DownloadNotificationService::class.java).apply {
+                    putExtra("type", action.name.lowercase())
+                    putExtra("id", id)
                 }
 
-                if (state == DownloadState.IsPaused) {
-                    actionTypes.add(DownloadActionType.Resume)
-                    actionTypes.add(DownloadActionType.Stop)
-                }
+                val pending: PendingIntent = PendingIntent.getService(
+                    context, 4337 + index + id, resultIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+                )
 
-                // ADD ACTIONS
-                for ((index, i) in actionTypes.withIndex()) {
-                    val resultIntent = Intent(context, DownloadNotificationService::class.java)
-
-                    resultIntent.putExtra(
-                        "type", when (i) {
-                            DownloadActionType.Resume -> "resume"
-                            DownloadActionType.Pause -> "pause"
-                            DownloadActionType.Stop -> "stop"
-                        }
+                builder.addAction(
+                    NotificationCompat.Action(
+                        when (action) {
+                            DownloadActionType.Resume -> R.drawable.rdload
+                            DownloadActionType.Pause -> R.drawable.rdpause
+                            DownloadActionType.Stop -> R.drawable.rderror
+                        },
+                        action.name, pending
                     )
-
-                    resultIntent.putExtra("id", id)
-
-                    val pending: PendingIntent =
-                        PendingIntent.getService(
-                            context, 4337 + index + id,
-                            resultIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                                        PendingIntent.FLAG_MUTABLE else 0
-                        )
-
-
-                    builder.addAction(
-                        NotificationCompat.Action(
-                            when (i) {
-                                DownloadActionType.Resume -> R.drawable.rdload
-                                DownloadActionType.Pause -> R.drawable.rdpause
-                                DownloadActionType.Stop -> R.drawable.rderror
-                            }, when (i) {
-                                DownloadActionType.Resume -> "Resume"
-                                DownloadActionType.Pause -> "Pause"
-                                DownloadActionType.Stop -> "Stop"
-                            }, pending
-                        )
-                    )
-                }
-            }
-
-            if (!hasCreatedNotChanel) {
-                context.createNotificationChannel()
-            }
-
-            with(NotificationManagerCompat.from(context)) {
-                // notificationId is a unique int for each notification that you must define
-                try {
-                    notify(id, builder.build())
-                } catch (t: Throwable) {
-                    logError(t)
-                }
+                )
             }
         }
+
+        if (!hasCreatedNotChanel) {
+            context.createNotificationChannel()
+        }
+
+        with(NotificationManagerCompat.from(context)) {
+            try {
+                notify(id, builder.build())
+            } catch (t: Throwable) {
+                logError(t)
+            }
+        }
+
     }
 }
 
 object ImageDownloader {
-    private val cachedBitmapMutex = Mutex()
-    private val cachedBitmaps = hashMapOf<String, Bitmap>()
+    private val cachedBitmaps = ConcurrentHashMap<String, Bitmap>()
 
     suspend fun Context.getImageBitmapFromUrl(
         url: String,
         headers: Map<String, String>? = null
     ): Bitmap? {
         try {
-            with(cachedBitmapMutex) {
-                if (cachedBitmaps.containsKey(url)) {
-                    return cachedBitmaps[url]
-                }
+            cachedBitmaps[url]?.let {
+                return it
             }
 
             val imageLoader = SingletonImageLoader.get(this)
@@ -1063,9 +1187,7 @@ object ImageDownloader {
             }
 
             bitmap?.let {
-                with(cachedBitmapMutex) {
-                    cachedBitmaps[url] = it
-                }
+                cachedBitmaps[url] = it
             }
 
             return bitmap
@@ -1083,6 +1205,7 @@ object BookDownloader2 {
 
     private val streamMutex = Mutex()
 
+    // TODO refactor to use immutable
     @WorkerThread
     suspend fun stream(res: LoadResponse, apiName: String) {
         when (res) {
@@ -1098,10 +1221,17 @@ object BookDownloader2 {
 
     @WorkerThread
     suspend fun stream(res: EpubResponse, apiName: String) {
-        downloadWorkThread(res, getApiFromName(apiName))
-        readEpub(res.author, res.name, apiName, res.synopsis)
+        downloadWorkThread(res, getApiFromName(apiName), context ?: return, worker = WaitOrCancel())
+        readEpub(
+            author = res.author,
+            name = res.name,
+            apiName = apiName,
+            synopsis = res.synopsis,
+            alwaysGenerateNewFile = false
+        ) {}
     }
 
+    /** Chapter titles from the locally generated EPUB (used by the result page for EPUB-only books). */
     fun getEpubChapterNames(
         context: Context?,
         apiName: String,
@@ -1195,15 +1325,53 @@ object BookDownloader2 {
         }
     }
 
-    private fun generateAndReadEpub(
+    suspend fun stream(card: ImmutableSearchResponse) = withContext(Dispatchers.IO) {
+        if (streamResultMutex.isLocked) return@withContext
+        streamResultMutex.withLock {
+            val api = getApiFromName(card.apiName)
+            val data = api.load(card.url)
+
+            if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
+                val response = ImmutableSearchResponse.from(data.value)
+                ImmutableSearchResponse.addToHistory(response)
+                response.id?.let {
+                    ImmutableSearchResponse.setTimeOfPageOpened(it, System.currentTimeMillis())
+                    openChanged.invoke(it)
+                }
+
+                stream(data.value, card.apiName)
+            } else {
+                showToast(R.string.error_loading_novel, Toast.LENGTH_SHORT)
+            }
+        }
+    }
+
+    private fun readEpub(
         author: String?,
         name: String,
         apiName: String,
-        synopsis: String?
+        synopsis: String?,
+        alwaysGenerateNewFile: Boolean,
+        generating: () -> Unit = {},
     ) {
-        showToast(R.string.generating_epub)
         try {
-            turnToEpub(author, name, apiName, synopsis)
+            val activity = activity ?: return
+            val context = activity
+
+            if (alwaysGenerateNewFile) {
+                generating.invoke()
+                generateAndReadEpub(activity, author, name, apiName, synopsis)
+                return
+            }
+
+            val file = FileHelper.epub.openFile(context, name, false)
+            val uri = file?.uri
+            if (uri != null) {
+                openEpub(activity, uri, apiName = apiName, novelName = name)
+            } else {
+                generating.invoke()
+                generateAndReadEpub(activity, author, name, apiName, synopsis)
+            }
         } catch (e: ErrorLoadingException) {
             if (e.message != null) {
                 showToast(e.message)
@@ -1217,20 +1385,99 @@ object BookDownloader2 {
                 throw e
             }
         } catch (t: Throwable) {
+            logError(t)
             showToast(R.string.error_loading_novel)
         }
-        openEpub(name, apiName = apiName)
     }
 
-    private fun readEpub(author: String?, name: String, apiName: String, synopsis: String?) {
-        if (hasEpub(name)) {
-            openEpub(name, apiName = apiName)
-        } else {
-            generateAndReadEpub(author, name, apiName, synopsis)
+    private fun generateAndReadEpub(
+        activity: Activity,
+        author: String?,
+        name: String,
+        apiName: String,
+        synopsis: String?,
+    ) {
+        val file = FileHelper.epub.createFile(activity, name)
+            ?: throw ErrorLoadingException("Unable to create file")
+        val fileStream = file.openOutputStream(append = false)
+            ?: throw ErrorLoadingException("Unable to open inputstream")
+        BookDownloader2Helper.turnToEpub(
+            apiName,
+            name,
+            author,
+            synopsis,
+            activity,
+            fileStream
+        )
+        openEpub(activity, file.uri, apiName = apiName, novelName = name)
+    }
+
+    /**
+     * [apiName] and [novelName] are forwarded to [ReadActivity2] so the reader can derive the
+     * translator novel id and serve translated chapters from the TranslatorDatabase.
+     */
+    fun openEpub(
+        activity: Activity,
+        uri: Uri,
+        apiName: String? = null,
+        novelName: String? = null,
+    ) {
+        val settingsManager = PreferenceManager.getDefaultSharedPreferences(activity)
+
+        val externalReader = settingsManager.getBoolean(
+            activity.getString(R.string.external_reader_key),
+            true
+        )
+
+        if (!externalReader) {
+            val myIntent = Intent(activity, ReadActivity2::class.java)
+            myIntent.setDataAndType(uri, "application/epub+zip")
+            if (apiName != null && novelName != null) {
+                myIntent.putExtra("apiName", apiName)
+                myIntent.putExtra("novelName", novelName)
+            }
+            activity.startActivity(myIntent)
+            return
         }
+
+        val exportedUri = FileHelper.exportUri(activity, uri)
+
+        val intent = Intent().apply {
+            action = Intent.ACTION_VIEW
+            addFlags(
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                        or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                        or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+        intent.setDataAndType(exportedUri, FileHelper.EPUB_MIME)
+        activity.startActivity(intent)
     }
 
     private val readEpubMutex = Mutex()
+
+    suspend fun readEpub(response: ImmutableSearchResponse, generating: () -> Unit = {}) {
+        val id = response.id ?: return
+        val downloadedCount = response.downloadState?.progress?.toInt() ?: return
+        ImmutableSearchResponse.addToHistory(response)
+        ImmutableSearchResponse.setTimeOfPageOpened(id, System.currentTimeMillis())
+        openChanged.invoke(id)
+
+        readEpub(
+            id,
+            downloadedCount,
+            response.author,
+            response.name,
+            response.apiName,
+            response.synopsis,
+            generating
+        )
+
+        // Update epub size
+        chapterReadChanged(response.name)
+    }
 
     @WorkerThread
     suspend fun readEpub(
@@ -1239,22 +1486,31 @@ object BookDownloader2 {
         author: String?,
         name: String,
         apiName: String,
-        synopsis: String?
+        synopsis: String?,
+        generating: () -> Unit = {}
     ) {
         if (readEpubMutex.isLocked) return
         readEpubMutex.withLock {
             val downloaded = getKey(DOWNLOAD_EPUB_SIZE, id.toString(), 0)!!
             val shouldUpdate = downloadedCount - downloaded != 0
-            if (shouldUpdate) {
-                generateAndReadEpub(author, name, apiName, synopsis)
-            } else {
-                readEpub(author, name, apiName, synopsis)
-            }
+            readEpub(
+                author = author,
+                name = name,
+                apiName = apiName,
+                synopsis = synopsis,
+                alwaysGenerateNewFile = shouldUpdate,
+                generating = generating
+            )
         }
     }
 
     private val deleteNovelMutex = Mutex()
-    private suspend fun deleteNovelAsync(author: String?, name: String, apiName: String) {
+    private suspend fun deleteNovelAsync(
+        context: Context,
+        author: String?,
+        name: String,
+        apiName: String
+    ) {
         if (deleteNovelMutex.isLocked) return
         deleteNovelMutex.withLock {
             val id = generateId(apiName, author, name)
@@ -1264,14 +1520,14 @@ object BookDownloader2 {
 
             // wait until download is stopped
             while (true) {
-                if (!currentDownloadsMutex.withLock { currentDownloads.contains(id) }) {
+                if (!currentDownloads.containsKey(id)) {
                     break
                 }
-                delay(100)
+                delay(100.milliseconds)
             }
 
             // delete the novel
-            BookDownloader2Helper.deleteNovel(activity, author, name, apiName)
+            BookDownloader2Helper.deleteNovel(context, author, name, apiName)
 
             // remove from info
             downloadInfoMutex.withLock {
@@ -1285,11 +1541,11 @@ object BookDownloader2 {
     }
 
     fun deleteNovel(author: String?, name: String, apiName: String) = ioSafe {
-        deleteNovelAsync(author, name, apiName)
+        deleteNovelAsync(context ?: return@ioSafe, author, name, apiName)
     }
 
 
-    suspend fun getOldDataReadingProgress(currentTabIndex: Int){
+    suspend fun getOldDataReadingProgress(currentTabIndex: Int) {
         val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return
         val readList = arrayListOf(
             ReadType.READING,
@@ -1304,9 +1560,10 @@ object BookDownloader2 {
                 val state = getKey<Int>(key)
                 if (state == readList[currentTabIndex].prefValue) {
                     val id = key.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)
+
                     val cached = getKey<ResultCached>(id) ?: continue
                     launch {
-                        getNewTotalChapters(cached)
+                        getNewTotalChapters(cached, currentTabIndex)
                     }
                 }
             }
@@ -1315,11 +1572,10 @@ object BookDownloader2 {
 
 
     private val getNewTotalChaptersSemaphore = Semaphore(5)
-    suspend fun getNewTotalChapters(cached: ResultCached)
-    {
+    suspend fun getNewTotalChapters(cached: ResultCached, page: Int) {
         getNewTotalChaptersSemaphore.withPermit {
-            try
-            {
+            try {
+                refreshingChanged(RefreshQuery(cached.id, true, page))
                 val api = getApiFromNameOrNull(cached.apiName) ?: return@withPermit
                 val response = api.load(cached.source, true)
 
@@ -1327,7 +1583,7 @@ object BookDownloader2 {
                 val loaded = response.value as? StreamResponse ?: return@withPermit
 
                 val totalChapters = loaded.data.size
-                if(totalChapters == cached.totalChapters) return@withPermit
+                if (totalChapters == cached.totalChapters) return@withPermit
 
                 setKey(
                     RESULT_BOOKMARK,
@@ -1336,142 +1592,128 @@ object BookDownloader2 {
                         totalChapters = totalChapters,
                     )
                 )
+                bookmarkChanged(cached.id)
 
                 val newId = generateId(loaded, cached.apiName)
-                if(cached.id != newId){
+                if (cached.id != newId) {
                     migrationNovelMutex.withLock {
-                        migrateKeys(cached.id,
+                        migrateKeys(
+                            cached.id,
                             newId,
                             cached.name,
-                            loaded.name)
+                            loaded.name
+                        )
                     }
                 }
             } catch (e: Throwable) {
                 if (e !is CancellationException) logError(e)
+            } finally {
+                refreshingChanged(RefreshQuery(cached.id, false, page))
             }
         }
     }
 
-    @WorkerThread
-    @Throws
-    private fun turnToEpub(
-        author: String?,
-        name: String,
-        apiName: String,
-        synopsis: String?
-    ) {
-        return BookDownloader2Helper.turnToEpub(activity, author, name, apiName, synopsis)
-    }
-
-    private fun hasEpub(name: String): Boolean {
-        return BookDownloader2Helper.hasEpub(activity, name)
-    }
-
-    private fun openEpub(name: String, openInApp: Boolean? = null, apiName: String? = null) {
-        try {
-            BookDownloader2Helper.openEpub(activity, name, openInApp, apiName)
-        } catch (e: ErrorLoadingException) {
-            if (e.message != null) {
-                showToast(e.message)
-            } else {
-                throw e
-            }
-        } catch (e: IOException) {
-            if (e.message != null) {
-                showToast(e.message)
-            } else {
-                throw e
-            }
-        } catch (t: Throwable) {
-            showToast(R.string.error_loading_novel)
-        }
-    }
 
     val downloadInfoMutex = Mutex()
-    val downloadProgress: HashMap<Int, DownloadProgressState> =
-        hashMapOf()
-    val downloadData: HashMap<Int, DownloadFragment.DownloadData> = hashMapOf()
+    val downloadProgress: ConcurrentHashMap<Int, DownloadProgressState> = ConcurrentHashMap()
+    val downloadData: ConcurrentHashMap<Int, DownloadFragment.DownloadData> = ConcurrentHashMap()
 
     val downloadProgressChanged = Event<Pair<Int, DownloadProgressState>>()
     val downloadDataChanged = Event<Pair<Int, DownloadFragment.DownloadData>>()
     val downloadRemoved = Event<Int>()
     val downloadDataRefreshed = Event<Int>()
+    val bookmarkChanged = Event<Int>()
+    val refreshingChanged = Event<RefreshQuery>()
+    val chapterReadChanged = Event<String>()
+    val openChanged = Event<Int>()
 
-    private fun initDownloadProgress() = ioSafe {
+    @Immutable
+    data class RefreshQuery(
+        val id: Int,
+        val refreshing: Boolean,
+        val page: Int,
+    )
+
+    private fun initDownloadProgress() = CoroutineScope(Dispatchers.Default).launchSafe {
         downloadInfoMutex.withLock {
-            val keys = getKeys(DOWNLOAD_FOLDER) ?: return@ioSafe
-            for (key in keys) {
+            // 1. 1000ms startup time from reading the *first* key <- this cant be optimized without better db
+            // 2. 100ms to get all keys in DOWNLOAD_FOLDER
+            val keys = getKeys(DOWNLOAD_FOLDER) ?: return@withLock
+            keys.forEach { key ->
                 val res =
-                    getKey<DownloadFragment.DownloadData>(key) ?: continue
+                    getKey<DownloadFragment.DownloadData>(key) ?: return@forEach
 
                 val localId = generateId(res.apiName, res.author, res.name)
 
-                BookDownloader2Helper.downloadInfo(
+                // 3. 1000ms to get all "downloadInfo"
+                val info = BookDownloader2Helper.downloadInfo(
                     context,
                     res.author,
                     res.name,
                     res.apiName
-                )?.let { info ->
-                    downloadData[localId] = res
+                ) ?: return@forEach
 
-                    downloadProgress[localId] = DownloadProgressState(
-                        state = DownloadState.Nothing,
-                        progress = info.progress,
-                        total = info.total,
-                        downloaded = info.downloaded,
-                        lastUpdatedMs = System.currentTimeMillis(),
-                        etaMs = null
-                    )
-                }
+                downloadData[localId] = res
+                downloadProgress[localId] = DownloadProgressState(
+                    state = DownloadState.Nothing,
+                    progress = info.progress,
+                    total = info.total,
+                    downloaded = info.downloaded,
+                    lastUpdatedMs = System.currentTimeMillis(),
+                    etaMs = null
+                )
             }
         }
-
         downloadDataRefreshed.invoke(0)
     }
 
-    val currentDownloadsMutex = Mutex()
-    val currentDownloads: HashSet<Int> = hashSetOf()
+    val currentDownloads: ConcurrentHashMap<Int, Unit> = ConcurrentHashMap()
 
-    private val pendingActionMutex = Mutex()
-    private val pendingAction: HashMap<Int, DownloadActionType> = hashMapOf()
+    private val pendingAction: ConcurrentHashMap<Int, DownloadActionType> = ConcurrentHashMap()
+    private val workerNotification: ConcurrentHashMap<Int, WaitOrCancel> = ConcurrentHashMap()
 
-    fun addPendingAction(id: Int, action: DownloadActionType) = ioSafe {
+    suspend fun doWorkWithCancel(id: Int, block: suspend (WaitOrCancel) -> Unit) {
+        val worker = WaitOrCancel()
+        workerNotification[id] = worker
+        try {
+            block(worker)
+        } finally {
+            pendingAction.remove(id)
+            workerNotification.remove(id, worker)
+        }
+    }
+
+    fun addPendingAction(id: Int, action: DownloadActionType) {
         addPendingActionAsync(id, action)
     }
 
-    private suspend fun addPendingActionAsync(id: Int, action: DownloadActionType) {
-        currentDownloadsMutex.withLock {
-            if (!currentDownloads.contains(id)) {
-                return
-            }
+    private fun addPendingActionAsync(id: Int, action: DownloadActionType) {
+        if (!currentDownloads.containsKey(id)) {
+            return
         }
-
-        pendingActionMutex.withLock {
-            pendingAction[id] = action
-        }
+        pendingAction[id] = action
+        workerNotification[id]?.notifyEvent()
     }
 
     private suspend fun createNotification(
+        context: Context,
         id: Int,
         load: LoadResponse,
         stateProgressState: DownloadProgressState,
-        show: Boolean = true,
         progressInBytes: Boolean = false
     ) {
         NotificationHelper.createNotification(
-            activity,
-            load.url, id, load, stateProgressState, show, progressInBytes
+            context,
+            load.url, id,
+            load.name,
+            load.posterUrl,
+            stateProgressState,
+            progressInBytes
         )
     }
 
     private suspend fun consumeAction(id: Int): DownloadActionType? {
-        pendingActionMutex.withLock {
-            pendingAction[id]?.let { action ->
-                pendingAction -= id
-                return action
-            }
-        }
-        return null
+        return pendingAction.remove(id)
     }
 
     private suspend fun changeDownload(
@@ -1555,18 +1797,14 @@ object BookDownloader2 {
     @WorkerThread
     suspend fun downloadWorkThread(
         card: DownloadFragment.DownloadDataLoaded,
+        context: Context,
     ) {
         if (card.isImported) {
             return
         }
 
-        currentDownloadsMutex.withLock {
-            if (currentDownloads.contains(card.id)) {
-                return
-            }
-            // Register card.id immediately so that addPendingAction() calls (e.g. pause/stop
-            // from the UI) are accepted even while we are still fetching the LoadResponse.
-            currentDownloads += card.id
+        if (currentDownloads.containsKey(card.id)) {
+            return
         }
 
         // set pending before download
@@ -1586,23 +1824,6 @@ object BookDownloader2 {
                 val res = data.value
                 val newId = generateId(res, card.apiName)
                 val oldId = card.id
-
-                // If the resolved ID differs from card.id, forward any action that was queued
-                // against card.id so the delegate's download loop can consume it under newId.
-                if (oldId != newId) {
-                    pendingActionMutex.withLock {
-                        pendingAction.remove(oldId)?.let { action ->
-                            pendingAction[newId] = action
-                        }
-                    }
-                }
-
-                // Remove oldId from currentDownloads before calling the delegate.
-                // setPrefixData() inside the delegate will add newId (which may equal oldId).
-                currentDownloadsMutex.withLock {
-                    currentDownloads -= oldId
-                }
-
                 // migrate all data here and delete the old
                 if (oldId != newId) {
                     // we cant have 2 migrations happening at the same time in case they overlap somehow, this is a *very* cold path anyways
@@ -1610,7 +1831,7 @@ object BookDownloader2 {
                         //showToast("Id mismatch, migrating data from ${card.name} to ${res.name}")
                         migrateKeys(oldId, newId, card.name, res.name)
                         BookDownloader2Helper.copyAllData(
-                            activity,
+                            context,
                             card.author,
                             card.name,
                             card.apiName,
@@ -1618,28 +1839,27 @@ object BookDownloader2 {
                             res.name,
                             api.name
                         )
-                        deleteNovelAsync(card.author, card.name, card.apiName)
+                        deleteNovelAsync(context, card.author, card.name, card.apiName)
                     }
                 }
 
-                when (res) {
-                    is EpubResponse -> {
-                        downloadWorkThread(
-                            res, api
-                        )
-                    }
+                doWorkWithCancel(newId) { worker ->
+                    when (res) {
+                        is EpubResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
 
-                    is StreamResponse -> {
-                        downloadWorkThread(
-                            res, api
-                        )
+                        is StreamResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
                     }
                 }
             } else {
                 // failed to get, but not inside download function, so fail here
-                currentDownloadsMutex.withLock {
-                    currentDownloads -= card.id
-                }
                 downloadInfoMutex.withLock {
                     downloadProgress[card.id]?.apply {
                         state = DownloadState.IsFailed
@@ -1649,9 +1869,86 @@ object BookDownloader2 {
                 }
             }
         } catch (t: Throwable) {
-            currentDownloadsMutex.withLock {
-                currentDownloads -= card.id
+            logError(t)
+        }
+    }
+
+    @WorkerThread
+    suspend fun downloadWorkThread(
+        card: ImmutableSearchResponse,
+        context: Context,
+    ) {
+        if (card.isImported) {
+            return
+        }
+        val id = card.id ?: return
+
+        if (currentDownloads.containsKey(id)) {
+            return
+        }
+
+        // set pending before download
+        downloadInfoMutex.withLock {
+            downloadProgress[id]?.apply {
+                state = DownloadState.IsPending
+                lastUpdatedMs = System.currentTimeMillis()
+                downloadProgressChanged.invoke(id to this)
             }
+        }
+
+        try {
+            val api = getApiFromName(card.apiName)
+            val data = api.load(card.url, allowCache = false)
+
+            if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
+                val res = data.value
+                val newId = generateId(res, card.apiName)
+                val oldId = card.id
+                // migrate all data here and delete the old
+                if (oldId != newId) {
+                    // we cant have 2 migrations happening at the same time in case they overlap somehow, this is a *very* cold path anyways
+                    migrationNovelMutex.withLock {
+                        //showToast("Id mismatch, migrating data from ${card.name} to ${res.name}")
+                        migrateKeys(oldId, newId, card.name, res.name)
+                        BookDownloader2Helper.copyAllData(
+                            context,
+                            card.author,
+                            card.name,
+                            card.apiName,
+                            res.author,
+                            res.name,
+                            api.name
+                        )
+                        deleteNovelAsync(context, card.author, card.name, card.apiName)
+                    }
+                }
+
+                doWorkWithCancel(newId) { worker ->
+                    when (res) {
+                        is EpubResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
+
+                        is StreamResponse -> {
+                            downloadWorkThread(
+                                res, api, context, worker
+                            )
+                        }
+                    }
+                }
+            } else {
+                // failed to get, but not inside download function, so fail here
+                downloadInfoMutex.withLock {
+                    downloadProgress[card.id]?.apply {
+                        state = DownloadState.IsFailed
+                        lastUpdatedMs = System.currentTimeMillis()
+                        downloadProgressChanged.invoke(card.id to this)
+                    }
+                }
+            }
+        } catch (t: Throwable) {
             logError(t)
         }
     }
@@ -1687,7 +1984,8 @@ object BookDownloader2 {
             load.tags,
             apiName,
             System.currentTimeMillis(),
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            posterHeaders = load.posterHeaders
         )
 
         setKey(
@@ -1709,11 +2007,9 @@ object BookDownloader2 {
         val id = generateId(load, apiName)
 
         // cant download the same thing twice at the same time
-        currentDownloadsMutex.withLock {
-            if (currentDownloads.contains(id)) {
-                return
-            }
-            currentDownloads += id
+        val old = currentDownloads.put(id, Unit)
+        if (old != null) {
+            return
         }
         val prevDownloadData =
             getKey<DownloadFragment.DownloadData>(DOWNLOAD_FOLDER, id.toString())
@@ -1730,15 +2026,15 @@ object BookDownloader2 {
             load.tags,
             apiName,
             System.currentTimeMillis(),
-            prevDownloadData?.lastDownloaded
+            prevDownloadData?.lastDownloaded,
+            posterHeaders = load.posterHeaders
         )
         setKey(DOWNLOAD_FOLDER, id.toString(), currentDownloadData)
         setKey(DOWNLOAD_TOTAL, id.toString(), total)
 
         downloadInfoMutex.withLock {
-            downloadData[id] = currentDownloadData
-            downloadDataChanged.invoke(id to currentDownloadData)
 
+            downloadData[id] = currentDownloadData
             downloadProgress[id]?.apply {
                 state = DownloadState.IsPending
                 lastUpdatedMs = System.currentTimeMillis()
@@ -1765,6 +2061,7 @@ object BookDownloader2 {
                     downloadProgressChanged.invoke(id to it)
                 }
             }
+            downloadDataChanged.invoke(id to currentDownloadData)
         }
     }
 
@@ -1774,24 +2071,12 @@ object BookDownloader2 {
     //to avoid img headers or icons
     val MIN_IMAGE_SIZE = 30 * 1024
 
-
-    private fun createHtmlWrapper(title: String, content: String): String {
-        return """
-        <html xmlns="http://www.w3.org/1999/xhtml">
-            <head><meta charset="utf-8"/><title>$title</title></head>
-            <body>
-                $content
-            </body>
-        </html>
-    """.trimIndent()
-    }
-
-
     //Import pdf area -----------------------------------------------
     private suspend fun handleDownloadActions(
         id: Int,
         load: EpubResponse,
-        current: DownloadState
+        current: DownloadState,
+        context: Context
     ): DownloadState {
         val action = consumeAction(id)
         val newState = when (action) {
@@ -1803,7 +2088,8 @@ object BookDownloader2 {
         if (newState != current || newState == DownloadState.IsPaused) updateDownloadNotificationState(
             id,
             load,
-            newState
+            newState,
+            context
         )
         return newState
     }
@@ -1812,6 +2098,7 @@ object BookDownloader2 {
         id: Int,
         load: EpubResponse,
         state: DownloadState,
+        context: Context,
         progress: Int? = null
     ) {
         changeDownload(id) {
@@ -1820,7 +2107,7 @@ object BookDownloader2 {
                 this.progress = it.toLong()
                 this.downloaded = it.toLong()
             }
-        }?.let { createNotification(id, load, it) }
+        }?.let { createNotification(context, id, load, it) }
     }
 
     fun pdfPageWithoutHAndF(page: PDPage, stripper: PDFTextStripperByArea): String {
@@ -1848,13 +2135,27 @@ object BookDownloader2 {
         filesDir: File,
         count: Int
     ): Boolean? {
-        val bitmap = imageXObject.image
-        if (!bitmap.isRecycled) {
+        val originalBitmap = imageXObject.image ?: return null
+        if (originalBitmap.width <= 0 || originalBitmap.height <= 0) return null
+        if (!originalBitmap.isRecycled) {
             try {
-                val outStream = ByteArrayOutputStream()
+                val maxRes = 1200
+                val shouldScale = originalBitmap.width > maxRes || originalBitmap.height > maxRes
 
-                //get image compressed as byteArray
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outStream)
+                val finalBitmap = if (shouldScale) {
+                    val ratio = originalBitmap.width.toFloat() / originalBitmap.height.toFloat()
+                    val targetW = if (ratio > 1) maxRes else (maxRes * ratio).toInt()
+                    val targetH = if (ratio > 1) (maxRes / ratio).toInt() else maxRes
+
+                    originalBitmap.scale(targetW, targetH).also {
+                        originalBitmap.recycle()
+                    }
+                } else {
+                    originalBitmap
+                }
+
+                val outStream = ByteArrayOutputStream()
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outStream)
                 val imgBytes = outStream.toByteArray()
 
                 // only over NKB images
@@ -1873,13 +2174,11 @@ object BookDownloader2 {
                             }
                         }
                     }
-
+                    finalBitmap.recycle()
                     return true
                 }
             } catch (e: Exception) {
                 logError(e)
-            } finally {
-                if (!bitmap.isRecycled) bitmap.recycle() //delete from ram
             }
         }
         return null
@@ -1909,8 +2208,7 @@ object BookDownloader2 {
         val info = document.documentInformation
         val author =
             if (info.author.isNullOrBlank()) context.getString(R.string.unknown) else info.author
-        val fileName =
-            SafeFile.fromUri(context, data)?.name() ?: context.getString(R.string.unknown)
+        val fileName = StorageFile.from(context, data)?.name ?: context.getString(R.string.unknown)
         val name = fileName.removeSuffix(".pdf").removeSuffix(".PDF")
         val apiName = IMPORT_SOURCE_PDF
 
@@ -1969,13 +2267,14 @@ object BookDownloader2 {
                 state = currentState
                 this.progress = chapterCount.toLong() - 1
                 this.downloaded = chapterCount.toLong() - 1
-            }?.let { createNotification(id, load, it) }
+            }?.let { createNotification(context, id, load, it) }
 
 
             //prototype of book
             val book = EpubBook().apply {
                 metadata.addTitle(sName)
                 metadata.addAuthor(Author(sAuthor))
+                // TODO add apiname in metadata.otherProperties = ?
             }
 
             //Necessary so the system recognizes the existing book
@@ -1986,12 +2285,14 @@ object BookDownloader2 {
                 }
             }
 
+            book.resources.add(getGeneralCSStyleForEPUBs())
+
             //init progress
             while (true) {
                 //check notification options
-                currentState = handleDownloadActions(id, load, currentState)
+                currentState = handleDownloadActions(id, load, currentState, context)
                 if (currentState == DownloadState.IsPaused) {
-                    delay(200)
+                    delay(200.milliseconds)
                     continue
                 } else if (currentState == DownloadState.IsStopped)
                     break
@@ -2019,7 +2320,7 @@ object BookDownloader2 {
                 // collect N pages as sections to chapters
                 if (pageIdx % pagesPerChapter == 0 || pageIdx == totalPages) {
                     val sectionTitle = "${context.getString(R.string.chapter)} $chapterCount"
-                    val htmlContent = createHtmlWrapper(sectionTitle, currentChapterText.toString())
+                    val htmlContent = packageAsXHtml(sectionTitle, currentChapterText.toString())
 
                     //add chapter to the book
                     File(tempFolder, "chapter$chapterCount.xhtml").writeText(htmlContent)
@@ -2031,7 +2332,7 @@ object BookDownloader2 {
                             this.progress = chapterCount.toLong()
                             this.downloaded = chapterCount.toLong()
                         }?.let {
-                            createNotification(id, load, it)
+                            createNotification(context, id, load, it)
                         }
                     } else //finally
                     {
@@ -2049,13 +2350,14 @@ object BookDownloader2 {
 
             if (currentState == DownloadState.IsDone) {
                 //add imgs to book
-                tempFolder.listFiles()?.let {
-                    for ((i, file) in it.withIndex())
+                tempFolder.listFiles()?.let { files ->
+                    for ((i, file) in files.withIndex()) {
                         if (file.name.contains("img_")) {
-                            val res = Resource(file.readBytes(), file.name)
+                            val res = Resource(getSafeByteArray(file.readBytes()), file.name)
                             book.addResource(res)
                             if (i == 0) book.coverImage = res
                         }
+                    }
                 }
 
                 //use twice, to sort chapters
@@ -2064,7 +2366,7 @@ object BookDownloader2 {
                 }?.forEach { file ->
                     val res = Resource(file.readBytes(), file.name)
                     book.addSection(
-                        "Chapter ${
+                        "Section ${
                             file.name.replace("chapter", "").replace(".xhtml", "")
                         }", res
                     )
@@ -2081,20 +2383,20 @@ object BookDownloader2 {
                     state = DownloadState.IsDone
                     this.progress = this.total
                     this.downloaded = this.total
-                }?.let { createNotification(id, load, it) }
+                }?.let { createNotification(context, id, load, it) }
             } else {
                 changeDownload(id) {
                     state = DownloadState.IsStopped
-                }?.let { createNotification(id, load, it) }
+                }?.let { createNotification(context, id, load, it) }
             }
         } catch (t: Throwable) {
             logError(t)
             changeDownload(id) {
                 state = DownloadState.IsFailed
-            }?.let { createNotification(id, load, it) }
+            }?.let { createNotification(context, id, load, it) }
         } finally {
             document.close()
-            currentDownloadsMutex.withLock { currentDownloads -= id }
+            currentDownloads -= id
             //delete temp
             tempFolder.deleteRecursively()
         }
@@ -2142,12 +2444,55 @@ object BookDownloader2 {
         }
     }
 
+    fun preloadPartialImportedPdf(bk: ImmutableSearchResponse) {
+        val context = context ?: return
+        try {
+            val finalBook = File(
+                File(context.filesDir, getDirectory(bk.apiName, bk.author ?: "", bk.name)),
+                LOCAL_EPUB
+            )
+            if (finalBook.exists()) finalBook.delete()
+            val tempFolder = File(context.cacheDir, "temp_${bk.id}")
+            val book = EpubBook().apply {
+                metadata.addTitle(bk.name)
+                metadata.addAuthor(Author(bk.author))
+            }
+            tempFolder.listFiles()?.let {
+                for ((i, file) in it.withIndex())
+                    if (file.name.contains("img_")) {
+                        val res = Resource(file.readBytes(), file.name)
+                        book.addResource(res)
+                        if (i == 0) book.coverImage = res
+                    }
+            }
+
+            //use twice, to sort chapters
+            tempFolder.listFiles { _, name -> name.startsWith("chapter") }?.sortedBy {
+                it.name.filter { char -> char.isDigit() }.toInt()
+            }?.forEach { file ->
+                val res = Resource(file.readBytes(), file.name)
+                book.addSection(
+                    "Chapter ${file.name.replace("chapter", "").replace(".xhtml", "")}",
+                    res
+                )
+            }
+
+            finalBook.parentFile?.mkdirs()
+            //save all the book
+            FileOutputStream(finalBook).use { fos ->
+                EpubWriter().write(book, fos)
+            }
+        } catch (t: Throwable) {
+            logError(t)
+        }
+    }
+
 
     //Import epubs area -----------------------------------------------
     @WorkerThread
     @Throws
     suspend fun downloadWorkThread(data: Uri, context: Context) {
-        val filesDir = activity?.filesDir ?: return
+        val filesDir = context.filesDir
         val contentResolver = context.contentResolver
         val fd = contentResolver.openFileDescriptor(data, "r")
             ?: throw ErrorLoadingException("Unable to open file descriptor")
@@ -2163,7 +2508,7 @@ object BookDownloader2 {
         val name = if (book.coverImage?.data != null) book.metadata.firstTitle
         else {
             contentResolver.query(data, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (cursor.moveToFirst())
                     cursor.getString(nameIndex).substringBeforeLast(".")
                 else null
@@ -2181,9 +2526,11 @@ object BookDownloader2 {
             name = name,
             apiName = apiName,
             downloadLinks = emptyList(),
-            downloadExtractLinks = emptyList()
+            downloadExtractLinks = emptyList(),
         ).apply {
             this.author = author
+            this.synopsis =
+                book.metadata.descriptions?.firstOrNull { description -> description != null && description.isNotBlank() }
         }
 
         try {
@@ -2204,7 +2551,9 @@ object BookDownloader2 {
                                         )
                                     }
                         }?.let { entry ->
-                            coverBytes = zipFile.getInputStream(entry).use { it.readBytes() }
+                            val rawBytes = zipFile.getInputStream(entry).use { it.readBytes() }
+                            // Downsample the image before assigning it to coverBytes
+                            coverBytes = getSafeByteArray(rawBytes)
                         }
                 }
 
@@ -2213,9 +2562,7 @@ object BookDownloader2 {
                 if (coverBytes != null) {
                     // Store the image and override it
                     val filepath = BookDownloader2Helper.getFilenameIMG(sApiName, sAuthor, sName)
-                    val posterFilepath =
-                        filesDir.toString() + filepath
-                    val pFile = File(posterFilepath)
+                    val pFile = File(filesDir, filepath)
                     pFile.parentFile?.mkdirs()
                     pFile.writeBytes(coverBytes)
                 }
@@ -2228,11 +2575,12 @@ object BookDownloader2 {
                 File(filesDir.toString() + getDirectory(sApiName, sAuthor, sName), LOCAL_EPUB)
 
             file.parentFile?.mkdirs()
-            file.createNewFile()
-            file.writeBytes(
-                context.contentResolver.openInputStream(data)?.readBytes()
-                    ?: throw IOException("No file found")
-            )
+
+            contentResolver.openInputStream(data)?.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: throw IOException("No file found")
 
             setSuffixData(load, apiName)
             changeDownload(id) {
@@ -2241,21 +2589,24 @@ object BookDownloader2 {
                 this.downloaded = this.total
             }?.let { newProgressState ->
                 createNotification(
+                    context,
                     id,
                     load,
                     newProgressState
                 )
             }
         } finally {
-            currentDownloadsMutex.withLock {
-                currentDownloads -= id
-            }
+            currentDownloads -= id
         }
     }
 
+    //this is for complete epubs like from anna's archive
     @WorkerThread
-    suspend fun downloadWorkThread(load: EpubResponse, api: APIRepository) {
-        val filesDir = activity?.filesDir ?: return
+    suspend fun downloadWorkThread(
+        load: EpubResponse, api: APIRepository, context: Context,
+        worker: WaitOrCancel,
+    ) {
+        val filesDir = context.filesDir
         val sApiName = BookDownloader2Helper.sanitizeFilename(api.name)
         val sAuthor = BookDownloader2Helper.sanitizeFilename(load.author ?: "")
         val sName = BookDownloader2Helper.sanitizeFilename(load.name)
@@ -2283,6 +2634,7 @@ object BookDownloader2 {
                 state = DownloadState.IsDownloading
             }?.let { newProgressState ->
                 createNotification(
+                    context,
                     id,
                     load,
                     newProgressState
@@ -2310,14 +2662,14 @@ object BookDownloader2 {
                             changeDownload(id) {
                                 state = newState
                             }?.let { progressState ->
-                                createNotification(id, load, progressState)
+                                createNotification(context, id, load, progressState)
                             }
                             currentState = newState
                         }
                         if (currentState != DownloadState.IsPaused) {
                             break
                         }
-                        delay(200)
+                        worker.delay(5000.milliseconds)
                     }
 
                     if (currentState == DownloadState.IsStopped) {
@@ -2329,85 +2681,95 @@ object BookDownloader2 {
                 val stream = try {
                     link.get().body
                 } catch (e: Exception) {
-                    delay(api.rateLimitTime + 1000)
+                    worker.delay((api.rateLimitTime + 1000).milliseconds)
                     continue
                 }
 
                 val length = stream.contentLength()
 
                 if (length <= LOCAL_EPUB_MIN_SIZE) {
-                    delay(api.rateLimitTime + 1000)
+                    worker.delay((api.rateLimitTime + 1000).milliseconds)
                     continue
                 }
-
-                val totalBytes = ArrayList<Byte>()
                 var progress = 0L
                 val startedTime = System.currentTimeMillis()
                 file.parentFile?.mkdirs()
                 file.createNewFile()
                 val size = DEFAULT_BUFFER_SIZE
                 var lastUpdatedMs = 0L
-                stream.byteStream().buffered(size).iterator().asSequence().chunked(size)
-                    .forEach { bytes ->
-                        progress += bytes.size
-                        totalBytes.addAll(bytes)
-                        val total = maxOf(length, progress)
-                        val currentTime = System.currentTimeMillis()
-                        val totalTimeSoFar = currentTime - startedTime
-                        val state = DownloadProgressState(
-                            state = DownloadState.IsDownloading,
-                            progress = progress,
-                            total = total,
-                            downloaded = progress,
-                            lastUpdatedMs = currentTime,
-                            etaMs = maxOf(((totalTimeSoFar * total) / progress) - totalTimeSoFar, 0)
-                        )
 
-                        run {
-                            var currentState = DownloadState.IsDownloading
-                            while (true) {
-                                when (consumeAction(id)) {
-                                    DownloadActionType.Pause -> DownloadState.IsPaused
-                                    DownloadActionType.Resume -> DownloadState.IsDownloading
-                                    DownloadActionType.Stop -> DownloadState.IsStopped
-                                    else -> null
-                                }?.let { newState ->
-                                    // if a new state is consumed then push that data instantly
-                                    changeDownload(id) {
-                                        this.state = newState
-                                    }
-                                    createNotification(
-                                        id,
-                                        load,
-                                        state.copy(state = newState),
-                                        progressInBytes = true
-                                    )
-                                    currentState = newState
-                                }
-                                if (currentState != DownloadState.IsPaused) {
-                                    break
-                                }
-                                delay(200)
-                            }
+                stream.byteStream().buffered(size).use { input ->
+                    file.outputStream().use { output ->
+                        val buffer = ByteArray(size)
+                        var bytesRead: Int
 
-                            if (currentState == DownloadState.IsStopped) {
-                                return
-                            }
-                        }
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            progress += bytesRead
+                            val total = maxOf(length, progress)
+                            val currentTime = System.currentTimeMillis()
+                            val totalTimeSoFar = currentTime - startedTime
 
-                        // don't spam notifications so only update once per sec
-                        if (lastUpdatedMs + 1000 < System.currentTimeMillis()) {
-                            lastUpdatedMs = System.currentTimeMillis()
-                            createNotification(
-                                id,
-                                load,
-                                state,
-                                progressInBytes = true
+                            val state = DownloadProgressState(
+                                state = DownloadState.IsDownloading,
+                                progress = progress,
+                                total = total,
+                                downloaded = progress,
+                                lastUpdatedMs = currentTime,
+                                etaMs = maxOf(
+                                    ((totalTimeSoFar * total) / progress) - totalTimeSoFar,
+                                    0
+                                )
                             )
+
+                            run {
+                                var currentState = DownloadState.IsDownloading
+                                while (true) {
+                                    when (consumeAction(id)) {
+                                        DownloadActionType.Pause -> DownloadState.IsPaused
+                                        DownloadActionType.Resume -> DownloadState.IsDownloading
+                                        DownloadActionType.Stop -> DownloadState.IsStopped
+                                        else -> null
+                                    }?.let { newState ->
+                                        changeDownload(id) {
+                                            this.state = newState
+                                        }
+                                        createNotification(
+                                            context,
+                                            id,
+                                            load,
+                                            state.copy(state = newState),
+                                            progressInBytes = true
+                                        )
+                                        currentState = newState
+                                    }
+                                    if (currentState != DownloadState.IsPaused) {
+                                        break
+                                    }
+                                    delay(200.milliseconds)
+                                }
+
+                                if (currentState == DownloadState.IsStopped) {
+                                    return
+                                }
+                            }
+
+                            // don't spam notifications so only update once per sec
+                            if (lastUpdatedMs + 1000 < System.currentTimeMillis()) {
+                                lastUpdatedMs = System.currentTimeMillis()
+                                createNotification(
+                                    context,
+                                    id,
+                                    load,
+                                    state,
+                                    progressInBytes = true
+                                )
+                            }
                         }
                     }
+                }
 
-                file.writeBytes(totalBytes.toByteArray())
+
 
                 setSuffixData(load, api.name)
 
@@ -2417,6 +2779,7 @@ object BookDownloader2 {
                     this.downloaded = this.total
                 }?.let { newProgressState ->
                     createNotification(
+                        context,
                         id,
                         load,
                         newProgressState
@@ -2430,15 +2793,14 @@ object BookDownloader2 {
                 state = DownloadState.IsFailed
             }?.let { newProgressState ->
                 createNotification(
+                    context,
                     id,
                     load,
                     newProgressState,
                 )
             }
         } finally {
-            currentDownloadsMutex.withLock {
-                currentDownloads -= id
-            }
+            currentDownloads -= id
         }
     }
 
@@ -2480,23 +2842,28 @@ object BookDownloader2 {
     }
 
     @WorkerThread
-    suspend fun downloadWorkThread(load: StreamResponse, api: APIRepository) {
+    suspend fun downloadWorkThread(
+        load: StreamResponse, api: APIRepository, context: Context,
+        worker: WaitOrCancel,
+    ) {
         val id = generateId(load, api.name)
         val desiredStart = (
                 getKey<Int>(
                     DOWNLOAD_OFFSET, id.toString(),
                 ) ?: 0
                 ).coerceIn(0, load.data.size)
-        downloadWorkThread(load, api, desiredStart until load.data.size)
+        downloadWorkThread(load, api, desiredStart until load.data.size, context, worker)
     }
 
     @WorkerThread
     suspend fun downloadWorkThread(
         load: StreamResponse,
         api: APIRepository,
-        range: ClosedRange<Int>
+        range: ClosedRange<Int>,
+        context: Context,
+        worker: WaitOrCancel,
     ) {
-        val filesDir = activity?.filesDir ?: return
+        val filesDir = context.filesDir
         val sApiName = BookDownloader2Helper.sanitizeFilename(api.name)
         val sAuthor =
             BookDownloader2Helper.sanitizeFilename(load.author ?: "")
@@ -2524,31 +2891,6 @@ object BookDownloader2 {
             for (index in range.start..range.endInclusive) {
                 val data = load.data.getOrNull(index) ?: continue
 
-                // consume any action and wait until not paused
-                while (true) {
-                    when (consumeAction(id)) {
-                        DownloadActionType.Pause -> {
-                            DownloadState.IsPaused
-                        }
-
-                        DownloadActionType.Resume -> DownloadState.IsDownloading
-                        DownloadActionType.Stop -> DownloadState.IsStopped
-                        else -> null
-                    }?.let { newState ->
-                        // if a new state is consumed then push that data instantly
-                        changeDownload(id) {
-                            state = newState
-                        }?.let { progressState ->
-                            createNotification(id, load, progressState)
-                        }
-                        currentState = newState
-                    }
-                    if (currentState != DownloadState.IsPaused) {
-                        break
-                    }
-                    delay(200)
-                }
-
                 val filepath =
                     filesDir.toString() + BookDownloader2Helper.getFilename(
                         sApiName,
@@ -2557,15 +2899,54 @@ object BookDownloader2 {
                         index
                     )
                 val rFile = File(filepath)
-                if (rFile.exists()) {
-                    if (rFile.length() > 10) { // TO PREVENT INVALID FILE FROM HAVING TO REMOVE EVERYTHING
-                        continue
-                    }
+                // TO PREVENT INVALID FILE FROM HAVING TO REMOVE EVERYTHING
+                if (rFile.exists() && rFile.length() > 10) {
+                    continue
                 }
 
                 val beforeDownloadTime = System.currentTimeMillis()
-                val hasDownloadedChapter =
-                    BookDownloader2Helper.downloadIndividualChapter(filepath, api, data)
+                val hasDownloadedChapter: Boolean
+                while (true) {
+                    // consume any action and wait until not paused
+                    while (true) {
+                        when (consumeAction(id)) {
+                            DownloadActionType.Pause -> {
+                                DownloadState.IsPaused
+                            }
+
+                            DownloadActionType.Resume -> DownloadState.IsDownloading
+                            DownloadActionType.Stop -> DownloadState.IsStopped
+                            else -> null
+                        }?.let { newState ->
+                            // if a new state is consumed then push that data instantly
+                            changeDownload(id) {
+                                state = newState
+                            }?.let { progressState ->
+                                createNotification(context, id, load, progressState)
+                            }
+                            currentState = newState
+                        }
+                        if (currentState != DownloadState.IsPaused) {
+                            break
+                        }
+                        worker.delay(5000.milliseconds)
+                    }
+
+                    val result =
+                        BookDownloader2Helper.downloadIndividualChapter(
+                            filepath,
+                            api,
+                            data,
+                            worker = worker
+                        )
+
+                    /* It may be canceled by an action */
+                    if (result == BookDownloader2Helper.DownloadResult.Cancel) {
+                        continue
+                    }
+                    hasDownloadedChapter = (result == BookDownloader2Helper.DownloadResult.Success)
+                    break
+                }
 
                 if (hasDownloadedChapter) {
                     downloadedTotal += 1
@@ -2590,7 +2971,7 @@ object BookDownloader2 {
                     state = currentState
                     etaMs = (timePerLoadMs * (range.endInclusive - index)).toLong()
                 }?.let { progressState ->
-                    createNotification(id, load, progressState)
+                    createNotification(context, id, load, progressState)
                 }
 
                 when (currentState) {
@@ -2603,6 +2984,7 @@ object BookDownloader2 {
                             state = currentState
                         }?.let { newProgressState ->
                             createNotification(
+                                context,
                                 id,
                                 load,
                                 newProgressState,
@@ -2621,13 +3003,17 @@ object BookDownloader2 {
             }
 
             changeDownload(id) {
-                this.progress = totalItems.toLong()
+                /** Only modify progress if we have made any, as this fixes stubs */
+                if (downloadedTotal > 0) {
+                    this.progress = totalItems.toLong()
+                }
                 this.downloaded = range.endInclusive + 1 - range.start + alreadyDownloaded
                 state = DownloadState.IsDone
             }?.let { progressState ->
                 // only notify done if we have actually done some work
                 if (downloadedTotal > 0)
                     createNotification(
+                        context,
                         id,
                         load,
                         progressState
@@ -2635,15 +3021,13 @@ object BookDownloader2 {
             }
         } catch (t: Throwable) {
             // also set it here in case of exception
+            logError(t)
+            changeDownload(id) { state = DownloadState.IsFailed }
             if (downloadedTotal > 0) {
                 setSuffixData(load, api.name)
             }
-
-            logError(t)
         } finally {
-            currentDownloadsMutex.withLock {
-                currentDownloads -= id
-            }
+            currentDownloads -= id
         }
     }
 

@@ -1,40 +1,91 @@
 package com.lagradost.quicknovel.ui.mainpage
 
-import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import androidx.appcompat.widget.SearchView
-import androidx.core.view.isGone
-import androidx.core.view.isInvisible
-import androidx.core.view.isVisible
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.databinding.FragmentMainpageBinding
-import com.lagradost.quicknovel.mvvm.Resource
-import com.lagradost.quicknovel.mvvm.observe
-import com.lagradost.quicknovel.mvvm.observeNullable
-import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
-import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lagradost.cloudstream4.rememberAppSettings
+import com.lagradost.cloudstream4.state.ObserveEffect
+import com.lagradost.cloudstream4.theme.CloudStreamTheme
+import com.lagradost.cloudstream4.theme.perfToColor
+import com.lagradost.cloudstream4.theme.perfToMode
+import com.lagradost.quicknovel.CommonActivity.showToast
+import com.mihon.presentation.settings.collectAsState
 
 
 class MainPageFragment : Fragment() {
-    lateinit var binding: FragmentMainpageBinding
-    private val viewModel: MainPageViewModel by viewModels()
+    companion object {
+        fun newInstance(
+            apiName: String,
+            mainCategory: Int? = null,
+            orderBy: Int? = null,
+            tag: Int? = null
+        ): Bundle =
+            Bundle().apply {
+                putString("apiName", apiName)
+
+                if (mainCategory != null)
+                    putInt("mainCategory", mainCategory)
+                if (orderBy != null)
+                    putInt("orderBy", orderBy)
+                if (tag != null)
+                    putInt("tag", tag)
+            }
+        fun newInstance(
+            apiName: String,
+            filter : FilterQuery,
+        ): Bundle =
+            Bundle().apply {
+                putString("apiName", apiName)
+                putInt("mainCategory", filter.category)
+                putInt("orderBy", filter.orderBy)
+                putInt("tag", filter.tag)
+            }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View {
-        binding = FragmentMainpageBinding.inflate(inflater)
-        return binding.root
+    ): View = ComposeView(inflater.context).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+
+        setContent {
+            val settings = rememberAppSettings()
+            val mode by settings.ui.theme.collectAsState()
+            val primaryColor by settings.ui.primaryColor.collectAsState()
+            val viewModel: MainPageViewModel2 =
+                viewModel(factory = MainPageViewModel2.provideFactory(requireArguments()))
+
+            CloudStreamTheme(
+                mode = perfToMode(mode),
+                primaryColor = perfToColor(primaryColor),
+            ) {
+                val state by viewModel.state.collectAsStateWithLifecycle()
+
+                ObserveEffect(viewModel.effect) { effect ->
+                    when(effect) {
+                        is MainPageEffect.ErrorLoading -> showToast(effect.error.toString())
+                    }
+                }
+                MainPageScreen(state,viewModel::onAction)
+            }
+        }
     }
+}
+
+
+/*
+class MainPageFragment : BaseFragment<FragmentMainpageBinding>(
+    BindingCreator.Inflate(FragmentMainpageBinding::inflate)
+) {
+    private val viewModel: MainPageViewModel by viewModels()
 
     companion object {
         fun newInstance(
@@ -66,27 +117,23 @@ class MainPageFragment : Fragment() {
 
     var isInSearch = false
 
-    private fun setupGridView() {
+    override fun fixLayout(view: View) {
         val compactView = false //activity?.getGridIsCompact() ?: return
         val spanCountLandscape = if (compactView) 2 else 6
         val spanCountPortrait = if (compactView) 1 else 3
         val orientation = resources.configuration.orientation
         if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            binding.mainpageList.spanCount = spanCountLandscape
+            binding?.mainpageList?.spanCount = spanCountLandscape
         } else {
-            binding.mainpageList.spanCount = spanCountPortrait
+            binding?.mainpageList?.spanCount = spanCountPortrait
         }
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        setupGridView()
     }
 
     lateinit var searchExitIcon: ImageView
     lateinit var searchMagIcon: ImageView
     private var lastId: Int = -1 // dirty fix
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onBindingCreated(binding: FragmentMainpageBinding, savedInstanceState: Bundle?) {
+
         val apiName = requireArguments().getString("apiName")!!
 
         defMainCategory = arguments?.getInt("mainCategory", 0)
@@ -182,7 +229,6 @@ class MainPageFragment : Fragment() {
             })
         }*/
 
-        setupGridView()
 
         binding.mainpageList.apply {
             setRecycledViewPool(MainAdapter.sharedPool)
@@ -330,4 +376,4 @@ class MainPageFragment : Fragment() {
             binding.mainpageSortbyHolder.isGone = it // CANT USE FILTER ON A SEARCHERS
         }
     }
-}
+}*/

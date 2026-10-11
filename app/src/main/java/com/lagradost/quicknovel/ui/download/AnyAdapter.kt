@@ -8,7 +8,6 @@ import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
-import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BookDownloader2.preloadPartialImportedPdf
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
@@ -23,20 +22,13 @@ import com.lagradost.quicknovel.databinding.HistoryResultCompactBinding
 import com.lagradost.quicknovel.ui.BaseDiffCallback
 import com.lagradost.quicknovel.ui.NoStateAdapter
 import com.lagradost.quicknovel.ui.ViewHolderState
-import com.lagradost.quicknovel.translator.SecurePrefs
-import com.lagradost.quicknovel.util.Apis
-import com.lagradost.quicknovel.util.GoogleTranslate
+import com.lagradost.quicknovel.ui.newSharedPool
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.SettingsHelper.getDownloadIsCompact
 import com.lagradost.quicknovel.util.UIHelper.hideKeyboard
 import com.lagradost.quicknovel.util.UIHelper.setImage
 import com.lagradost.quicknovel.widget.AutofitRecyclerView
 import kotlin.math.roundToInt
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class AnyAdapter(
     private val resView: AutofitRecyclerView,
@@ -47,7 +39,7 @@ class AnyAdapter(
             if (a is ResultCached && b is ResultCached) {
                 a.source == b.source
             } else if (a is DownloadFragment.DownloadDataLoaded && b is DownloadFragment.DownloadDataLoaded) {
-                a.source == b.source
+                a.id == b.id//if you use .source, when you delete a novel, this crashes
             } else {
                 false
             }
@@ -59,9 +51,9 @@ class AnyAdapter(
 ) {
     companion object {
         val sharedPool =
-            RecyclerView.RecycledViewPool().apply {
-                this.setMaxRecycledViews(RESULT_CACHED, 20)
-                this.setMaxRecycledViews(DOWNLOAD_DATA_LOADED, 20)
+            newSharedPool {
+                setMaxRecycledViews(RESULT_CACHED, 20)
+                setMaxRecycledViews(DOWNLOAD_DATA_LOADED, 20)
             }
 
         const val RESULT_CACHED: Int = 1
@@ -75,8 +67,6 @@ class AnyAdapter(
             else -> 0L
         }
     }
-
-
 
 
     override fun onCreateFooter(parent: ViewGroup): ViewHolderState<Any> {
@@ -103,43 +93,15 @@ class AnyAdapter(
         when (val binding = holder.view) {
             is DownloadResultGridBinding -> {
                 clearImage(binding.imageView)
-                (binding.imageText.tag as? Job)?.cancel()
-                binding.imageText.tag = null
             }
 
             is HistoryResultCompactBinding -> {
                 clearImage(binding.imageView)
-                (binding.imageText.tag as? Job)?.cancel()
-                binding.imageText.tag = null
             }
 
             is DownloadResultCompactBinding -> {
                 clearImage(binding.imageView)
-                (binding.imageText.tag as? Job)?.cancel()
-                binding.imageText.tag = null
             }
-        }
-    }
-
-    private fun translateTitleIfNeeded(
-        imageText: android.widget.TextView,
-        name: String,
-        apiName: String
-    ) {
-        (imageText.tag as? Job)?.cancel()
-        imageText.tag = null
-        imageText.text = name
-        val ctx = imageText.context
-        val isZh = Apis.getApiFromNameNull(apiName)?.lang == "zh"
-        if (isZh && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
-            val job = CoroutineScope(Dispatchers.Main).launch {
-                val translated = withContext(Dispatchers.IO) { GoogleTranslate.translate(name) }
-                if (imageText.tag === this.coroutineContext[Job]) {
-                    imageText.text = translated
-                    imageText.tag = null
-                }
-            }
-            imageText.tag = job
         }
     }
 
@@ -213,9 +175,13 @@ class AnyAdapter(
             is HistoryResultCompactBinding -> {
                 val card = item as ResultCached
                 view.apply {
-                    translateTitleIfNeeded(imageText, card.name, card.apiName)
+                    imageText.text = card.name
                     historyExtraText.text =
-                        "${card.lastChapterRead}/${card.currentTotalChapters} ${root.context.getString(R.string.read_action_chapters)}"
+                        "${card.lastChapterRead}/${card.currentTotalChapters} ${
+                            root.context.getString(
+                                R.string.read_action_chapters
+                            )
+                        }"
 
                     imageView.setImage(card.poster)
 
@@ -275,10 +241,12 @@ class AnyAdapter(
                             imageTextMore.text = "+$diff "
                             imageTextMore.isVisible =
                                 diff > 0 && !showDownloadLoading && !item.isImported
-                            translateTitleIfNeeded(imageText, item.name, item.apiName)
+                            imageText.text = item.name
 
                             imageView.alpha = if (isAPdfDownloading) 0.6f else 1.0f
-                            imageView.setImage(item.image)
+                           // imageView.setImage(item.image)
+
+                            progressReading.isVisible = false
                         }
                     }
 
@@ -303,10 +271,11 @@ class AnyAdapter(
                                 item.image,
                             ) // skipCache = false
 
-                            translateTitleIfNeeded(imageText, item.name, item.apiName)
+                            imageText.text = item.name
                             imageTextMore.isVisible = false
 
-                            progressReading.text = "${item.lastChapterRead}/${item.currentTotalChapters}"
+                            progressReading.text =
+                                "${item.lastChapterRead}/${item.currentTotalChapters}"
                         }
                     }
 
@@ -352,7 +321,7 @@ class AnyAdapter(
                     val diff = card.downloadedCount - epubSize
                     imageTextMore.text = if (diff > 0) "+$diff " else ""
 
-                    imageView.setImage(card.image)
+                    //imageView.setImage(card.image)
 
                     downloadProgressText.text =
                         "${card.downloadedCount}/${card.downloadedTotal}" + if (card.ETA == "") "" else " - ${card.ETA}"
@@ -381,7 +350,7 @@ class AnyAdapter(
                         isVisible = card.generating || (card.downloadedCount < card.downloadedTotal)
                     }
 
-                    translateTitleIfNeeded(imageText, card.name, card.apiName)
+                    imageText.text = card.name
                     val realState = card.state
                     /*if (card.downloadedCount >= card.downloadedTotal) {
                         downloadUpdate.alpha = 0.5f
