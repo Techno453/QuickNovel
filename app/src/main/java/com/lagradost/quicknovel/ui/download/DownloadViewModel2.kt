@@ -28,6 +28,9 @@ import com.lagradost.quicknovel.DownloadProgressState
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
+import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.translator.TranslatorNovelId
+import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableDownloadState
 import com.lagradost.quicknovel.ui.common.ImmutableSearchList
@@ -96,6 +99,21 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
     }
 
     private val searchPipe = DebounceQuery()
+    /** Removes the novel's AI translations, glossary and pending terms from the translator DB. */
+    private fun deleteTranslatorData(apiName: String, name: String) =
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = BaseApplication.context ?: return@launch
+            try {
+                val novelId = TranslatorNovelId.from(apiName, name)
+                val db = TranslatorDatabase.getInstance(context)
+                db.translationDao().deleteAllForNovel(novelId)
+                db.glossaryDao().deleteAllForNovel(novelId)
+                db.pendingTermDao().deleteAll(novelId)
+            } catch (t: Throwable) {
+                logError(t)
+            }
+        }
+
     override fun onAction(action: DownloadPageAction) {
         when (action) {
             is DownloadPageAction.Refresh -> {
@@ -303,6 +321,7 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
                         action.response.name,
                         action.response.apiName
                     )
+                    deleteTranslatorData(action.response.apiName, action.response.name)
                 } else {
                     removeKey(RESULT_BOOKMARK, id.toString())
                     removeKey(RESULT_BOOKMARK_STATE, id.toString())
