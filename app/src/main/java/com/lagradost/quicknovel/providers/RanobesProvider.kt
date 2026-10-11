@@ -130,7 +130,7 @@ class RanobesProvider : MainAPI() {
     }
 
     override suspend fun loadHtml(url: String): String? {
-        val response = app.get(url, headers = baseHeaders)
+        val response = app.get(url, interceptor = interceptor)
         val document = Jsoup.parse(response.text)
         delay(Random.nextLong(250, 350))
         return (document.selectFirst("#dle-content > article > div.block.story.shortstory > h1")

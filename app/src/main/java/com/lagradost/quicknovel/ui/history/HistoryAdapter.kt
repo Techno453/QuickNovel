@@ -7,10 +7,18 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.HistoryResultCompactBinding
+import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.ui.NoStateAdapter
 import com.lagradost.quicknovel.ui.ViewHolderState
+import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.setImage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class HistoryAdapter(private val viewModel: HistoryViewModel) :
     NoStateAdapter<ResultCached>(DiffCallback()) {
@@ -52,7 +60,32 @@ class HistoryAdapter(private val viewModel: HistoryViewModel) :
                 viewModel.showMetadata(item)
                 return@setOnLongClickListener true
             }
+
+            // Cancel any in-flight translation job on this view
+            (imageText.tag as? Job)?.cancel()
+            imageText.tag = null
+
+            val ctx = imageText.context
+            val isZh = Apis.getApiFromNameNull(item.apiName)?.lang == "zh"
+            if (isZh && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
+                val job = CoroutineScope(Dispatchers.Main).launch {
+                    val translated = withContext(Dispatchers.IO) {
+                        GoogleTranslate.translate(item.name)
+                    }
+                    if (imageText.tag === this.coroutineContext[Job]) {
+                        imageText.text = translated
+                        imageText.tag = null
+                    }
+                }
+                imageText.tag = job
+            }
         }
+    }
+
+    override fun onClearView(holder: ViewHolderState<Any>) {
+        val binding = holder.view as? HistoryResultCompactBinding ?: return
+        (binding.imageText.tag as? Job)?.cancel()
+        binding.imageText.tag = null
     }
 
     class DiffCallback : DiffUtil.ItemCallback<ResultCached>() {

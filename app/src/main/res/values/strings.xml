@@ -19,6 +19,7 @@
     <string name="error_outside_chapter">Invalid skip</string>
     <string name="generate_epub">Generate Epub</string>
     <string name="generating_epub">Generating Epub</string>
+    <string name="translating_chapters">Translating chapters</string>
     <string name="reload_error">Retry connection…</string>
     <string name="download_text">Download</string>
     <string name="download">Download</string>

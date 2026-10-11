@@ -582,6 +582,15 @@ object TTSHelper {
                 "<.*?Translator:.*?Editor:.*?>".toRegex(),
                 ""
             )
+            // Strip "End of Chapter" boilerplate that Chinese novel sites append
+            .replace(
+                Regex("""<[^>]*>\s*\(?\s*[Ee]nd [Oo]f [Cc]hapter\s*\d*\s*\)?\s*<[^>]*>"""),
+                ""
+            )
+            .replace(
+                Regex("""<[^>]*>\s*\(?\s*[Cc]hapter\s*\d*\s*[Ee]nd\s*\)?\s*<[^>]*>"""),
+                ""
+            )
     }
 
     fun render(html: String, markwon: Markwon): Spanned {

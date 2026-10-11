@@ -27,6 +27,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.animation.doOnEnd
+import androidx.lifecycle.lifecycleScope
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -63,7 +64,9 @@ import com.lagradost.quicknovel.ui.TextAdapter
 import com.lagradost.quicknovel.ui.TextConfig
 import com.lagradost.quicknovel.ui.TextVisualLine
 import com.lagradost.quicknovel.ui.ViewHolderState
+import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
+import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
@@ -73,6 +76,9 @@ import com.lagradost.quicknovel.util.UIHelper.systemFonts
 import com.lagradost.quicknovel.util.divCeil
 import com.lagradost.quicknovel.util.toPx
 import java.lang.Integer.max
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.util.Locale
 import kotlin.math.absoluteValue
@@ -860,35 +866,50 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.chaptersTitles) { titles ->
             binding.readActionChapters.setOnClickListener {
-                val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
-                //builderSingle.setIcon(R.drawable.ic_launcher)
-                val currentChapter = viewModel.desiredIndex?.index
-                // cant be too safe here
-                val validChapter =
-                    currentChapter != null && currentChapter >= 0 && currentChapter < titles.size
-                if (validChapter) {
-                    builderSingle.setTitle(titles[currentChapter].asString(this)) //  "Select Chapter"
+                val shouldTranslate = viewModel.book.isChineseSource() &&
+                    SecurePrefs.isGoogleTranslateTitlesEnabled(this)
+
+                fun showChapterDialog(displayTitles: List<String>) {
+                    val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
+                    val currentChapter = viewModel.desiredIndex?.index
+                    val validChapter =
+                        currentChapter != null && currentChapter >= 0 && currentChapter < displayTitles.size
+                    if (validChapter) {
+                        builderSingle.setTitle(displayTitles[currentChapter])
+                    } else {
+                        builderSingle.setTitle(R.string.select_chapter)
+                    }
+
+                    val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
+                    arrayAdapter.addAll(displayTitles)
+
+                    builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
+                    builderSingle.setAdapter(arrayAdapter) { _, which ->
+                        viewModel.seekToChapter(which)
+                    }
+
+                    val dialog = builderSingle.create()
+                    dialog.show()
+
+                    dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
+                    if (validChapter) {
+                        dialog.listView.setSelection(currentChapter)
+                        dialog.listView.setItemChecked(currentChapter, true)
+                    }
+                }
+
+                if (shouldTranslate) {
+                    lifecycleScope.launch {
+                        val translated = withContext(Dispatchers.IO) {
+                            titles.map { title ->
+                                try { GoogleTranslate.translate(title.asString(this@ReadActivity2)) }
+                                catch (_: Exception) { title.asString(this@ReadActivity2) }
+                            }
+                        }
+                        showChapterDialog(translated)
+                    }
                 } else {
-                    builderSingle.setTitle(R.string.select_chapter)
-                }
-
-                val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
-
-                arrayAdapter.addAll(titles.map { it.asString(this) })
-
-                builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
-
-                builderSingle.setAdapter(arrayAdapter) { _, which ->
-                    viewModel.seekToChapter(which)
-                }
-
-                val dialog = builderSingle.create()
-                dialog.show()
-
-                dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
-                if (validChapter) {
-                    dialog.listView.setSelection(currentChapter)
-                    dialog.listView.setItemChecked(currentChapter, true)
+                    showChapterDialog(titles.map { it.asString(this) })
                 }
             }
         }

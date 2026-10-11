@@ -1,13 +1,18 @@
 package com.lagradost.quicknovel
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
-import android.service.notification.Condition.newId
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.util.Log
 import androidx.annotation.WorkerThread
+import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -29,7 +34,6 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
         const val ID_REFRESH_DOWNLOADS = "REFRESH_DOWNLOADS"
         const val ID_REFRESH_READINGPROGRESS = "REFRESH_READINGPROGRESS"
         const val ID_DOWNLOAD = "ID_DOWNLOAD"
-
 
         private var _viewModel: WeakReference<DownloadViewModel> = WeakReference(null)
         var viewModel: DownloadViewModel?
@@ -123,6 +127,42 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
         }
     }
 
+    /**
+     * Builds a [ForegroundInfo] using the book's own download notification ID so that
+     * the foreground-service notification and the progress notification are the same object.
+     * When BookDownloader2.createNotification() later calls notify(notifId, …) with the same
+     * ID the notification is updated in-place — only one notification is ever shown.
+     */
+    private fun createForegroundInfo(notifId: Int, title: String): ForegroundInfo {
+        val channelId = NotificationHelper.CHANNEL_ID
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                NotificationHelper.CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val nm = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+        }
+        val notification = NotificationCompat.Builder(applicationContext, channelId)
+            .setContentTitle(title)
+            .setContentText("Downloading…")
+            .setSmallIcon(R.drawable.rdload)
+            .setOngoing(true)
+            .build()
+        // On API 29+ the ForegroundInfo must declare a service type that matches
+        // the FOREGROUND_SERVICE_DATA_SYNC permission in AndroidManifest.xml.
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                notifId,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(notifId, notification)
+        }
+    }
+
     @WorkerThread
     override suspend fun doWork(): Result {
         val id = this.workerParams.inputData.getString(ID)
@@ -130,14 +170,22 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             ID_DOWNLOAD -> {
                 when (val data = popWork(this.workerParams.inputData.getInt(DATA, -1))) {
                     is StreamResponse -> {
+                        // Use the book's own notification ID so the foreground-service
+                        // notification and the progress notification are the same one.
+                        val notifId = BookDownloader2Helper.generateId(data, data.apiName)
+                        setForeground(createForegroundInfo(notifId, data.name))
                         BookDownloader2.downloadWorkThread(data, Apis.getApiFromName(data.apiName))
                     }
 
                     is EpubResponse -> {
+                        val notifId = BookDownloader2Helper.generateId(data, data.apiName)
+                        setForeground(createForegroundInfo(notifId, data.name))
                         BookDownloader2.downloadWorkThread(data, Apis.getApiFromName(data.apiName))
                     }
 
                     is DownloadFragment.DownloadDataLoaded -> {
+                        // card.id matches the notification ID used by BookDownloader2
+                        setForeground(createForegroundInfo(data.id, data.name))
                         if(data.apiName == IMPORT_SOURCE_PDF)
                             BookDownloader2.downloadPDFWorkThread(data.source.toUri(), context)
                         else

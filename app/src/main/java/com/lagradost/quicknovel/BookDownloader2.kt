@@ -18,6 +18,7 @@ import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -91,6 +92,7 @@ import me.ag2s.epublib.domain.EpubBook
 import me.ag2s.epublib.domain.MediaType
 import me.ag2s.epublib.domain.MediaTypes
 import me.ag2s.epublib.domain.Resource
+import me.ag2s.epublib.domain.TOCReference
 import me.ag2s.epublib.epub.EpubReader
 import me.ag2s.epublib.epub.EpubWriter
 import me.ag2s.epublib.util.zip.AndroidZipFile
@@ -552,7 +554,7 @@ object BookDownloader2Helper {
     }
 
     @Throws
-    fun openEpub(activity: Activity?, name: String, openInApp: Boolean? = null) {
+    fun openEpub(activity: Activity?, name: String, openInApp: Boolean? = null, apiName: String? = null) {
         if (activity == null) throw IOException("No activity")
 
         if (!activity.checkWrite()) {
@@ -573,6 +575,10 @@ object BookDownloader2Helper {
         if (openInApp ?: !externalReader) {
             val myIntent = Intent(activity, ReadActivity2::class.java)
             myIntent.setDataAndType(foundFile.uriOrThrow(), "application/epub+zip")
+            if (apiName != null) {
+                myIntent.putExtra("apiName", apiName)
+                myIntent.putExtra("novelName", name)
+            }
             activity.startActivity(myIntent)
             return
         }
@@ -1096,6 +1102,55 @@ object BookDownloader2 {
         readEpub(res.author, res.name, apiName, res.synopsis)
     }
 
+    fun getEpubChapterNames(
+        context: Context?,
+        apiName: String,
+        author: String?,
+        name: String,
+    ): List<String>? {
+        context ?: return null
+        val sApiName = BookDownloader2Helper.sanitizeFilename(apiName)
+        val sAuthor = BookDownloader2Helper.sanitizeFilename(author ?: "")
+        val sName = BookDownloader2Helper.sanitizeFilename(name)
+
+        val file = File(
+            context.filesDir.toString() + BookDownloader2Helper.getDirectory(sApiName, sAuthor, sName),
+            LOCAL_EPUB
+        )
+
+        if (!file.exists() || file.length() <= LOCAL_EPUB_MIN_SIZE) return null
+
+        return try {
+            val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            val zipFile = AndroidZipFile(fd, "")
+            val book = EpubReader().readEpubLazy(zipFile, "utf-8")
+
+            var refs = mutableListOf<TOCReference>()
+            book.tableOfContents.tocReferences.forEach { ref ->
+                refs.add(ref)
+                if (ref.children != null) refs.addAll(ref.children)
+            }
+
+            if (refs.size <= 1) {
+                val newRefs = mutableListOf<TOCReference>()
+                book.spine.spineReferences.forEachIndexed { index, spineRef ->
+                    if (spineRef.isLinear) {
+                        val res = spineRef.resource
+                        newRefs.add(TOCReference(res.title ?: "Chapter ${index + 1}", res))
+                    }
+                }
+                if (newRefs.isNotEmpty()) refs = newRefs
+            }
+
+            refs.mapIndexed { index, ref ->
+                ref.title ?: "Chapter ${index + 1}"
+            }
+        } catch (t: Throwable) {
+            logError(t)
+            null
+        }
+    }
+
     @WorkerThread
     suspend fun stream(res: StreamResponse, apiName: String) {
         if (streamMutex.isLocked) return
@@ -1164,12 +1219,12 @@ object BookDownloader2 {
         } catch (t: Throwable) {
             showToast(R.string.error_loading_novel)
         }
-        openEpub(name)
+        openEpub(name, apiName = apiName)
     }
 
     private fun readEpub(author: String?, name: String, apiName: String, synopsis: String?) {
         if (hasEpub(name)) {
-            openEpub(name)
+            openEpub(name, apiName = apiName)
         } else {
             generateAndReadEpub(author, name, apiName, synopsis)
         }
@@ -1312,9 +1367,9 @@ object BookDownloader2 {
         return BookDownloader2Helper.hasEpub(activity, name)
     }
 
-    private fun openEpub(name: String, openInApp: Boolean? = null) {
+    private fun openEpub(name: String, openInApp: Boolean? = null, apiName: String? = null) {
         try {
-            BookDownloader2Helper.openEpub(activity, name, openInApp)
+            BookDownloader2Helper.openEpub(activity, name, openInApp, apiName)
         } catch (e: ErrorLoadingException) {
             if (e.message != null) {
                 showToast(e.message)
@@ -1509,6 +1564,9 @@ object BookDownloader2 {
             if (currentDownloads.contains(card.id)) {
                 return
             }
+            // Register card.id immediately so that addPendingAction() calls (e.g. pause/stop
+            // from the UI) are accepted even while we are still fetching the LoadResponse.
+            currentDownloads += card.id
         }
 
         // set pending before download
@@ -1528,6 +1586,23 @@ object BookDownloader2 {
                 val res = data.value
                 val newId = generateId(res, card.apiName)
                 val oldId = card.id
+
+                // If the resolved ID differs from card.id, forward any action that was queued
+                // against card.id so the delegate's download loop can consume it under newId.
+                if (oldId != newId) {
+                    pendingActionMutex.withLock {
+                        pendingAction.remove(oldId)?.let { action ->
+                            pendingAction[newId] = action
+                        }
+                    }
+                }
+
+                // Remove oldId from currentDownloads before calling the delegate.
+                // setPrefixData() inside the delegate will add newId (which may equal oldId).
+                currentDownloadsMutex.withLock {
+                    currentDownloads -= oldId
+                }
+
                 // migrate all data here and delete the old
                 if (oldId != newId) {
                     // we cant have 2 migrations happening at the same time in case they overlap somehow, this is a *very* cold path anyways
@@ -1562,6 +1637,9 @@ object BookDownloader2 {
                 }
             } else {
                 // failed to get, but not inside download function, so fail here
+                currentDownloadsMutex.withLock {
+                    currentDownloads -= card.id
+                }
                 downloadInfoMutex.withLock {
                     downloadProgress[card.id]?.apply {
                         state = DownloadState.IsFailed
@@ -1571,6 +1649,9 @@ object BookDownloader2 {
                 }
             }
         } catch (t: Throwable) {
+            currentDownloadsMutex.withLock {
+                currentDownloads -= card.id
+            }
             logError(t)
         }
     }

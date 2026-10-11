@@ -116,6 +116,39 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+            android:key="translation"
+            android:title="Translation (Chinese → English)"
+            app:isPreferenceVisible="true">
+
+        <Preference
+                android:icon="@drawable/ic_baseline_translate_24"
+                android:key="openai_api_key_pref"
+                android:title="OpenAI API Key"
+                android:summary="Set your API key for AI translation" />
+
+        <Preference
+                android:icon="@drawable/ic_baseline_translate_24"
+                android:key="openai_model_pref"
+                android:title="Translation Model"
+                android:summary="gpt-4o-mini (fast, cheap) or gpt-4o (best quality)" />
+
+        <SwitchPreference
+                android:icon="@drawable/ic_baseline_translate_24"
+                android:key="translation_enabled_pref"
+                android:title="Enable Translation UI"
+                android:summary="Show Translate button for Chinese sources"
+                app:defaultValue="true" />
+
+        <SwitchPreference
+                android:icon="@drawable/ic_baseline_translate_24"
+                android:key="gtranslate_titles_pref"
+                android:title="Auto-translate Titles &amp; Synopses"
+                android:summary="Use Google Translate (free) for search titles, chapter names, and synopses"
+                app:defaultValue="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
             android:key="extra"
             android:title="@string/info"
             app:isPreferenceVisible="true">

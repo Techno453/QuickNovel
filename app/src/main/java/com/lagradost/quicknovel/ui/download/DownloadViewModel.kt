@@ -47,6 +47,8 @@ import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromNameOrNull
+import com.lagradost.quicknovel.translator.TranslatorNovelId
+import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
 import kotlinx.coroutines.Dispatchers
@@ -291,6 +293,16 @@ class DownloadViewModel : ViewModel() {
 
     fun delete(card: DownloadFragment.DownloadDataLoaded) {
         BookDownloader2.deleteNovel(card.author, card.name, card.apiName)
+        viewModelScope.launch {
+            val novelId = TranslatorNovelId.from(card.apiName, card.name)
+            val ctx = context ?: return@launch
+            withContext(Dispatchers.IO) {
+                val db = TranslatorDatabase.getInstance(ctx)
+                db.translationDao().deleteAllForNovel(novelId)
+                db.glossaryDao().deleteAllForNovel(novelId)
+                db.pendingTermDao().deleteAll(novelId)
+            }
+        }
     }
 
     private fun matchesQuery(x: String): Boolean {

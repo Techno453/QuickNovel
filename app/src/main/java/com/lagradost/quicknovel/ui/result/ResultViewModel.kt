@@ -37,6 +37,7 @@ import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_DOWNLOADED
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_READ
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_UNREAD
 import com.lagradost.quicknovel.RESULT_CHAPTER_SORT
+import com.lagradost.quicknovel.EpubResponse
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.mvvm.Resource
@@ -50,12 +51,16 @@ import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_UPDATED_SORT
 import com.lagradost.quicknovel.ui.download.SortingMethod
+import com.lagradost.quicknovel.translator.TranslatorNovelId
+import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 
 class ResultViewModel : ViewModel() {
@@ -103,6 +108,22 @@ class ResultViewModel : ViewModel() {
         when (response) {
             is StreamResponse -> {
                 chapters.postValue(orderChapters(response.data))
+            }
+
+            is EpubResponse -> {
+                chapters.postValue(null)
+                ioSafe {
+                    val names = BookDownloader2.getEpubChapterNames(
+                        context,
+                        response.apiName,
+                        response.author,
+                        response.name
+                    )
+                    val chapterData = names?.mapIndexed { index, name ->
+                        ChapterData(name = name, url = "epub_chapter://$index")
+                    }
+                    chapters.postValue(chapterData)
+                }
             }
 
             else -> chapters.postValue(null)
@@ -318,22 +339,32 @@ class ResultViewModel : ViewModel() {
             addToHistory()
 
             chapter?.let {
-                // TODO BETTER STORE
-                val streamResponse =
-                    ((loadResponse.value as? Resource.Success)?.value as? StreamResponse)
-                        ?: return@let
-                val index = chapterIndex(chapter)
-                if (index != null && index >= 0) {
-                    setReadChapter(chapter, true)
-                    setKey(EPUB_CURRENT_POSITION, streamResponse.name, index)
-                    setKey(
-                        EPUB_CURRENT_POSITION_CHAPTER,
-                        streamResponse.name,
-                        streamResponse.data[index].name
-                    )
-                    setKey(
-                        EPUB_CURRENT_POSITION_SCROLL_CHAR, streamResponse.name, 0,
-                    )
+                when (val l = load) {
+                    is StreamResponse -> {
+                        val index = chapterIndex(chapter)
+                        if (index != null && index >= 0) {
+                            setReadChapter(chapter, true)
+                            setKey(EPUB_CURRENT_POSITION, l.name, index)
+                            setKey(
+                                EPUB_CURRENT_POSITION_CHAPTER,
+                                l.name,
+                                l.data[index].name
+                            )
+                            setKey(
+                                EPUB_CURRENT_POSITION_SCROLL_CHAR, l.name, 0,
+                            )
+                        }
+                    }
+                    is EpubResponse -> {
+                        val chapterIndex =
+                            chapter.url.removePrefix("epub_chapter://").toIntOrNull()
+                        if (chapterIndex != null && chapterIndex >= 0) {
+                            setKey(EPUB_CURRENT_POSITION, l.name, chapterIndex)
+                            setKey(EPUB_CURRENT_POSITION_CHAPTER, l.name, chapter.name)
+                            setKey(EPUB_CURRENT_POSITION_SCROLL_CHAR, l.name, 0)
+                        }
+                    }
+                    else -> {}
                 }
             }
 
@@ -529,6 +560,14 @@ class ResultViewModel : ViewModel() {
         loadMutex.withLock {
             if (!hasLoaded) return@launch
             BookDownloader2.deleteNovel(load.author, load.name, apiName)
+            val novelId = TranslatorNovelId.from(apiName, load.name)
+            val ctx = context ?: return@launch
+            withContext(Dispatchers.IO) {
+                val db = TranslatorDatabase.getInstance(ctx)
+                db.translationDao().deleteAllForNovel(novelId)
+                db.glossaryDao().deleteAllForNovel(novelId)
+                db.pendingTermDao().deleteAll(novelId)
+            }
         }
     }
 
@@ -752,7 +791,10 @@ class ResultViewModel : ViewModel() {
 
     fun initState(apiName: String, url: String) = viewModelScope.launch {
         isGetLoaded = true
-        loadResponse.postValue(Resource.Loading(url))
+        // Only show loading state if we don't already have cached data displayed
+        if (loadResponse.value !is Resource.Success) {
+            loadResponse.postValue(Resource.Loading(url))
+        }
 
         loadMutex.withLock {
             this@ResultViewModel.apiName = apiName

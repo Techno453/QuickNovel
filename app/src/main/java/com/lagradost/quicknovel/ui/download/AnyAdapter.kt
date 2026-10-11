@@ -23,12 +23,20 @@ import com.lagradost.quicknovel.databinding.HistoryResultCompactBinding
 import com.lagradost.quicknovel.ui.BaseDiffCallback
 import com.lagradost.quicknovel.ui.NoStateAdapter
 import com.lagradost.quicknovel.ui.ViewHolderState
+import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.SettingsHelper.getDownloadIsCompact
 import com.lagradost.quicknovel.util.UIHelper.hideKeyboard
 import com.lagradost.quicknovel.util.UIHelper.setImage
 import com.lagradost.quicknovel.widget.AutofitRecyclerView
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AnyAdapter(
     private val resView: AutofitRecyclerView,
@@ -95,15 +103,43 @@ class AnyAdapter(
         when (val binding = holder.view) {
             is DownloadResultGridBinding -> {
                 clearImage(binding.imageView)
+                (binding.imageText.tag as? Job)?.cancel()
+                binding.imageText.tag = null
             }
 
             is HistoryResultCompactBinding -> {
                 clearImage(binding.imageView)
+                (binding.imageText.tag as? Job)?.cancel()
+                binding.imageText.tag = null
             }
 
             is DownloadResultCompactBinding -> {
                 clearImage(binding.imageView)
+                (binding.imageText.tag as? Job)?.cancel()
+                binding.imageText.tag = null
             }
+        }
+    }
+
+    private fun translateTitleIfNeeded(
+        imageText: android.widget.TextView,
+        name: String,
+        apiName: String
+    ) {
+        (imageText.tag as? Job)?.cancel()
+        imageText.tag = null
+        imageText.text = name
+        val ctx = imageText.context
+        val isZh = Apis.getApiFromNameNull(apiName)?.lang == "zh"
+        if (isZh && SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)) {
+            val job = CoroutineScope(Dispatchers.Main).launch {
+                val translated = withContext(Dispatchers.IO) { GoogleTranslate.translate(name) }
+                if (imageText.tag === this.coroutineContext[Job]) {
+                    imageText.text = translated
+                    imageText.tag = null
+                }
+            }
+            imageText.tag = job
         }
     }
 
@@ -177,7 +213,7 @@ class AnyAdapter(
             is HistoryResultCompactBinding -> {
                 val card = item as ResultCached
                 view.apply {
-                    imageText.text = card.name
+                    translateTitleIfNeeded(imageText, card.name, card.apiName)
                     historyExtraText.text =
                         "${card.lastChapterRead}/${card.currentTotalChapters} ${root.context.getString(R.string.read_action_chapters)}"
 
@@ -239,7 +275,7 @@ class AnyAdapter(
                             imageTextMore.text = "+$diff "
                             imageTextMore.isVisible =
                                 diff > 0 && !showDownloadLoading && !item.isImported
-                            imageText.text = item.name
+                            translateTitleIfNeeded(imageText, item.name, item.apiName)
 
                             imageView.alpha = if (isAPdfDownloading) 0.6f else 1.0f
                             imageView.setImage(item.image)
@@ -267,7 +303,7 @@ class AnyAdapter(
                                 item.image,
                             ) // skipCache = false
 
-                            imageText.text = item.name
+                            translateTitleIfNeeded(imageText, item.name, item.apiName)
                             imageTextMore.isVisible = false
 
                             progressReading.text = "${item.lastChapterRead}/${item.currentTotalChapters}"
@@ -345,7 +381,7 @@ class AnyAdapter(
                         isVisible = card.generating || (card.downloadedCount < card.downloadedTotal)
                     }
 
-                    imageText.text = card.name
+                    translateTitleIfNeeded(imageText, card.name, card.apiName)
                     val realState = card.state
                     /*if (card.downloadedCount >= card.downloadedTotal) {
                         downloadUpdate.alpha = 0.5f

@@ -218,6 +218,9 @@ abstract class AbstractBook {
     }
 
     abstract fun author(): String?
+
+    /** Returns true if this book comes from a Chinese (zh) source. */
+    open fun isChineseSource(): Boolean = false
 }
 
 class QuickBook(val data: QuickStreamData) : AbstractBook() {
@@ -228,6 +231,9 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     override fun author(): String? {
         return data.meta.author
     }
+
+    override fun isChineseSource(): Boolean =
+        Apis.getApiFromNameNull(data.meta.apiName)?.lang == "zh"
 
     override val canReload = true
 
@@ -249,6 +255,21 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
 
     override suspend fun getChapterData(index: Int, reload: Boolean): String {
         val ctx = context ?: throw ErrorLoadingException("Invalid context")
+
+        // Check if a translation exists in the Room DB for Chinese sources
+        val api = com.lagradost.quicknovel.util.Apis.getApiFromNameNull(data.meta.apiName)
+        if (api?.lang == "zh" && !reload) {
+            val novelId = com.lagradost.quicknovel.translator.TranslatorNovelId.from(
+                data.meta.apiName, data.meta.name
+            )
+            val translationDao = com.lagradost.quicknovel.translator.db.TranslatorDatabase
+                .getInstance(ctx).translationDao()
+            val translated = translationDao.getTranslation(novelId, index)
+            if (translated != null) {
+                return translated.englishText
+            }
+        }
+
         return ctx.getQuickChapter(
             data.meta,
             data.data[index],
@@ -296,7 +317,7 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     }
 }
 
-class RegularBook(val data: EpubBook) : AbstractBook() {
+class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBook() {
     init {
         var refs = mutableListOf<TOCReference>()
         data.tableOfContents.tocReferences.forEach { ref ->
@@ -322,6 +343,10 @@ class RegularBook(val data: EpubBook) : AbstractBook() {
     }
 
     override val canReload = false
+
+    // novelId is only set when opened from the translation pipeline (Chinese source)
+    override fun isChineseSource(): Boolean = novelId != null
+
     override fun author(): String? {
         val mainAuthor = data.metadata.authors.firstOrNull() ?: return null
         val firstName = mainAuthor.firstname
@@ -358,6 +383,18 @@ class RegularBook(val data: EpubBook) : AbstractBook() {
     }
 
     override suspend fun getChapterData(index: Int, reload: Boolean): String {
+        // Check if a translation exists in the Room DB for this chapter
+        if (novelId != null && !reload) {
+            val ctx = context
+            if (ctx != null) {
+                val translated = com.lagradost.quicknovel.translator.db.TranslatorDatabase
+                    .getInstance(ctx).translationDao().getTranslation(novelId, index)
+                if (translated != null) {
+                    return translated.englishText
+                }
+            }
+        }
+
         val start = data.tableOfContents.tocReferences[index].resource
         val startIdx = data.spine.getResourceIndex(start)
 
@@ -1155,7 +1192,12 @@ class ReadActivityViewModel : ViewModel() {
                     ?: throw ErrorLoadingException("Unable to open file descriptor")
                 val zipFile = AndroidZipFile(fd, "")
                 val book = EpubReader().readEpubLazy(zipFile, "utf-8")
-                RegularBook(book)
+                val epubApiName = intent.getStringExtra("apiName")
+                val epubNovelName = intent.getStringExtra("novelName")
+                val novelId = if (epubApiName != null && epubNovelName != null) {
+                    com.lagradost.quicknovel.translator.TranslatorNovelId.from(epubApiName, epubNovelName)
+                } else null
+                RegularBook(book, novelId)
             } else {
                 val input = context.contentResolver.openInputStream(data)
                     ?: throw ErrorLoadingException("Empty data")

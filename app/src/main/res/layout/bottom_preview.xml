@@ -86,6 +86,7 @@
                     <TextView
                             android:id="@+id/resultview_preview_meta_chapters"
                             style="@style/ResultInfoText"
+                            android:background="?android:attr/selectableItemBackground"
                             tools:text="121min" />
                 </com.lagradost.quicknovel.widget.FlowLayout>
 

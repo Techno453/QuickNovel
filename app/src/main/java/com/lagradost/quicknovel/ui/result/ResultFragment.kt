@@ -2,6 +2,7 @@ package com.lagradost.quicknovel.ui.result
 
 import android.animation.ObjectAnimator
 import android.content.DialogInterface
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
@@ -17,6 +18,7 @@ import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -27,6 +29,7 @@ import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.CommonActivity
 import com.lagradost.quicknovel.DownloadState
+import com.lagradost.quicknovel.EpubResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainActivity.Companion.navigate
 import com.lagradost.quicknovel.R
@@ -44,6 +47,11 @@ import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
+import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.TranslatorNovelId
+import com.lagradost.quicknovel.ui.glossary.GlossaryFragment
+import com.lagradost.quicknovel.ui.translate.TranslateRangeDialogFragment
+import com.lagradost.quicknovel.ui.translate.TranslateViewModel
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
@@ -53,14 +61,20 @@ import com.lagradost.quicknovel.util.UIHelper.html
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.setImage
+import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.toPx
+import androidx.lifecycle.lifecycleScope
 import kotlin.collections.toList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 const val MAX_SYNO_LENGH = 300
 
 class ResultFragment : Fragment() {
     lateinit var binding: FragmentResultBinding
     private val viewModel: ResultViewModel by viewModels()
+    private val translateViewModel: TranslateViewModel by activityViewModels()
 
     companion object {
         fun newInstance(url: String, apiName: String, startAction: Int = 0): Bundle =
@@ -199,6 +213,17 @@ class ResultFragment : Fragment() {
                     resultTitle.text = res.name
                     resultAuthor.text = res.author ?: getString(R.string.no_author)
 
+                    // Translate title if this is a Chinese source and the toggle is on
+                    val isZhForTitle = repo?.api?.lang == "zh"
+                    if (isZhForTitle && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val translated = withContext(Dispatchers.IO) { GoogleTranslate.translate(res.name) }
+                            resultTitle.text = translated
+                        }
+                    }
+                    // Update chapter adapter with correct isChineseSource now that repo is known
+                    (chapterList.adapter as? ChapterAdapter)?.setIsChineseSource(isZhForTitle)
+
                     resultRatingVotedCount.text = getString(R.string.no_data)
                     res.rating?.let { rating ->
                         resultRating.text = context?.getRating(rating)
@@ -217,7 +242,7 @@ class ResultFragment : Fragment() {
                     resultTabs.isVisible = false
                     val hasRelated = !res.related.isNullOrEmpty()
                     val hasChapters =
-                        res is StreamResponse && res.data.isNotEmpty() // this was removed because of lag, because of shitty android
+                        (res is StreamResponse && res.data.isNotEmpty()) || res is EpubResponse
                     val api = repo
 
                     if (api != null && (api.hasReviews || hasRelated || hasChapters)) {
@@ -320,6 +345,27 @@ class ResultFragment : Fragment() {
                                 if (isExpanded) res.synopsis.html() else syno.html()
                         }
                         resultSynopsisText.text = syno.html()
+
+                        // Translate synopsis if this is a Chinese source and the toggle is on
+                        val isZhForSynopsis = repo?.api?.lang == "zh"
+                        if (isZhForSynopsis && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                val translatedFull = withContext(Dispatchers.IO) {
+                                    GoogleTranslate.translate(synopsis)
+                                }
+                                val translatedSyno = if (translatedFull.length > MAX_SYNO_LENGH) {
+                                    translatedFull.substring(0, MAX_SYNO_LENGH) + "..."
+                                } else {
+                                    translatedFull
+                                }
+                                resultSynopsisText.text = translatedSyno.html()
+                                resultSynopsisText.setOnClickListener {
+                                    isExpanded = !isExpanded
+                                    resultSynopsisText.text =
+                                        if (isExpanded) translatedFull.html() else translatedSyno.html()
+                                }
+                            }
+                        }
                     } ?: run {
                         resultSynopsisText.text = "..."
                     }
@@ -331,6 +377,8 @@ class ResultFragment : Fragment() {
                             if (res.data.size == 1) getString(R.string.chapter) else getString(R.string.chapters)
                         resultQuickstream.isVisible = true
                         resultTotalChapters.isVisible = true
+                        val isChineseSource = repo?.api?.lang == "zh" && SecurePrefs.isTranslationEnabled(requireContext())
+                        resultTranslateHolder.isVisible = isChineseSource
                         if (res.data.isNotEmpty()) {
                             resultTotalChapters.text =
                                 getString(R.string.latest_format).format(res.data.last().name)
@@ -497,7 +545,7 @@ class ResultFragment : Fragment() {
         activity?.window?.decorView?.clearFocus()
         hideKeyboard()
 
-        if (viewModel.loadResponse.value == null)
+        if (viewModel.loadResponse.value == null || !viewModel.isGetLoaded)
             viewModel.initState(apiName, url)
 
         binding.apply {
@@ -632,6 +680,33 @@ class ResultFragment : Fragment() {
                 viewModel.streamRead()
             }
 
+            resultTranslateBtn.setOnClickListener {
+                val response = (viewModel.loadResponse.value as? Resource.Success)?.value as? StreamResponse
+                    ?: return@setOnClickListener
+                val apiName = viewModel.apiName
+                val novelId = TranslatorNovelId.from(apiName, response.name)
+                val chapters = ArrayList(response.data)
+
+                TranslateRangeDialogFragment.newInstance(
+                    novelId = novelId,
+                    apiName = apiName,
+                    chapters = chapters,
+                    novelAuthor = response.author,
+                    novelName = response.name
+                ).show(childFragmentManager, "translate_range")
+            }
+
+            resultGlossaryBtn.setOnClickListener {
+                val response = (viewModel.loadResponse.value as? Resource.Success)?.value
+                    ?: return@setOnClickListener
+                val novelId = TranslatorNovelId.from(viewModel.apiName, response.name)
+                val novelName = response.name
+                activity?.navigate(
+                    R.id.global_to_navigation_glossary,
+                    GlossaryFragment.newInstance(novelId, novelName)
+                )
+            }
+
             /*downloadDeleteTrashFromResult.setOnClickListener {
                 viewModel.deleteAlert()
             }*/
@@ -667,9 +742,58 @@ class ResultFragment : Fragment() {
         }
         observe(viewModel.loadResponse, ::newState)
 
+        observe(translateViewModel.progress) { progress ->
+            // Compute the novelId for the book currently shown on this screen.
+            val thisNovelId = (viewModel.loadResponse.value as? Resource.Success)
+                ?.value?.let { r -> TranslatorNovelId.from(viewModel.apiName, r.name) }
+
+            // Only apply button state changes when the translation belongs to this book.
+            val isForThisBook = thisNovelId != null &&
+                thisNovelId == translateViewModel.currentNovelId
+
+            fun setTranslateEnabled(enabled: Boolean) {
+                val ctx = binding.resultTranslateBtn.context
+                binding.resultTranslateBtn.isEnabled = enabled
+                binding.resultTranslateBtn.backgroundTintList = ColorStateList.valueOf(
+                    if (enabled) ctx.colorFromAttribute(R.attr.textColor)
+                    else ctx.colorFromAttribute(R.attr.iconGrayBackground)
+                )
+            }
+
+            when {
+                progress == null || !isForThisBook -> {
+                    // No active translation for this book — ensure button is usable.
+                    setTranslateEnabled(true)
+                    binding.resultTranslateBtn.text = "Translate"
+                }
+                progress.completed -> {
+                    setTranslateEnabled(true)
+                    binding.resultTranslateBtn.text = "Translate"
+                    val msg = if (progress.newTermsFound > 0)
+                        "Translation complete! ${progress.newTermsFound} new terms found — review them in the Glossary."
+                    else "Translation complete!"
+                    android.widget.Toast.makeText(requireContext(), msg, android.widget.Toast.LENGTH_LONG).show()
+                }
+                progress.error != null -> {
+                    setTranslateEnabled(true)
+                    binding.resultTranslateBtn.text = "Translate"
+                    android.widget.Toast.makeText(requireContext(), "Translation error: ${progress.error}", android.widget.Toast.LENGTH_LONG).show()
+                }
+                else -> {
+                    // In progress for this book — grey out and show count.
+                    setTranslateEnabled(false)
+                    binding.resultTranslateBtn.text = if (progress.total > 0)
+                        "${progress.current}/${progress.total}"
+                    else
+                        "Starting…"
+                }
+            }
+        }
+
         binding.chapterList.apply {
             setRecycledViewPool(ChapterAdapter.sharedPool)
-            val mainPageAdapter = ChapterAdapter(viewModel)
+            val isZhSource = repo?.api?.lang == "zh"
+            val mainPageAdapter = ChapterAdapter(viewModel, isChineseSource = isZhSource)
             adapter = mainPageAdapter
             setHasFixedSize(true)
         }

@@ -38,6 +38,7 @@ import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showMultiDialog
 import com.lagradost.quicknovel.util.SubtitleHelper
+import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.UIHelper.clipboardHelper
 import com.lagradost.quicknovel.util.UIHelper.dismissSafe
 import com.lagradost.safefile.MediaFileContentType
@@ -566,5 +567,74 @@ class SettingsFragment : PreferenceFragmentCompat() {
             MainActivity.activeAPI = MainActivity.getApiFromName(newValue.toString())
             return@setOnPreferenceChangeListener true
         }*/
+
+        // Translation settings
+        findPreference<androidx.preference.Preference>("openai_api_key_pref")?.setOnPreferenceClickListener { pref ->
+            val ctx = pref.context
+            val currentKey = com.lagradost.quicknovel.translator.SecurePrefs.getApiKey(ctx) ?: ""
+            val editText = android.widget.EditText(ctx)
+            editText.setText(currentKey)
+            editText.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            editText.hint = "sk-..."
+
+            AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
+                .setTitle("OpenAI API Key")
+                .setView(editText)
+                .setPositiveButton("Save") { _, _ ->
+                    val key = editText.text.toString().trim()
+                    com.lagradost.quicknovel.translator.SecurePrefs.setApiKey(ctx, key)
+                    showToast(if (key.isNotBlank()) "API key saved" else "API key cleared")
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .setNeutralButton("Verify") { _, _ ->
+                    val key = editText.text.toString().trim()
+                    if (key.isBlank()) { showToast("Enter an API key first"); return@setNeutralButton }
+                    ioSafe {
+                        val model = com.lagradost.quicknovel.translator.SecurePrefs.getModel(ctx)
+                        val engine = com.lagradost.quicknovel.translator.TranslationEngine(key, model)
+                        val valid = engine.testApiKey()
+                        showToast(if (valid) "API key is valid!" else "Invalid API key")
+                    }
+                }
+                .show()
+            true
+        }
+
+        findPreference<androidx.preference.Preference>("openai_model_pref")?.setOnPreferenceClickListener { pref ->
+            val ctx = pref.context
+            val models = listOf(
+                "gpt-4o-mini" to "gpt-4o-mini (\$ — fast & cheap)",
+                "gpt-4o" to "gpt-4o (\$\$\$ — best quality)"
+            )
+            val current = com.lagradost.quicknovel.translator.SecurePrefs.getModel(ctx)
+            val currentIdx = models.indexOfFirst { it.first == current }.coerceAtLeast(0)
+
+            activity?.showBottomDialog(
+                models.map { it.second }, currentIdx,
+                "Translation Model", false, {}
+            ) { idx ->
+                com.lagradost.quicknovel.translator.SecurePrefs.setModel(ctx, models[idx].first)
+            }
+            true
+        }
+
+        findPreference<androidx.preference.SwitchPreference>("translation_enabled_pref")
+            ?.setOnPreferenceChangeListener { _, newValue ->
+                val ctx = context ?: return@setOnPreferenceChangeListener true
+                com.lagradost.quicknovel.translator.SecurePrefs.setTranslationEnabled(ctx, newValue as Boolean)
+                true
+            }
+
+        findPreference<androidx.preference.SwitchPreference>("gtranslate_titles_pref")?.apply {
+            val ctx = context
+            // Sync the switch state from SecurePrefs (EncryptedSharedPreferences, not default prefs)
+            isChecked = com.lagradost.quicknovel.translator.SecurePrefs.isGoogleTranslateTitlesEnabled(ctx)
+            setOnPreferenceChangeListener { _, newValue ->
+                com.lagradost.quicknovel.translator.SecurePrefs.setGoogleTranslateTitlesEnabled(ctx, newValue as Boolean)
+                com.lagradost.quicknovel.util.GoogleTranslate.clearCache()
+                true
+            }
+        }
     }
 }

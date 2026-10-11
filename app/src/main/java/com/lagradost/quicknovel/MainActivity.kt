@@ -74,7 +74,12 @@ import com.lagradost.quicknovel.util.UIHelper.html
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.setImage
 import com.lagradost.safefile.SafeFile
+import androidx.lifecycle.lifecycleScope
+import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.util.GoogleTranslate
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.lang.ref.WeakReference
@@ -656,7 +661,8 @@ class MainActivity : AppCompatActivity() {
                             hidePreviewPopupDialog()
                         }
 
-                        resultviewPreviewDescription.text = d.synopsis ?: getString(R.string.no_data)
+                        val synopsisText = d.synopsis ?: getString(R.string.no_data)
+                        resultviewPreviewDescription.text = synopsisText
 
                         resultviewPreviewDescription.setOnClickListener { view ->
                             view.context?.let { ctx ->
@@ -665,6 +671,32 @@ class MainActivity : AppCompatActivity() {
                                 builder.setMessage(d.synopsis.html())
                                     .setTitle(d.name)
                                     .show()
+                            }
+                        }
+
+                        val isZh = Apis.getApiFromNameNull(viewModel.apiName)?.lang == "zh"
+                        if (isZh && SecurePrefs.isGoogleTranslateTitlesEnabled(this@MainActivity)) {
+                            lifecycleScope.launch {
+                                val translatedTitle = withContext(Dispatchers.IO) {
+                                    GoogleTranslate.translate(d.name)
+                                }
+                                resultviewPreviewTitle.text = translatedTitle
+
+                                d.synopsis?.let { synopsis ->
+                                    val translatedSynopsis = withContext(Dispatchers.IO) {
+                                        GoogleTranslate.translate(synopsis)
+                                    }
+                                    resultviewPreviewDescription.text = translatedSynopsis
+                                    resultviewPreviewDescription.setOnClickListener { view ->
+                                        view.context?.let { ctx ->
+                                            val builder: AlertDialog.Builder =
+                                                AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
+                                            builder.setMessage(translatedSynopsis.html())
+                                                .setTitle(translatedTitle)
+                                                .show()
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -685,8 +717,13 @@ class MainActivity : AppCompatActivity() {
                         if (d is StreamResponse) {
                             resultviewPreviewMetaChapters.text = "${d.data.size} ${getString(R.string.chapter_sort)}"
                             resultviewPreviewMetaChapters.isVisible = d.data.isNotEmpty()
+                            resultviewPreviewMetaChapters.setOnClickListener {
+                                loadResult(d.url, viewModel.apiName)
+                                hidePreviewPopupDialog()
+                            }
                         } else {
                             resultviewPreviewMetaChapters.isVisible = false
+                            resultviewPreviewMetaChapters.setOnClickListener(null)
                         }
                     }
                 }
