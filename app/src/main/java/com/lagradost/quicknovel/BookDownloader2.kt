@@ -63,6 +63,7 @@ import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.extractors.ExtractorApi
 import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
@@ -1413,8 +1414,9 @@ object BookDownloader2 {
     }
 
     /**
-     * [apiName] and [novelName] are forwarded to [ReadActivity2] so the reader can derive the
-     * translator novel id and serve translated chapters from the TranslatorDatabase.
+     * [apiName] and [novelName] are forwarded to [ReadActivity2] (for translatable sources) so the
+     * reader can derive the translator novel id and serve translated chapters from the
+     * TranslatorDatabase.
      */
     fun openEpub(
         activity: Activity,
@@ -1432,7 +1434,8 @@ object BookDownloader2 {
         if (!externalReader) {
             val myIntent = Intent(activity, ReadActivity2::class.java)
             myIntent.setDataAndType(uri, "application/epub+zip")
-            if (apiName != null && novelName != null) {
+            // Only books from translatable (zh/ja/ko) sources get a translator novel id.
+            if (apiName != null && novelName != null && TranslationLanguages.isTranslatableApi(apiName)) {
                 myIntent.putExtra("apiName", apiName)
                 myIntent.putExtra("novelName", novelName)
             }
