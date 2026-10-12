@@ -215,7 +215,10 @@ class GlossaryLookupSheet : BottomSheetDialogFragment() {
             }
             addView(LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
+                // Sentence case like TranslateTextButton (styles_translate.xml)
                 val approve = MaterialButton(ctx, null, androidx.appcompat.R.attr.borderlessButtonStyle).apply {
+                    isAllCaps = false
+                    letterSpacing = 0f
                     text = getString(R.string.pending_approve)
                     setOnClickListener {
                         // Approving a conflicting rendering updates the existing entry (same source);
@@ -228,6 +231,8 @@ class GlossaryLookupSheet : BottomSheetDialogFragment() {
                     }
                 }
                 val dismiss = MaterialButton(ctx, null, androidx.appcompat.R.attr.borderlessButtonStyle).apply {
+                    isAllCaps = false
+                    letterSpacing = 0f
                     text = getString(R.string.reader_glossary_dismiss)
                     setOnClickListener { glossary.rejectPendingTerm(p) }
                 }

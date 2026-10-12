@@ -19,9 +19,13 @@
             android:id="@+id/lookup_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:drawablePadding="10dp"
+            android:gravity="center_vertical"
             android:textColor="?attr/textColor"
             android:textSize="20sp"
             android:textStyle="bold"
+            app:drawableStartCompat="@drawable/ic_glossary_24"
+            app:drawableTint="?attr/textColor"
             tools:text="Lin Feng" />
 
         <TextView
@@ -67,7 +71,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/lookup_edit"
-                style="@style/BlackButton"
+                style="@style/TranslateOutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
@@ -77,7 +81,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/lookup_lock"
-                style="@style/WhiteButton"
+                style="@style/TranslateOutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -86,12 +90,12 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/lookup_add"
-            style="@style/WhiteButton"
+            style="@style/TranslateOutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/reader_glossary_add"
             android:visibility="gone"
-            app:icon="@drawable/ic_baseline_add_24" />
+            app:icon="@drawable/ic_glossary_24" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
