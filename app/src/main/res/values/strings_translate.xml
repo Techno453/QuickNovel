@@ -103,6 +103,15 @@
     <string name="tr_search_ai">Use AI for search queries</string>
     <string name="tr_search_ai_desc">Ask the translation model first (better at original novel titles); needs an API key</string>
 
+    <!-- Search tab: language chips above the source tiles and results (docs/search.md) -->
+    <string name="search_language">Search language</string>
+    <string name="search_language_all">All languages</string>
+    <string name="search_language_zh">Chinese</string>
+    <string name="search_language_ja">Japanese</string>
+    <string name="search_language_ko">Korean</string>
+    <string name="search_language_en">English</string>
+    <string name="search_language_no_sources">No enabled sources in this language. Pick another language, or turn sources on under Search providers.</string>
+
     <!-- Default translation style -->
     <string name="tr_style_names">%1$s names</string>
     <string name="tr_style_honorifics">%1$s honorifics</string>
