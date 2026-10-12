@@ -15,9 +15,11 @@ import com.lagradost.quicknovel.translator.db.GlossaryTerm
  *    先輩の…, 그 …) in any category, or a "character" whose English is not a name
  *    ("the minister", "examiner": an article or no capital letter).
  * 4. [Reason.COMMON_NOUN]: a non-character entry with a very short source (1–2 Han/kana
- *    characters, or one Hangul syllable) that does not look like a proper noun ([looksProper])
- *    and has low confidence (< [SHORT_TERM_MIN_CONFIDENCE]) or an all-lowercase English
- *    rendering (毒 "poison", 麦畑 "wheat fields", 신 "god", 低级 "low level").
+ *    characters or Hangul syllables) that does not look like a proper noun ([looksProper]) and
+ *    has low confidence (< [SHORT_TERM_MIN_CONFIDENCE]) or an all-lowercase English rendering
+ *    (毒 "poison", 麦畑 "wheat fields", 신 "god", 低级 "low level"); or any non-character entry
+ *    the model rendered as one lowercase English word ([isPlainWord]: 두루마리 "scroll",
+ *    비둘기 "pigeon", 환생 "reincarnation").
  * 5. [Reason.AUTHOR_NOTE]: the source occurs only inside author's-note blocks of the excerpt
  *    ([AuthorNotes]), e.g. the pen name in "土豆求月票".
  * 6. [Reason.MERGED]: entries with the same source are merged (highest confidence wins), then
@@ -87,15 +89,26 @@ object AnalysisFilter {
         return ARTICLE.containsMatchIn(e) || e == e.lowercase()
     }
 
-    /** 1–2 Han/kana characters (zh/ja) or a single Hangul syllable (ko), nothing else. */
+    /**
+     * 1–2 Han/kana characters (zh/ja) or 1–2 Hangul syllables (ko), nothing else. (Two Hangul
+     * syllables carry far less than two Han characters: 차원 "dimension", 식칼 "kitchen knife".)
+     */
     fun isVeryShort(source: String): Boolean {
         val s = source.trim()
         if (s.isEmpty()) return false
         val hangul = HANGUL_SYLLABLE.findAll(s).count()
-        if (hangul > 0) return hangul == 1 && s.length == 1
+        if (hangul > 0) return hangul in 1..2 && hangul == s.length
         val cjk = HAN_OR_KANA.findAll(s).count()
         return cjk in 1..2 && cjk == s.length
     }
+
+    private val SINGLE_LOWERCASE_WORD = Regex("""^[a-z]+(?:-[a-z]+)*$""")
+
+    /**
+     * A single lowercase English word ("scroll", "pigeon", "reincarnation", "dojo"): the model
+     * itself rendered the term as an ordinary dictionary word, not a name or coined term.
+     */
+    fun isPlainWord(english: String): Boolean = SINGLE_LOWERCASE_WORD.matches(english.trim())
 
     /** Short sources that are still proper nouns: katakana names, place / sect / family suffixes. */
     fun looksProper(source: String): Boolean {
@@ -147,6 +160,7 @@ object AnalysisFilter {
                 category == GlossaryTerm.CATEGORY_CHARACTER && isGenericRole(t.source, t.english) -> Reason.GENERIC_ROLE
                 category != GlossaryTerm.CATEGORY_CHARACTER && isVeryShort(t.source) && !looksProper(t.source) &&
                     (t.confidence < SHORT_TERM_MIN_CONFIDENCE || isAllLowercase(t.english)) -> Reason.COMMON_NOUN
+                category != GlossaryTerm.CATEGORY_CHARACTER && isPlainWord(t.english) -> Reason.COMMON_NOUN
                 noteText.isNotEmpty() && isOnlyInNotes(t, noteText, storyText) -> Reason.AUTHOR_NOTE
                 else -> null
             }

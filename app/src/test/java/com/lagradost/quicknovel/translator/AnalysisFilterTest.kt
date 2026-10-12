@@ -100,6 +100,47 @@ class AnalysisFilterTest {
     }
 
     @Test
+    fun koreanCommonNounsRenderedAsPlainWordsAreDropped() {
+        val terms = listOf(
+            t("라나엘", "Ranael", "character", 0.99f, "female"),
+            t("두루마리", "scroll", "artifact", 0.95f),
+            t("비둘기", "pigeon", "creature"),
+            t("환생", "reincarnation", "other"),
+            t("차원", "dimension", "location"),
+            t("3급 차원관리신", "third-rank dimension-management god", "title"),
+            t("니애미 차원", "Your-Mom Dimension", "location"), // left to the prompt
+        )
+        val r = AnalysisFilter.filter(terms, "")
+        assertEquals(listOf("라나엘", "3급 차원관리신", "니애미 차원"), r.terms.map { it.source })
+        assertTrue(AnalysisFilter.isPlainWord("swordswoman"))
+        assertTrue(AnalysisFilter.isPlainWord("half-elf"))
+        assertFalse(AnalysisFilter.isPlainWord("Dou Qi"))
+        assertFalse(AnalysisFilter.isPlainWord("healing magic"))
+        assertFalse(AnalysisFilter.isPlainWord("Scroll"))
+    }
+
+    @Test
+    fun doupoBracketedAfterwordArtifactsAreDropped() {
+        // The real ending of 斗破苍穹 chapter 1: a bracketed note to readers over two paragraphs.
+        val chapter = """
+            萧熏儿快步追了上去，与少年并肩而行…
+            （土豆新书开张，请各位新老书友点击收藏，另外，别忘记票票哦，谢谢一路跟来的剑圣书友，那时候的大地震，让身在四川的土豆到处躲命
+            有了你们的支持，才使得剑圣走过风雨一路，剑圣便将完美结局！）
+        """.trimIndent()
+        val r = AnalysisFilter.filter(
+            listOf(
+                t("萧熏儿", "Xiao Xun'er", "character", 1f, "female"),
+                t("土豆", "Tudou", "character"),
+                t("四川", "Sichuan", "location", 1f),
+                t("剑圣", "Jiansheng", "other"),
+            ),
+            chapter,
+        )
+        assertEquals(listOf("萧熏儿"), r.terms.map { it.source })
+        assertEquals(setOf("土豆", "四川", "剑圣"), r.droppedFor(Reason.AUTHOR_NOTE).map { it.source }.toSet())
+    }
+
+    @Test
     fun modelFlagFalseIsDropped() {
         val r = AnalysisFilter.filter(
             listOf(t("식칼", "Kitchen Knife", "artifact", proper = false), t("라나엘", "Ranael", "character", proper = true)),
@@ -114,7 +155,9 @@ class AnalysisFilterTest {
         assertTrue(AnalysisFilter.isVeryShort("毒"))
         assertTrue(AnalysisFilter.isVeryShort("麦畑"))
         assertTrue(AnalysisFilter.isVeryShort("신"))
-        assertFalse(AnalysisFilter.isVeryShort("차원"))
+        assertTrue(AnalysisFilter.isVeryShort("차원"))
+        assertFalse(AnalysisFilter.isVeryShort("비둘기"))
+        assertFalse(AnalysisFilter.isVeryShort("3급"))
         assertFalse(AnalysisFilter.isVeryShort("乌坦城"))
         assertTrue(AnalysisFilter.looksProper("萧家"))
         assertTrue(AnalysisFilter.looksProper("ロア"))

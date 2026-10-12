@@ -61,6 +61,24 @@ class AuthorNotesTest {
     }
 
     @Test
+    fun bracketedAsideToReadersRunsToItsClosingBracket() {
+        val chapter = """
+            萧炎缓缓行去…
+            （土豆新书开张，请各位书友点击收藏，别忘记票票哦
+            剑圣便将完美结局！）
+            第二天，萧炎早早起床。
+            （他心中暗想：这测验魔石碑，当真可恶。）
+            【系统更新完成，获得收藏品一件】
+        """.trimIndent()
+        val split = AuthorNotes.split(chapter)
+        assertEquals(
+            "萧炎缓缓行去…\n\n第二天，萧炎早早起床。\n\n（他心中暗想：这测验魔石碑，当真可恶。）\n\n【系统更新完成，获得收藏品一件】",
+            split.story,
+        )
+        assertTrue(split.notes.contains("土豆") && split.notes.contains("剑圣"))
+    }
+
+    @Test
     fun textWithoutNotesIsUnchanged() {
         val text = "第一段。\n\n第二段。"
         val split = AuthorNotes.split(text)

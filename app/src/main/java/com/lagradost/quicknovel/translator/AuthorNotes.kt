@@ -12,7 +12,9 @@ package com.lagradost.quicknovel.translator
  * - block markers ([BLOCK_MARKERS]) open a note that runs to the end of the chapter, e.g.
  *   "作者的话：…", "【あとがき】", "작가의 말";
  * - line markers ([LINE_PATTERNS]) make just that paragraph a note, e.g. "PS：…", "求月票！",
- *   "후원해 주신 분들 감사합니다".
+ *   "후원해 주신 분들 감사합니다";
+ * - a bracketed aside to readers ([BRACKET_NOTE_KEYWORDS]) is a note up to its closing bracket,
+ *   e.g. "（土豆新书开张……请各位书友点击收藏……）" (the real ending of 斗破苍穹 chapter 1).
  *
  * Pen names cannot be known in advance, so they are only caught when they appear inside such a
  * block. The lists are deliberately small; the analysis prompt also tells the model to ignore
@@ -33,11 +35,22 @@ object AuthorNotes {
     val LINE_PATTERNS = listOf(
         // "PS:", "ps：", "P.S.", "PS." at the start of the paragraph
         Regex("""^(?:P\.?S\.?|ps)\s*[:：.。,，]""", RegexOption.IGNORE_CASE),
-        // Chinese pleas for votes, monthly tickets, bookmarks, subscriptions, tips
-        Regex("""求月票|求推荐|求收藏|求订阅|求打赏|推荐票|月票"""),
+        // Chinese pleas for votes, monthly tickets, bookmarks, subscriptions, tips; addressing readers
+        Regex("""求月票|求推荐|求收藏|求订阅|求打赏|推荐票|月票|票票|书友"""),
         // Korean donation / sponsorship thanks (not the in-story 후원자 "sponsor")
         Regex("""^후원|후원\s*감사|후원해\s*주신|후원해주신"""),
     )
+
+    /**
+     * A paragraph that opens with a bracket and mentions one of these is an author's aside that
+     * runs to the matching closing bracket, possibly over several paragraphs, e.g.
+     * "（土豆新书开张，……请各位新老书友点击收藏……" … "……不会留有任何烂尾之嫌！）".
+     */
+    val BRACKET_NOTE_KEYWORDS = Regex("""书友|新书|收藏|票票|推荐票|月票|求票|码字|打赏|订阅""")
+
+    // Round brackets only: 【…】 and [ … ] are in-story system messages in many novels.
+    private const val OPEN_BRACKETS = "（("
+    private const val CLOSE_BRACKETS = "）)"
 
     /** Leading characters skipped before looking for a marker: brackets, dashes, stars, spaces. */
     private val LEADING_NOISE = Regex("""^[\s\p{Ps}\p{Pd}\p{So}*#=~～_·•「『【〔（(\[<《〈]+""")
@@ -73,14 +86,23 @@ object AuthorNotes {
         return LINE_PATTERNS.any { it.containsMatchIn(head) }
     }
 
+    /** True if [paragraph] opens a bracketed aside addressed to readers ([BRACKET_NOTE_KEYWORDS]). */
+    fun startsBracketNote(paragraph: String): Boolean {
+        val p = paragraph.trim()
+        return p.isNotEmpty() && p.first() in OPEN_BRACKETS && BRACKET_NOTE_KEYWORDS.containsMatchIn(p)
+    }
+
     /** Splits one chapter's plain text. Apply per chapter: a block runs to the end of [chapterText]. */
     fun split(chapterText: String): Split {
         val story = mutableListOf<String>()
         val notes = mutableListOf<String>()
         var inBlock = false
+        var inBracket = false
         for (p in paragraphs(chapterText)) {
             if (!inBlock && startsBlock(p)) inBlock = true
-            if (inBlock || isNoteLine(p)) notes += p else story += p
+            if (!inBlock && !inBracket && startsBracketNote(p)) inBracket = true
+            if (inBlock || inBracket || isNoteLine(p)) notes += p else story += p
+            if (inBracket && p.last() in CLOSE_BRACKETS) inBracket = false
         }
         return Split(story.joinToString("\n\n"), notes.joinToString("\n\n"))
     }

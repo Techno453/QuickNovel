@@ -1,5 +1,7 @@
 package com.lagradost.quicknovel.bench
 
+import com.lagradost.quicknovel.translator.AnalysisFilter
+import com.lagradost.quicknovel.translator.AuthorNotes
 import com.lagradost.quicknovel.translator.DiscoveredTerm
 import com.lagradost.quicknovel.translator.PromptTemplates
 import com.lagradost.quicknovel.translator.TranslationProtocol
@@ -14,7 +16,8 @@ import java.util.Locale
  * no judging; spend goes on the shared ledger like every other call.
  *
  * Output: `<run>/analysis/<sample>.<model>.r<n>.json` (parsed terms + raw reply) and
- * `<run>/analysis-compare.md`.
+ * `<run>/analysis-compare.md`. As in the app, author's notes are stripped from the excerpt
+ * ([AuthorNotes]); the report also shows what [AnalysisFilter] would drop from each run.
  */
 object AnalysisCompare {
 
@@ -50,7 +53,7 @@ object AnalysisCompare {
         for (sample in samples) for (model in models) for (r in 1..runs) {
             val system = PromptTemplates.analysisSystemPrompt(sample.lang)
             val user = PromptTemplates.buildAnalysisPrompt(
-                excerpt = sample.text, sourceLang = sample.lang, knownSources = emptyList(),
+                excerpt = AuthorNotes.strip(sample.text), sourceLang = sample.lang, knownSources = emptyList(),
                 previousPremise = "", style = null, chapterLabel = "chapter 1",
             )
             val started = System.currentTimeMillis()
@@ -93,10 +96,18 @@ object AnalysisCompare {
             .append("Rows flagged ⚑ have models disagreeing on the English rendering or the gender.\n\n")
         val cols = modelIds.flatMap { m -> (1..runs).map { m to it } }
 
-        sb.append("## Spend and size\n\n| Sample | Model | Run | Terms | Characters | Gendered | Tokens in+out | USD | Latency s |\n|---|---|---|---|---|---|---|---|---|\n")
+        val textOf = samples.associate { it.id to it.text }
+        // What the app's deterministic filter would drop from each run: (sample, model, run) -> source -> reason.
+        val filtered = extractions.associate { e ->
+            Triple(e.sampleId, e.modelId, e.run) to
+                AnalysisFilter.filter(e.terms, textOf[e.sampleId].orEmpty()).dropped.associate { it.term.source.trim() to it.reason }
+        }
+        sb.append("## Spend and size\n\n`Kept` = terms left after the app's `AnalysisFilter`.\n\n")
+        sb.append("| Sample | Model | Run | Terms | Kept | Characters | Gendered | Tokens in+out | USD | Latency s |\n|---|---|---|---|---|---|---|---|---|---|\n")
         for (e in extractions) {
             val chars = e.terms.filter { it.category == "character" }
-            sb.append("| ${e.sampleId} | ${e.modelId} | r${e.run} | ${e.terms.size} | ${chars.size} | ${chars.count { it.gender != "unknown" }} | ")
+            val dropped = filtered[Triple(e.sampleId, e.modelId, e.run)].orEmpty().size
+            sb.append("| ${e.sampleId} | ${e.modelId} | r${e.run} | ${e.terms.size} | ${e.terms.size - dropped} | ${chars.size} | ${chars.count { it.gender != "unknown" }} | ")
                 .append("${e.promptTokens}+${e.completionTokens} | ${"%.4f".format(Locale.US, e.usd)} | ${"%.1f".format(Locale.US, e.latencyMs / 1000.0)}")
                 .append(e.error?.let { " | ERROR: $it" } ?: "").append(" |\n")
         }
@@ -145,6 +156,8 @@ object AnalysisCompare {
                     if (englishes.size > 1) add("english differs")
                     if (genders.size > 1) add("gender differs")
                     if (missingInModel.isNotEmpty() && missingInModel.size < modelIds.size) add("only " + (modelIds - missingInModel).joinToString("/"))
+                    val reasons = cols.mapNotNull { (m, r) -> filtered[Triple(sample.id, m, r)]?.get(source) }.toSet()
+                    if (reasons.isNotEmpty()) add("filtered: " + reasons.joinToString("/") { it.name.lowercase(Locale.ROOT) })
                 }
                 sb.append("| ").append(source).append(" | ")
                 sb.append(cols.joinToString(" | ") { c ->
