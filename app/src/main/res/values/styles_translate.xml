@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared view styles for the XML translation dialogs (Translate, Analyze novel, glossary), so they
+     match the Compose settings, wizard and Spending screens: primary-coloured section labels,
+     grey 13sp notes, sentence-case buttons. See docs/ui-cohesion.md. -->
+<resources>
+    <style name="TranslateSectionLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <style name="TranslateNote">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">?attr/grayTextColor</item>
+    </style>
+
+    <style name="TranslateBody">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?attr/textColor</item>
+    </style>
+
+    <style name="TranslateOutlinedButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="iconPadding">8dp</item>
+    </style>
+
+    <!-- Outlined text fields whose outline and hint stay visible in the light theme. -->
+    <style name="TranslateTextField" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/translate_box_stroke</item>
+        <item name="hintTextColor">?attr/colorPrimary</item>
+        <item name="android:textColorHint">?attr/grayTextColor</item>
+    </style>
+
+    <style name="TranslateTextField.Dense" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense">
+        <item name="boxStrokeColor">@color/translate_box_stroke</item>
+        <item name="hintTextColor">?attr/colorPrimary</item>
+        <item name="android:textColorHint">?attr/grayTextColor</item>
+    </style>
+
+    <!-- The app's filled filter chip with text that stays readable on the primary colour. -->
+    <style name="TranslateFilterChip" parent="ChipFilled">
+        <item name="textColor">@color/translate_chip_text</item>
+        <item name="android:textColor">@color/translate_chip_text</item>
+        <item name="checkedIconTint">@color/translate_chip_text</item>
+        <item name="chipIconTint">@color/translate_chip_text</item>
+    </style>
+
+    <style name="TranslateTextButton" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+</resources>

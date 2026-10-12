@@ -45,7 +45,8 @@ class AnalyzeNovelDialogFragment : DialogFragment() {
             binding.analyzeCountLabel.text = getString(R.string.analyze_chapters, count)
             // Analysis makes no strict-mode retries; the estimate depends on the model and source language.
             val estimate = CostEstimator.estimateAnalysis(count, model, lang)
-            binding.analyzeEstimate.text = getString(R.string.analyze_estimate, CostEstimator.formatEstimate(estimate), model)
+            // Model label as in the Translate dialog ("GPT-6 Luna"), not the raw id.
+            binding.analyzeEstimate.text = getString(R.string.analyze_estimate, CostEstimator.formatEstimate(estimate), analysisConfig.label)
         }
 
         binding.analyzeCountSlider.value = count.toFloat()

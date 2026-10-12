@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Outline of text fields in the translation dialogs and the glossary: visible in black, dark and light themes. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorPrimary" android:state_focused="true" />
+    <item android:color="?attr/textColor" android:state_hovered="true" />
+    <item android:color="?attr/grayTextColor" android:state_enabled="false" />
+    <item android:color="?attr/grayTextColor" />
+</selector>

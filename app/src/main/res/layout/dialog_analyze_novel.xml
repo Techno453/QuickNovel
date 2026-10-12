@@ -1,23 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Analyze novel: same padding and text styles as the Translate dialog (styles_translate.xml). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingStart="24dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="8dp">
 
     <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/analyze_message"
-        android:textColor="?attr/textColor"
-        android:textSize="14sp" />
+        style="@style/TranslateBody"
+        android:layout_marginTop="0dp"
+        android:text="@string/analyze_message" />
 
     <TextView
         android:id="@+id/analyze_count_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        style="@style/TranslateBody"
         android:layout_marginTop="16dp"
-        android:textColor="?attr/textColor" />
+        android:textStyle="bold" />
 
     <com.google.android.material.slider.Slider
         android:id="@+id/analyze_count_slider"
@@ -30,17 +31,11 @@
 
     <TextView
         android:id="@+id/analyze_estimate"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="?attr/grayTextColor"
-        android:textSize="13sp" />
+        style="@style/TranslateNote" />
 
     <TextView
         android:id="@+id/analyze_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="?attr/grayTextColor"
-        android:textSize="13sp" />
+        style="@style/TranslateNote"
+        android:layout_marginTop="8dp" />
 
 </LinearLayout>
