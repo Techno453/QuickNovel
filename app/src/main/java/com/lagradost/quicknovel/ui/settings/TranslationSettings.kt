@@ -41,6 +41,8 @@ import com.lagradost.quicknovel.translator.ModelPreset
 import com.lagradost.quicknovel.translator.ModelPresets
 import com.lagradost.quicknovel.translator.PresetTier
 import com.lagradost.quicknovel.translator.PromptProfiles
+import com.lagradost.quicknovel.translator.ConnectionStatus
+import com.lagradost.quicknovel.translator.ConnectionTester
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationLanguages
@@ -581,12 +583,22 @@ object TranslationSettings {
                 } else {
                     verifying = true
                     scope.launch {
-                        val error = try {
-                            TranslationEngine(SecurePrefs.engineConfig(context).copy(apiKey = key)).verify()
+                        // Free check (one GET), never a paid completion; see ConnectionTester.
+                        val result = try {
+                            ConnectionTester.test(provider, key)
                         } finally {
                             verifying = false
                         }
-                        showToast(if (error == null) "API key is valid!" else "Verification failed: $error")
+                        val detail = result.detail.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+                        showToast(
+                            when (result.status) {
+                                ConnectionStatus.OK -> "API key is valid!"
+                                ConnectionStatus.INVALID_KEY -> "The provider rejected this key$detail"
+                                ConnectionStatus.BLOCKED -> "Something is blocking the provider$detail"
+                                ConnectionStatus.NETWORK_ERROR -> "No connection to the provider$detail"
+                                ConnectionStatus.PROVIDER_ERROR -> "The provider returned an error$detail"
+                            }
+                        )
                     }
                 }
             },
