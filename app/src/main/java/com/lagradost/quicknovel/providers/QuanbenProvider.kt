@@ -10,26 +10,30 @@ open class QuanbenProvider : MainAPI() {
     override val iconId = R.drawable.icon_quanben
     override val hasMainPage = true
     override val lang = "zh"
+    // Browse (checked 2026-10-11): quanben.io has no ranking or latest-updates page, only the
+    // home page ("推荐小说" plus a few books per genre, one page) and the genre listings
+    // /c/{genre}.html, /c/{genre}_{page}.html in the site's own order (best known works first).
+    // Every book on the site is finished (全本 = "complete"), so there is no status filter.
     override val tags = listOf(
-        "All" to "",
-        "玄幻" to "xuanhuan",
-        "都市" to "dushi",
-        "言情" to "yanqing",
-        "穿越" to "chuanyue",
-        "青春" to "qingchun",
-        "仙侠" to "xianxia",
-        "灵异" to "lingyi",
-        "悬疑" to "xuanyi",
-        "历史" to "lishi",
-        "军事" to "junshi",
-        "游戏" to "youxi",
-        "竞技" to "jingji",
-        "科幻" to "kehuan",
-        "职场" to "zhichang",
-        "官场" to "guanchang",
-        "现言" to "xianyan",
-        "耽美" to "danmei",
-        "其它" to "qita"
+        "Recommended (推荐小说)" to "",
+        "Xuanhuan fantasy (玄幻)" to "xuanhuan",
+        "Urban (都市)" to "dushi",
+        "Romance (言情)" to "yanqing",
+        "Time travel (穿越)" to "chuanyue",
+        "Youth (青春)" to "qingchun",
+        "Xianxia (仙侠)" to "xianxia",
+        "Supernatural (灵异)" to "lingyi",
+        "Mystery (悬疑)" to "xuanyi",
+        "History (历史)" to "lishi",
+        "Military (军事)" to "junshi",
+        "Games (游戏)" to "youxi",
+        "Sports (竞技)" to "jingji",
+        "Sci-fi (科幻)" to "kehuan",
+        "Workplace (职场)" to "zhichang",
+        "Officialdom (官场)" to "guanchang",
+        "Modern romance (现言)" to "xianyan",
+        "Danmei (耽美)" to "danmei",
+        "Other (其它)" to "qita"
     )
 
     private fun getStandardNovelPath(url: String?): String? {
@@ -84,14 +88,18 @@ open class QuanbenProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val url = if (tag.isNullOrBlank()) {
-            mainUrl
-        } else {
-            if (page <= 1) "$mainUrl/c/$tag.html" else "$mainUrl/c/${tag}_$page.html"
-        }
+        val url = mainPageUrl(page, tag)
+        // The home page has a single page; repeating it would duplicate the list.
+        if (tag.isNullOrBlank() && page > 1) return HeadMainPageResponse(url, emptyList())
 
         val document = app.get(url).document
         return HeadMainPageResponse(url, parseNovels(document))
+    }
+
+    internal fun mainPageUrl(page: Int, tag: String?): String = when {
+        tag.isNullOrBlank() -> mainUrl
+        page <= 1 -> "$mainUrl/c/$tag.html"
+        else -> "$mainUrl/c/${tag}_$page.html"
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -103,13 +111,19 @@ open class QuanbenProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
-        titleOf(document) // fail before fetching the chapter-list mirror
+        titleOf(document) // fail before fetching the chapter list
 
         val slug = slugOf(url)
-        val mirrorUrl = "https://quanben5.com/n/$slug/xiaoshuo.html"
-        val mirrorDoc = runCatching { app.get(mirrorUrl).document }.getOrNull()
-        return parseLoad(url, document, mirrorDoc)
+        // The AMP chapter list has every chapter on one page (2451 for the longest works seen).
+        // The regular list.html only shows the first and last ~24 and loads the rest through a
+        // signed JSONP call, so it is a fallback for when the AMP page fails.
+        val listDoc = runCatching { app.get(ampListUrl(slug)).document }.getOrNull()
+            ?.takeIf { parseChapterList(it).isNotEmpty() }
+            ?: runCatching { app.get("$mainUrl/n/$slug/list.html").document }.getOrNull()
+        return parseLoad(url, document, listDoc)
     }
+
+    internal fun ampListUrl(slug: String) = "$mainUrl/amp/n/$slug/list.html"
 
     private fun titleOf(document: Document): String =
         document.selectFirst("meta[property=og:novel:book_name]")?.attr("content")
@@ -120,23 +134,32 @@ open class QuanbenProvider : MainAPI() {
         Regex("""n/([^/]+)""").find(url)?.groupValues?.get(1) ?: throw ErrorLoadingException("Slug not found")
 
     /**
-     * Pure half of [load]: [document] is the novel page and [mirrorDoc] the quanben5.com chapter
-     * list (null when that fetch failed). Covered by a JVM fixture test.
+     * Chapter names and URLs from one chapter-list page (the AMP list or list.html), taken
+     * from the same `<a>` so they cannot drift apart. AMP links (`/amp/n/<slug>/<n>.html`) are
+     * mapped to the regular reader pages. A list.html whose middle part is still collapsed
+     * (`#detail` with the "展开完整列表" link) is only a preview, so it yields nothing rather
+     * than a list with a gap.
      */
-    internal suspend fun parseLoad(url: String, document: Document, mirrorDoc: Document?): LoadResponse {
+    internal fun parseChapterList(listDoc: Document): List<Pair<String, String>> {
+        if (listDoc.selectFirst("#detail .more, a[onclick^=load_more]") != null) return emptyList()
+        return listDoc.select("ul.list3 li a[href]").mapNotNull { a ->
+            val name = a.text().trim()
+            val path = Regex("""^(?:https?://[^/]+)?(?:/amp)?(/n/[^/]+/\d+\.html)$""")
+                .find(a.attr("href").trim())?.groupValues?.get(1)
+            if (name.isEmpty() || path == null) null else name to "$mainUrl$path"
+        }.distinctBy { it.second }
+    }
+
+    /**
+     * Pure half of [load]: [document] is the novel page and [listDoc] its chapter list (the AMP
+     * list page; null when that fetch failed). Covered by a JVM fixture test.
+     */
+    internal suspend fun parseLoad(url: String, document: Document, listDoc: Document?): LoadResponse {
         val name = titleOf(document)
 
-        val slug = slugOf(url)
-        val chapters = mutableListOf<ChapterData>()
-        if (mirrorDoc != null) runCatching {
-            mirrorDoc.select("ul li a").forEachIndexed { index, el ->
-                val chName = el.text().trim()
-                if (chName.isNotEmpty()) {
-                    val chNumber = index + 1
-                    chapters.add(newChapterData(chName, "$mainUrl/n/$slug/$chNumber.html"))
-                }
-            }
-        }
+        val chapters = listDoc?.let { doc ->
+            runCatching { parseChapterList(doc) }.getOrNull()
+        }.orEmpty().map { (chName, chUrl) -> newChapterData(chName, chUrl) }
 
         return newStreamResponse(name, url, chapters) {
             this.posterUrl = document.selectFirst("meta[property=og:image]")?.attr("content")
@@ -155,7 +178,10 @@ open class QuanbenProvider : MainAPI() {
                 ?.text()?.trim())
                 ?.split(",")?.map { it.trim() }
 
-            setStatus(document.selectFirst("meta[property=og:novel:status]")?.attr("content"))
+            // og:novel:status is Chinese (连载 / 完结); setStatus() only knows English words.
+            val statusText = document.selectFirst("meta[property=og:novel:status]")?.attr("content")
+                ?: document.selectFirst("div.list2 p:contains(状态:) span")?.text()
+            this.status = CjkStatus.parse(statusText)
         }
     }
 
