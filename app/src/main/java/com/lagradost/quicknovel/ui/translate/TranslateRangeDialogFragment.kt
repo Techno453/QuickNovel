@@ -8,11 +8,16 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.DialogTranslateRangeBinding
 import com.lagradost.quicknovel.translator.CostEstimator
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationLanguages
+import com.lagradost.quicknovel.translator.db.TranslatorDatabase
+import com.lagradost.quicknovel.ui.glossary.AnalyzeNovelDialogFragment
+import kotlinx.coroutines.launch
 
 class TranslateRangeDialogFragment : DialogFragment() {
     private val viewModel: TranslateViewModel by activityViewModels()
@@ -54,6 +59,22 @@ class TranslateRangeDialogFragment : DialogFragment() {
         val sourceLang = TranslationLanguages.langOfApi(apiName) ?: TranslationLanguages.DEFAULT
 
         viewModel.loadTranslatedNums(novelId)
+        NovelChapterSource.remember(novelId, apiName, novelName.orEmpty(), novelAuthor, chapters)
+
+        // Story Bible status; suggest the analysis pre-pass when there are no characters yet.
+        lifecycleScope.launch {
+            val dao = TranslatorDatabase.getInstance(ctx).glossaryDao()
+            val characters = dao.countCharacters(novelId)
+            val totalTerms = dao.countForNovel(novelId)
+            binding.bibleStatus.text = getString(R.string.bible_status, characters, totalTerms - characters)
+            val showHint = characters == 0 && chapters.isNotEmpty()
+            binding.bibleAnalyzeHint.visibility = if (showHint) View.VISIBLE else View.GONE
+            binding.bibleAnalyzeButton.visibility = if (showHint) View.VISIBLE else View.GONE
+        }
+        binding.bibleAnalyzeButton.setOnClickListener {
+            AnalyzeNovelDialogFragment.newInstance(novelId).show(parentFragmentManager, "analyze_novel")
+            dismiss() // translate after the bible is built (only one job runs at a time)
+        }
 
         binding.rangeFrom.setText("1")
         binding.rangeTo.setText(minOf(50, total).toString())
@@ -102,7 +123,12 @@ class TranslateRangeDialogFragment : DialogFragment() {
                 }
 
                 if (SecurePrefs.getApiKey(ctx).isNullOrBlank()) {
-                    Toast.makeText(ctx, "Set your API key in Settings → Translation first", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, R.string.translator_no_api_key, Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+
+                if (AnalysisState.isRunning) {
+                    Toast.makeText(ctx, R.string.translator_busy, Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
 

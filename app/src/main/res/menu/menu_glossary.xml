@@ -3,13 +3,33 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_analyze_novel"
+        android:title="@string/glossary_menu_analyze"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_translation_style"
+        android:title="@string/glossary_menu_style"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_review_auto"
+        android:title="@string/glossary_menu_review_auto"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_import_preset"
-        android:title="Load Presets"
+        android:title="@string/glossary_menu_presets"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_export_json"
-        android:title="Export JSON"
+        android:title="@string/glossary_menu_export"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_import_json"
+        android:title="@string/glossary_menu_import"
         app:showAsAction="never" />
 
 </menu>

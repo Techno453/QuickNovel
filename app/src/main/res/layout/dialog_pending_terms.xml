@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="8dp"
-        android:text="Review newly found terms and approve or reject them:"
+        android:text="@string/pending_intro"
         android:textColor="?attr/textColor" />
 
     <androidx.recyclerview.widget.RecyclerView
