@@ -53,6 +53,28 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://www.wuxiabox.com
 - https://www.69shuba.com (Chinese)
 
+**AI translation:**
+
+Novels from Chinese, Japanese and Korean sources (69shuba, Kakuyomu, Novelpia, …) can be
+translated into English with an LLM:
+
+- **Story Bible** per novel: characters (with gender, role and speech style), places,
+  sects, ranks, techniques and items, plus a premise and translation style (name romanization,
+  honorifics). It is sent with every chapter so names stay consistent; new names found while
+  translating are added automatically or queued for review. *Analyze novel* (long-press
+  **Translate** on the novel page, or the Glossary menu) builds it from the first chapters.
+- **Batch** translation of a chapter range from the novel page (runs in the background), or
+  **on demand** when an untranslated chapter is opened in the reader. Translated chapters are
+  stored on the device and marked "(AI translated)" in the reader.
+- **Translated search**: search queries are translated into each provider's language, and titles
+  and synopses can be shown in English (Google Translate).
+
+It needs your own API key for any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter,
+a local server, …); chapter text is only sent to that endpoint. Set the key, base URL, model and the
+consistency options under **Settings → AI Translation**. See
+[docs/translation-models.md](docs/translation-models.md) for model choice and cost, and
+[docs/translation-bench.md](docs/translation-bench.md) for the translation quality benchmark.
+
 **Screenshoots:**
 
 <img src="./.github/home.jpg" height="400"/><img src="./.github/search.jpg" height="400"/><img src="./.github/downloads.jpg" height="400"/><img src="./.github/result.jpg" height="400"/><img src="./.github/reader.jpg" height="400"/>
