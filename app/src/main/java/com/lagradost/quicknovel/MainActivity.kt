@@ -211,15 +211,6 @@ class MainActivity : AppCompatActivity() {
                     R.id.global_to_navigation_results,
                     ResultFragment2.newInstance(url, apiName, startAction)
                 )
-                /*supportFragmentManager.beginTransaction()
-                        .setCustomAnimations(
-                            R.anim.enter_anim,
-                            R.anim.exit_anim,
-                            R.anim.pop_enter,
-                            R.anim.pop_exit
-                        )
-                        .add(R.id.homeRoot, ResultFragment().newInstance(url, apiName, startAction))
-                        .commit()*/
             }
         }
 

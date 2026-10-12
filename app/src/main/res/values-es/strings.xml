@@ -9,7 +9,6 @@
     <string name="title_settings">Ajustes</string>
 
     <!-- Información de la Novela / Detalles -->
-    <string name="synopsis">Sinopsis</string>
     <string name="tags">Etiquetas</string>
     <string name="views">Vistas</string>
     <string name="no_author">Autor desconocido</string>
@@ -23,8 +22,6 @@
     <string name="rating_format">Formato de puntuación</string>
     <string name="overall_rating_format">General %s</string>
     <string name="votes_format">%d Votos</string>
-    <string name="novel_imagecover_descript">Portada de la novela</string>
-    <string name="background_image_descript">Fondo de la novela</string>
     <string name="poster_descript">Póster</string>
     <string name="shadow_descript">Sombra</string>
     <string name="has_read">Has leído</string>
@@ -46,7 +43,6 @@
     <!-- Descargas y Gestión de Archivos -->
     <string name="downloads_text">Descargas</string>
     <string name="download">Descargar</string>
-    <string name="download_text">Descargar</string>
     <string name="download_from_chapter">Descarga parcial</string>
     <string name="download_path_key">download_path_key</string>
     <string name="download_path_pref">Ruta de descarga</string>
@@ -152,7 +148,6 @@
     <string name="tts_voice_title">Voz de lectura (TTS)</string>
     <string name="tts_locale">Idioma</string>
     <string name="tts_voice">Voz</string>
-    <string name="start_chapter">Capitulos salteados</string>
     <string name="tts_speed">Velocidad de voz</string>
     <string name="tts_pitch">Tono de voz</string>
     <string name="lock_tts">Bloquear área de lectura TTS</string>
@@ -248,7 +243,6 @@
     <string name="dropped">Abandonado</string>
     <string name="stubbed">Recortado (Stubbed)</string>
     <string name="long_download_time">Cuidado, esta fuente es lenta. Se recomienda lectura en línea.</string>
-    <string name="quickstream_novel_text">Leer en línea</string>
     <string name="stream_read">Leer en línea</string>
     <string name="permission_error">Se nececitan permisos</string>
     <string name="unable_to_inflate">ERROR: la ui no se creó correctamente, por favor REPORTAR INMEDIATAMENTE %s</string>
@@ -268,7 +262,6 @@
     <string name="unread">Sin leer</string>
     <string name="bookmark">Marcador</string>
     <string name="read">Leído</string>
-    <string name="bookmarks">Marcadores</string>
     <string name="monke_eating">Mono comiendo</string>
     <string name="user_image_avatar">Avatar de usuario</string>
     <string name="browse_list_icon">Icono de lista</string>
