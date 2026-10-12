@@ -19,8 +19,9 @@ import java.util.concurrent.ConcurrentHashMap
  * translation (天空之上) never matches. Sources try the candidates in order:
  * 1. the known original title, when "Use AI for search queries" is on and an API key is set
  *    (first line of the model's reply);
- * 2. the original titles from the key-free title index ([NovelUpdatesIndex], "Associated Names"),
- *    for a Latin-script query, up to [MAX_INDEX_NAMES] in the target language's script;
+ * 2. the original titles from the key-free title index ([TitleIndex]: NovelUpdates "Associated
+ *    Names" and the Novel Buddy search API's alternative names), for a Latin-script query, up to
+ *    [MAX_INDEX_NAMES] in the target language's script;
  * 3. the literal translation from the free Google endpoint;
  * 4. the model's other lines (literal translation, common alternative wording).
  * A query already written in the target script is sent unchanged.
@@ -226,7 +227,7 @@ object SearchQueryTranslator {
         }
 
         override suspend fun titleIndex(query: String): List<String> =
-            NovelUpdatesIndex.associatedNames(query)
+            TitleIndex.associatedNames(query)
 
         override suspend fun google(query: String, lang: String): String? {
             val translated = GoogleTranslate.translateTo(query, from = "auto", to = TranslationLanguages.googleCode(lang))

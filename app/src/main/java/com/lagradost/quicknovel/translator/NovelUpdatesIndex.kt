@@ -4,13 +4,9 @@ import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.providers.SourceGuard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jsoup.Jsoup
 import java.net.URLEncoder
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Pure parsing of NovelUpdates pages for the title index (docs/search.md): search hits and the
@@ -136,57 +132,24 @@ object NovelUpdatesIndex {
         Page(response.code, { response.headers[it] }, response.text)
     }
 
-    private val cache: MutableMap<String, List<String>> = Collections.synchronizedMap(
-        object : LinkedHashMap<String, List<String>>(16, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean =
-                size > MAX_CACHE_ENTRIES
-        }
-    )
-    private val locks = ConcurrentHashMap<String, Mutex>()
-    private val failures = ConcurrentHashMap<String, Long>()
-    private const val FAILURE_TTL_MS = 2 * 60_000L
-
-    /** Outcome of one uncached lookup; [failure] says why NovelUpdates could not answer. */
-    data class Lookup(val names: List<String>, val failure: String? = null)
+    private val cache = LookupCache("NovelUpdatesIndex", MAX_CACHE_ENTRIES)
 
     /**
      * CJK associated names of the series matching [query] (best series first), or an empty list
      * when the query is not Latin-script, nothing matched, or NovelUpdates could not be reached.
+     * A block or an error is remembered briefly (the zh/ja/ko lookups of one search share it),
+     * not for the session: it may clear later.
      */
     suspend fun associatedNames(query: String, fetcher: Fetcher = deviceFetcher): List<String> {
         val trimmed = query.trim()
         if (!NovelUpdatesParser.isLatinQuery(trimmed)) return emptyList()
-        val key = trimmed.lowercase()
-        cache[key]?.let { return it }
-        val mutex = locks.getOrPut(key) { Mutex() }
-        return try {
-            mutex.withLock {
-                cache[key]?.let { return@withLock it }
-                // A block or an error is remembered briefly (the zh/ja/ko lookups of one search
-                // share it), not for the session: it may clear later.
-                val failedAt = failures[key]
-                if (failedAt != null && System.currentTimeMillis() - failedAt < FAILURE_TTL_MS) {
-                    return@withLock emptyList()
-                }
-                val result = withTimeoutOrNull(TIMEOUT_MS) { lookup(trimmed, fetcher) }
-                    ?: Lookup(emptyList(), "timeout")
-                if (result.failure == null) {
-                    cache[key] = result.names
-                    failures.remove(key)
-                } else {
-                    failures[key] = System.currentTimeMillis()
-                    // runCatching: android.util.Log is not available in JVM tests.
-                    runCatching { android.util.Log.i("NovelUpdatesIndex", "Title index unavailable: ${result.failure}") }
-                }
-                result.names
-            }
-        } finally {
-            if (!mutex.isLocked) locks.remove(key, mutex)
+        return cache.get(trimmed) {
+            withTimeoutOrNull(TIMEOUT_MS) { lookup(trimmed, fetcher) } ?: IndexLookup(emptyList(), "timeout")
         }
     }
 
     /** Uncached lookup: search page, then up to [MAX_FETCHES] - 1 series pages. */
-    suspend fun lookup(query: String, fetcher: Fetcher): Lookup {
+    suspend fun lookup(query: String, fetcher: Fetcher): IndexLookup {
         var lastFailure: String? = null
         var fetches = 0
         suspend fun fetch(url: String): String? {
@@ -215,22 +178,19 @@ object NovelUpdatesIndex {
 
         val q = URLEncoder.encode(query, "UTF-8")
         val searchHtml = fetch("$BASE_URL/?s=$q&post_type=seriesplans")
-            ?: return Lookup(emptyList(), lastFailure)
+            ?: return IndexLookup(emptyList(), lastFailure)
         val hits = NovelUpdatesParser.rankHits(query, NovelUpdatesParser.parseSearch(searchHtml))
-        if (hits.isEmpty()) return Lookup(emptyList())
+        if (hits.isEmpty()) return IndexLookup(emptyList())
         val names = ArrayList<String>()
         for (hit in hits.take(MAX_FETCHES - 1)) {
-            val html = fetch(hit.url) ?: return Lookup(SearchQueryTranslator.distinctQueries(names), lastFailure)
+            val html = fetch(hit.url) ?: return IndexLookup(SearchQueryTranslator.distinctQueries(names), lastFailure)
             val page = NovelUpdatesParser.parseSeries(html) ?: continue
             names += page.associatedNames.filter { NovelUpdatesParser.languagesOf(it).isNotEmpty() }
             // The exact match carries the names we want; a second series only adds noise.
             if (names.isNotEmpty()) break
         }
-        return Lookup(SearchQueryTranslator.distinctQueries(names))
+        return IndexLookup(SearchQueryTranslator.distinctQueries(names))
     }
 
-    fun clearCache() {
-        cache.clear()
-        failures.clear()
-    }
+    fun clearCache() = cache.clear()
 }

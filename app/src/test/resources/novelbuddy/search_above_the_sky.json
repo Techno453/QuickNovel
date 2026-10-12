@@ -1,0 +1,6 @@
+{"success":true,"data":{"items":[
+{"id":"a1","url":"/above-the-sky","name":"Above The Sky","match_field":"name","slug":"above-the-sky","cover":"https://example.invalid/covers/above-the-sky.png","status":"ongoing","rating":4.8,"summary":"Summary text replaced.","is_mtl":false,"is_raw":false},
+{"id":"a2","url":"/mtl-above-the-sky","name":"MTL-above the sky","alt_names":[{"name":"高天之上"}],"alt_name":"高天之上","match_field":"name","slug":"mtl-above-the-sky","cover":"https://example.invalid/covers/mtl-above-the-sky.png","status":"ongoing","rating":4.5,"summary":"Summary text replaced.","is_mtl":true,"is_raw":false},
+{"id":"a3","url":"/mtl-test-yellow-sand-is-far-above-the-sky","name":"MTL-[Test] Yellow sand is far above the sky","alt_names":[{"name":"[测试]黄沙远上天外天"}],"alt_name":"[测试]黄沙远上天外天","match_field":"name","slug":"mtl-test-yellow-sand-is-far-above-the-sky","status":"completed","rating":4.0,"summary":"Summary text replaced.","is_mtl":true,"is_raw":false},
+{"id":"a4","url":"/pivot-of-the-sky","name":"Pivot of the Sky","match_field":"name","slug":"pivot-of-the-sky","status":"completed","rating":4.2,"summary":"Summary text replaced.","is_mtl":false,"is_raw":false}
+],"pagination":{"total":4,"page":1,"limit":10,"total_pages":1,"has_next":false,"has_previous":false}},"message":null}

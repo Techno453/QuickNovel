@@ -253,6 +253,7 @@ class HomeViewModel2 : ViewModel(),
             val outcome = CandidateSearch.run(
                 candidates,
                 urlOf = { it.url },
+                nameOf = { it.name },
                 pauseMs = api.rateLimitTime,
             ) { candidate -> repo.searchResult(candidate).getOrThrow() }
             logOutcome(api, outcome)

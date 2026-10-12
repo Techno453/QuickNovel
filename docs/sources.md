@@ -356,7 +356,7 @@ and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
 | Wuxia Click (wuxia.click), en | 2026-10-12 | MTL aggregator: Aggregator whose entries are labelled MTL. Deleted `WuxiaClickProvider`, its icon, deep link and README entry. |
 | Ranovel (ranovel.com), en | 2026-10-12 | MTL aggregator: MTL site ("Read Korean MTL Novel"). Deleted `RanovelProvider` and its icon. |
 | MeioNovel (meionovels.com), id | 2026-10-12 | MTL aggregator: Indonesian, chapters labelled "MTL". `MeioNovelProvider` is unregistered and its deep link and README entry removed; the class and icon stay because `ArNoProvider` and `NovLoveProvider` extend it. |
-| NovelBuddy (novelbuddy.me), en | 2026-10-12 | MTL aggregator: Aggregator with an MTL section; its most popular list is led by "MTL - ..." entries. Deleted `NovelBuddyProvider`, its icon, deep link and README entry. |
+| NovelBuddy (novelbuddy.me), en | 2026-10-12 | MTL aggregator: Aggregator with an MTL section; its most popular list is led by "MTL - ..." entries. Deleted `NovelBuddyProvider`, its icon, deep link and README entry. Its search API is still read as a lookup-only title index (`translator/NovelBuddyIndex.kt`, docs/search.md): English title → original CJK title, never chapters or results. |
 | NoBadNovel (nobadnovel.com), en | 2026-10-12 | MTL aggregator: Aggregator of long-tail recent Chinese web novels in machine-translated English. Deleted `NoBadNovelProvider`, its icon, deep link and README entry. |
 | PawRead (pawread.com), en | 2026-10-12 | MTL aggregator: Advertises machine translation of Chinese novels (site keywords). Deleted `PawReadProver`, its icon, deep link and README entry. |
 

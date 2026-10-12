@@ -110,7 +110,13 @@ class AlphapolisProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/search?query=${URLEncoder.encode(query, "UTF-8")}&category=novel"
-        return AlphapolisParser.parseList(this, getText(url))
+        val response = app.get(url, headers = headers + ("Referer" to "$mainUrl/"))
+        val body = response.text
+        SourceGuard.check(name, response, body)
+        // A search with no matches answers HTTP 404 with a full "no results" page.
+        if (response.code == 404) return emptyList()
+        SourceGuard.requireOk(name, response, body)
+        return AlphapolisParser.parseList(this, body)
     }
 
     override suspend fun load(url: String): LoadResponse {
