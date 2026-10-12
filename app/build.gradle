@@ -157,9 +157,12 @@ dependencies {
 tasks.withType(Test).configureEach {
     System.properties.each { k, v ->
         def key = k.toString()
-        if (key == 'bench' || key.startsWith('bench.')) systemProperty key, v.toString()
+        if (key == 'bench' || key.startsWith('bench.') || key == 'live') systemProperty key, v.toString()
     }
-    if (System.getProperty('bench') != null || System.getenv('BENCH') != null) {
+    // Live provider tests (src/test/.../providers/cjk, docs/sources.md): -Dlive=1 or LIVE=1.
+    if (System.getenv('LIVE') != null) systemProperty 'live', System.getenv('LIVE')
+    if (System.getProperty('bench') != null || System.getenv('BENCH') != null ||
+            System.getProperty('live') != null || System.getenv('LIVE') != null) {
         outputs.upToDateWhen { false }
         testLogging.showStandardStreams = true
     }
