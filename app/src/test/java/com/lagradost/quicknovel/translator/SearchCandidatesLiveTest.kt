@@ -35,8 +35,15 @@ class SearchCandidatesLiveTest {
         val env = BenchEnv.load()
         val key = env.key()
         assumeTrue("no OPENAI_API_KEY in the environment or bench.local.properties", key != null)
-        val model = System.getProperty("live.searchModel")?.takeIf { it.isNotBlank() } ?: LlmConfig.DEFAULT_MODEL
-        val engine = TranslationEngine(apiKey = key!!, model = model, usageSink = UsageSink { })
+        // Default: the app's title lookup model (GPT-6 Sol); -Dlive.searchModel=<preset or model id>.
+        val model = System.getProperty("live.searchModel")?.takeIf { it.isNotBlank() }
+            ?: TitleLookupModel.DEFAULT_PRESET_ID
+        val preset = ModelPresets.byId(model)?.takeIf { it.provider == LlmProviders.OPENAI }
+        val engine = if (preset != null) {
+            TranslationEngine(preset.toEngineConfig(key!!), target)
+        } else {
+            TranslationEngine(apiKey = key!!, model = model, usageSink = UsageSink { })
+        }
         val sources = object : SearchQueryTranslator.Sources {
             override suspend fun ai(query: String, lang: String) =
                 engine.completeShort(query, PromptTemplates.searchQuerySystemPrompt(lang))

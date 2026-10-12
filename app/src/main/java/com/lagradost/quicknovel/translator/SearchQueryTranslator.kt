@@ -216,7 +216,8 @@ object SearchQueryTranslator {
         override suspend fun ai(query: String, lang: String): String? {
             val ctx = context ?: BaseApplication.context
             if (!SecurePrefs.isAiSearchEnabled(ctx)) return null
-            val config = SecurePrefs.engineConfig(ctx)
+            // The title lookup model (default GPT-6 Sol), not the chapter translation model.
+            val config = SecurePrefs.titleLookupEngineConfig(ctx)
             if (config.apiKey.isBlank()) return null
             val engine = TranslationEngine(config, lang)
             return kotlinx.coroutines.withContext(SpendTag(SpendKind.SEARCH)) {

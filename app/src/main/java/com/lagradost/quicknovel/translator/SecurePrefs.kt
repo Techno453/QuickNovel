@@ -446,6 +446,27 @@ object SecurePrefs {
         return preset.toEngineConfig(key)
     }
 
+    /** Preset id of the title lookup model; absent = [TitleLookupModel.DEFAULT_PRESET_ID]. */
+    const val KEY_TITLE_LOOKUP_PRESET = "title_lookup_preset"
+
+    /** Title lookup model preset id, or null = same as the translation model. */
+    fun getTitleLookupPresetId(context: Context?): String? =
+        TitleLookupModel.presetId(getPrefs(context)?.getString(KEY_TITLE_LOOKUP_PRESET, null))
+
+    fun setTitleLookupPresetId(context: Context, id: String?) = edit(context) {
+        putString(KEY_TITLE_LOOKUP_PRESET, TitleLookupModel.storedValue(id))
+    }
+
+    /**
+     * Engine config for the AI search title lookup (docs/search.md): the title lookup preset when
+     * its provider has an API key, otherwise the translation model.
+     */
+    fun titleLookupEngineConfig(context: Context?): EngineConfig {
+        val preset = ModelPresets.byId(getTitleLookupPresetId(context)) ?: return engineConfig(context)
+        val key = getApiKey(context, preset.provider.id) ?: return engineConfig(context)
+        return preset.toEngineConfig(key)
+    }
+
     /** Reader read-ahead: chapters after the current one to keep translated (0 = off, default 2). */
     fun getReadAheadChapters(context: Context?): Int {
         ensureLoaded(context); return readAheadChapters

@@ -101,7 +101,10 @@
     <string name="tr_search_queries">Translate search queries</string>
     <string name="tr_search_queries_desc">Search Chinese, Japanese and Korean sources in their own language</string>
     <string name="tr_search_ai">Use AI for search queries</string>
-    <string name="tr_search_ai_desc">Ask the translation model first (better at original novel titles); needs an API key</string>
+    <string name="tr_search_ai_desc">Ask the title lookup model for the original title first; needs an API key</string>
+    <string name="tr_title_lookup_model">Title lookup model</string>
+    <string name="tr_title_lookup_model_summary">%1$s (%2$s) · well under a cent per search</string>
+    <string name="tr_title_lookup_model_dialog_note">Model that finds the original title of a search query, such as 高天之上 for Above the sky. One short request per search and language, cached, so a stronger model costs well under a cent per search and knows more titles.</string>
 
     <!-- Search tab: language chips above the source tiles and results (docs/search.md) -->
     <string name="search_language">Search language</string>
