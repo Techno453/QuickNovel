@@ -244,4 +244,12 @@ class ResultPageLogicTest {
         val display = logic.metadataDisplay("Name", null, null, emptyList(), null, null, emptyMap(), false, chapterNamesTranslated = true)
         assertTrue(display.canToggle)
     }
+
+    @Test
+    fun reviewsToTopAppearsAfterAFewReviews() {
+        assertFalse(logic.showScrollToTop(0))
+        assertFalse(logic.showScrollToTop(2))
+        assertTrue(logic.showScrollToTop(3))
+        assertTrue(logic.showScrollToTop(40))
+    }
 }

@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -67,6 +68,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -121,7 +123,13 @@ import com.lagradost.quicknovel.util.AppUtils.openInBrowser
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SettingsHelper.getRatingReview
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filterNotNull
 
 /**
@@ -1024,15 +1032,38 @@ private fun ReviewsPage(
     listState: LazyListState,
     action: (ResultPageAction) -> Unit,
 ) {
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        items(reviews.items, key = { it.randomUuid }) { review ->
-            ReviewItem(review, modifier = Modifier.capped(), action = action)
-        }
-        if (reviews.loading) {
-            item(key = "loading") {
-                Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+    val scope = rememberCoroutineScope()
+    val showToTop by remember { derivedStateOf { ResultPageLogic.showScrollToTop(listState.firstVisibleItemIndex) } }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            items(reviews.items, key = { it.randomUuid }) { review ->
+                ReviewItem(review, modifier = Modifier.capped(), action = action)
+            }
+            if (reviews.loading) {
+                item(key = "loading") {
+                    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
+            }
+        }
+        // "To top", as the XML page's reviews FAB: appears once a few reviews are scrolled past.
+        AnimatedVisibility(
+            visible = showToTop,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            SmallFloatingActionButton(
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_baseline_arrow_upward_24),
+                    contentDescription = stringResource(R.string.reviews_to_top)
+                )
             }
         }
     }

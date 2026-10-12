@@ -252,6 +252,11 @@ object ResultPageLogic {
         return translated to name
     }
 
+    /** The reviews list shows its "To top" button once this many reviews are scrolled past. */
+    const val SCROLL_TO_TOP_AFTER = 3
+
+    fun showScrollToTop(firstVisibleIndex: Int): Boolean = firstVisibleIndex >= SCROLL_TO_TOP_AFTER
+
     /** The chip of chapter [index] (Queued over Source changed over Translated, see [ChapterStatusSource]). */
     fun chipFor(index: Int, statuses: Map<Int, ChapterTranslationStatus>): ChapterTranslationStatus =
         statuses[index] ?: ChapterTranslationStatus.NONE
