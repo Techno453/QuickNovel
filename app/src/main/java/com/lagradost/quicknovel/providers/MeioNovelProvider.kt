@@ -6,7 +6,7 @@ import java.util.Locale
 
 /**
  * Not registered since 2026-10-12: meionovels.com serves machine-translated (MTL) chapters, and the
- * fork reads raw CJK sources itself. Kept as the base class of [ArNoProvider] and [NovLoveProvider].
+ * fork reads raw CJK sources itself. Kept as the base class of [NovLoveProvider].
  */
 open class MeioNovelProvider : MainAPI() {
     override val name = "MeioNovel"

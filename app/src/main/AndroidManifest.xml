@@ -110,10 +110,6 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="free.kolnovel.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
                     android:host="freewebnovel.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
@@ -123,10 +119,6 @@
                     android:scheme="https" />
                 <data
                     android:host="graycity.net"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="indowebnovel.id"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -174,10 +166,6 @@
                     android:pathPrefix="/r/"
                     android:scheme="https" />
                 <data
-                    android:host="rewayat.club"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
                     android:host="risenovel.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
@@ -186,15 +174,7 @@
                     android:pathPrefix="/fiction"
                     android:scheme="https" />
                 <data
-                    android:host="sakuranovel.id"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
                     android:host="www.scribblehub.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="www.skynovels.net"
                     android:pathPrefix="/"
                     android:scheme="https" />
             </intent-filter>

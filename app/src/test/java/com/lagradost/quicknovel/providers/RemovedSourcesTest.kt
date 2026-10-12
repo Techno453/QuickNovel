@@ -19,6 +19,22 @@ class RemovedSourcesTest {
         "chrysanthemumgarden.com", "hiraethtranslation.com", "readonlinefreebook.com", "lunoxscans.com", "wattpad.com",
     )
 
+    /**
+     * Sources in languages other than Chinese, Japanese, Korean and English, dropped on the user's
+     * decision (docs/sources.md, "Removed sources").
+     */
+    private val otherLanguageHosts = listOf(
+        "ar-no.com", "devilnovels.com", "galaxynovels.com", "indowebnovel.id", "sakuranovel.id", "kolnovel.com",
+        "novelasligeras.net", "novelmania.com.br", "novelfrance.fr", "ranobehub.org", "rewayat.club",
+        "skynovels.net", "planetaepub.com",
+    )
+
+    @Test
+    fun otherLanguageSitesAreNotRegistered() {
+        val registered = Apis.apis.filter { api -> otherLanguageHosts.any { it in api.mainUrl } }
+        assertTrue("Non-CJK, non-English sites registered: ${registered.map { it.name }}", registered.isEmpty())
+    }
+
     @Test
     fun romanceFocusedSitesAreNotRegistered() {
         val registered = Apis.apis.filter { api -> romanceHosts.any { it in api.mainUrl } }

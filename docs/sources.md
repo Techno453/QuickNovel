@@ -341,7 +341,8 @@ The fork keeps the raw CJK sources above (translated by its own AI translator) p
 human-translation and original-fiction sites (e.g. Royal Road, Scribble Hub, Wuxiaworld, fan
 translation groups, ebook libraries). Machine-translation (MTL) aggregators are not carried:
 reading the raw source through the fork's translator replaces them. Romance-focused sources are
-not carried either (see "Romance listings (not offered)" above). `providers/RemovedSourcesTest`
+not carried either (see "Romance listings (not offered)" above), and neither are sources in any
+language other than Chinese, Japanese, Korean and English. `providers/RemovedSourcesTest`
 and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
 
 | Source | Removed | Reason |
@@ -360,10 +361,23 @@ and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
 | FanMTL (fanmtl.com), en | 2026-10-12 | MTL aggregator: MTL fan-fiction site on the Wuxia Box engine. Deleted `FanMtlnProvider`, its icon, deep link and README entry. |
 | Wuxia Click (wuxia.click), en | 2026-10-12 | MTL aggregator: Aggregator whose entries are labelled MTL. Deleted `WuxiaClickProvider`, its icon, deep link and README entry. |
 | Ranovel (ranovel.com), en | 2026-10-12 | MTL aggregator: MTL site ("Read Korean MTL Novel"). Deleted `RanovelProvider` and its icon. |
-| MeioNovel (meionovels.com), id | 2026-10-12 | MTL aggregator: Indonesian, chapters labelled "MTL". `MeioNovelProvider` is unregistered and its deep link and README entry removed; the class and icon stay because `ArNoProvider` and `NovLoveProvider` extend it. |
+| MeioNovel (meionovels.com), id | 2026-10-12 | MTL aggregator: Indonesian, chapters labelled "MTL". `MeioNovelProvider` is unregistered and its deep link and README entry removed; the class and icon stay because `NovLoveProvider` extends it (`ArNoProvider` also did until it was removed, see below). |
 | NovelBuddy (novelbuddy.me), en | 2026-10-12 | MTL aggregator: Aggregator with an MTL section; its most popular list is led by "MTL - ..." entries. Deleted `NovelBuddyProvider`, its icon, deep link and README entry. Its search API is still read as a lookup-only title index (`translator/NovelBuddyIndex.kt`, docs/search.md): English title → original CJK title, never chapters or results. |
 | NoBadNovel (nobadnovel.com), en | 2026-10-12 | MTL aggregator: Aggregator of long-tail recent Chinese web novels in machine-translated English. Deleted `NoBadNovelProvider`, its icon, deep link and README entry. |
 | PawRead (pawread.com), en | 2026-10-12 | MTL aggregator: Advertises machine translation of Chinese novels (site keywords). Deleted `PawReadProver`, its icon, deep link and README entry. |
+| Ar-No (ar-no.com), ar | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `ArNoProvider` and its icon. |
+| DevilNovels (devilnovels.com), es | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `DevilNovelsProvider` and its icon. |
+| Galaxy Novels (galaxynovels.com), ar | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `GalaxyNovelsProvider` and its icon. |
+| IndoWebNovel (indowebnovel.id), id | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `IndoWebNovelProvider`, its icon, deep link and README entries. |
+| SakuraNovel (sakuranovel.id), id | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `SakuraNovelProvider` (an `IndoWebNovelProvider` subclass), its icon, deep link and README entries. |
+| KolNovel (free.kolnovel.com), ar | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `KolNovelProvider`, its icon, colour, deep link and README entries. |
+| Nova / Novelas Ligeras (novelasligeras.net), es | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `NovelasLigerasProvider` and its icon. |
+| Novelmania (novelmania.com.br), pt | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `NovelManiaProvider` and its icon. |
+| Novel France (novelfrance.fr), fr | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `NovelFranceProvider` and its icon. |
+| RanobeHub (ranobehub.org), ru | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `RanobeHubProvider` and its icon. |
+| Rewayat (rewayat.club), ar | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `RewayatProvider`, its icon, colour, deep link and README entry. |
+| SkyNovels (skynovels.net), es | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `SkyNovelsProvider`, its icon, deep link and README entry. |
+| PlanetaEpub (planetaepub.com), es | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). It was already unregistered ("not working"); deleted `PlanetaEpubProvider` and its icon. |
 
 ## Tests
 
