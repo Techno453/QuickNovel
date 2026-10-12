@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
+import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
@@ -24,6 +25,19 @@ abstract class TranslatorDatabase : RoomDatabase() {
     abstract fun pendingTermDao(): PendingTermDao
     abstract fun novelContextDao(): NovelContextDao
     abstract fun chapterSummaryDao(): ChapterSummaryDao
+
+    /**
+     * Removes everything stored for [novelId]: translated chapters, Story Bible terms, pending
+     * terms, novel context and chapter summaries. Every "delete this novel" path must use this so
+     * new per-novel tables cannot be forgotten.
+     */
+    suspend fun deleteAllForNovel(novelId: String) = withTransaction {
+        translationDao().deleteAllForNovel(novelId)
+        glossaryDao().deleteAllForNovel(novelId)
+        pendingTermDao().deleteAll(novelId)
+        novelContextDao().deleteForNovel(novelId)
+        chapterSummaryDao().deleteForNovel(novelId)
+    }
 
     companion object {
         @Volatile

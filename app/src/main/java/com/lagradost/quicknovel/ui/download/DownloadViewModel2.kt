@@ -99,16 +99,13 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
     }
 
     private val searchPipe = DebounceQuery()
-    /** Removes the novel's AI translations, glossary and pending terms from the translator DB. */
+    /** Removes all of the novel's translator data (translations, Story Bible, context, summaries). */
     private fun deleteTranslatorData(apiName: String, name: String) =
         viewModelScope.launch(Dispatchers.IO) {
             val context = BaseApplication.context ?: return@launch
             try {
                 val novelId = TranslatorNovelId.from(apiName, name)
-                val db = TranslatorDatabase.getInstance(context)
-                db.translationDao().deleteAllForNovel(novelId)
-                db.glossaryDao().deleteAllForNovel(novelId)
-                db.pendingTermDao().deleteAll(novelId)
+                TranslatorDatabase.getInstance(context).deleteAllForNovel(novelId)
             } catch (t: Throwable) {
                 logError(t)
             }

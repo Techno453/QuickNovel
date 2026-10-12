@@ -43,6 +43,7 @@ import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.launchSafe
+import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.CHAPTER_SORT
@@ -565,10 +566,11 @@ class ResultViewModel : ViewModel() {
             val novelId = TranslatorNovelId.from(apiName, load.name)
             val ctx = context ?: return@launch
             withContext(Dispatchers.IO) {
-                val db = TranslatorDatabase.getInstance(ctx)
-                db.translationDao().deleteAllForNovel(novelId)
-                db.glossaryDao().deleteAllForNovel(novelId)
-                db.pendingTermDao().deleteAll(novelId)
+                try {
+                    TranslatorDatabase.getInstance(ctx).deleteAllForNovel(novelId)
+                } catch (t: Throwable) {
+                    logError(t)
+                }
             }
         }
     }
