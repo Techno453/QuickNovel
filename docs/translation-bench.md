@@ -60,7 +60,8 @@ default panel spans three providers with reasoning off: `gpt-5.4-mini` (OpenAI,
 `reasoning_effort: none`), `google/gemini-3.1-flash-lite` and `deepseek/deepseek-v4.1-flash`
 (OpenRouter, `reasoning: {enabled: false}`). `judges.temperature` (default 0) is sent where the
 provider accepts it and dropped automatically when rejected; `judges.maxCompletionTokens` caps the
-reply (default 300).
+reply (default 300). Panel entries are resolved like `models` entries: one without `keyName` is an
+OpenAI model (before this was fixed, gpt-5.4-mini stored "no key ()" errors instead of scores).
 
 - **Blind rubric.** The judge sees the source excerpt, the story bible the translator was given and
   the translation, never the model name. It returns JSON with integer 1–10 scores for
@@ -216,8 +217,64 @@ Each entry in `models` either references one of the app's model presets
 - `sendTemperature: false` makes the engine never send `temperature`.
 - `enabled: false` keeps a model in the config without running it (the direct Gemini, DeepSeek
   and Qwen presets are listed disabled; enable them when you have those keys).
+- `promptProfile`: the app prompt profile to translate with (see below); unset = the preset's
+  own profile, or the standard prompt for explicit models.
 - Models are run in phases by provider (OpenAI first); the bible always uses `bibleModel`
   (OpenAI); judges are `judge.model` plus `judges.panel`.
+
+## Prompt profiles
+
+A prompt profile is a short list of extra system-prompt rules for one model, appended after the
+seven standard rules and numbered 8, 9, … (optionally with extra rules for one source language).
+Code: `PromptProfile.kt` (`PromptProfiles.ALL`) in
+`app/src/main/java/com/lagradost/quicknovel/translator/`. Each `ModelPreset` names its profile
+(`promptProfile`, default `default` = the standard prompt, byte-identical to the prompt before
+profiles existed); the engine takes it from `EngineConfig`, and `TranslationOptions.promptProfile`
+overrides it for the primary model only (a fallback model keeps its own). A custom model picks
+its profile in the model dialog (default: standard).
+
+| Profile | Rules | Used by |
+|---|---|---|
+| `default` | none | every preset except the two below; custom models unless changed |
+| `general` | 7: no glossary tags after names, implied subjects, keep profanity strength, idioms/slang by meaning, author's notes and pen names, one word per rank/unit, keep scene breaks and one-line paragraphs | `gemini-3.1-flash-lite`, `or-gemini-3.1-flash-lite` |
+| `luna` | `general` + scope of "rare/for once" adverbs + re-read for literal phrasing | tested on GPT-6 Luna, not adopted |
+| `gemini` | `general` + swearing strength + exact paragraph count + Japanese topic subjects (ja only) | tested on Gemini Flash-Lite, not adopted |
+
+Rule examples deliberately avoid the benchmark's own sentences, so a profile is not tuned to the
+three samples.
+
+### Testing a profile (A/B)
+
+Add a variant as its own model entry with a distinct id (`<model>@<variant>`), so results,
+judge scores and the report stay separate per variant:
+
+```json
+{ "preset": "gpt-6-luna", "id": "gpt-6-luna@general", "promptProfile": "general", "enabled": false },
+{ "preset": "gpt-6-luna", "id": "gpt-6-luna@rerun", "promptProfile": "default", "enabled": false }
+```
+
+then run only the variants (judging happens inline with the full panel):
+
+```sh
+BENCH=1 ./gradlew :app:testDebugUnitTest --rerun --tests "com.lagradost.quicknovel.bench.TranslationBench" -Dbench=1 -Dbench.models=gpt-6-luna@rerun,gpt-6-luna@general --console=plain
+```
+
+and compare with `-Dbench.reportOnly=true -Dbench.models=gpt-6-luna,gpt-6-luna@rerun,gpt-6-luna@general`.
+
+- The `@…` suffix is ignored for self-judging exclusion: `gpt-6-luna` never judges
+  `gpt-6-luna@general`.
+- Always include a `@rerun` entry (same model, `default` profile, fresh run). One output per
+  sample is noisy: in the 2026-10-11 A/B three standard-prompt runs of GPT-6 Luna scored 8.26,
+  8.70 and 8.96 on the same three chapters. A profile that moves the panel less than that
+  spread is a tie; look at deterministic metrics (paragraph fidelity, separators, tags) and the
+  targeted passages instead.
+- A replicate needs another id (`@general-r2`), because the result store keeps one output per
+  (sample, model id).
+- A preset reference inherits the preset's profile; the stored Gemini baseline pins
+  `"promptProfile": "default"` so its stored results stay labelled correctly.
+- Cost: a Luna variant is about $0.022 for three chapters with the full panel, a Gemini variant
+  about $0.031 (gpt-5.4-mini judging is two thirds of it). The 2026-10-11 A/B (12 variant runs)
+  cost $0.317.
 
 ## Story bible
 

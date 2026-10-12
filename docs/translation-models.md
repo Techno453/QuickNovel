@@ -183,7 +183,7 @@ Spearman 0.62–0.89; the manual pass correlates best with deepseek (0.85) and g
   Korean sample and gpt-5-mini on the Chinese one ("Ranael [character]", "Earth [location]").
   The prompt never shows terms in that form; the models appear to be echoing the
   `category` field of the `===TERMS===` output protocol. This is a per-model prompt issue, not
-  a bible issue, and is on the list for the prompt-profile work.
+  a bible issue; the `general` prompt profile forbids it (see below).
 - **Claude Haiku 5.5 refused** the Korean chapter outright and stopped the Chinese one 60% in,
   citing copyright, and abridged what it did return (paragraph fidelity 0.67). It is not
   offered as a preset.
@@ -191,13 +191,60 @@ Spearman 0.62–0.89; the manual pass correlates best with deepseek (0.85) and g
   Its Sonnet 5.5 scores (8.33) sit above the LLM panel's (7.75); read the Claude rows with that
   in mind. It scored Haiku lowest of all judges.
 
+### Prompt-profile A/B (2026-10-11)
+
+Prompt profiles add a few model-specific rules to the system prompt (see `translation-bench.md`,
+"Prompt profiles"). The A/B covered the two main presets, GPT-6 Luna and Gemini 3.1 Flash-Lite
+(OpenRouter), on the same three chapters: the stored baseline plus two fresh standard-prompt runs
+(`@rerun`, `@rerun2`) against two runs each of `general` and a model-specific profile (`luna`,
+`gemini`). Panel = raw mean of the LLM judges, never the model's own (the manual judge did not
+score the new outputs); the stored Gemini baseline has no gpt-6-luna score, so it has two judges.
+Adherence was 100% and CJK leaks 0 in every run.
+
+| Run | zh | ja | ko | Panel | Para fidelity |
+|---|---|---|---|---|---|
+| gpt-6-luna baseline | 8.11 | 9.11 | 7.56 | 8.26 | 1.00 (ko 0.99) |
+| gpt-6-luna @rerun / @rerun2 | 8.33 / 9.22 | 9.33 / 9.33 | 8.44 / 8.33 | 8.70 / 8.96 | 1.00 / 1.00 |
+| gpt-6-luna @general / -r2 | 8.44 / 8.67 | 9.22 / 9.33 | 7.78 / 7.67 | 8.48 / 8.56 | 1.00 / 1.00 |
+| gpt-6-luna @luna / -r2 | 8.56 / 8.56 | 9.22 / 9.22 | 8.22 / 7.67 | 8.67 / 8.48 | 1.00 / 1.00 |
+| gemini-3.1-flash-lite baseline (2 judges) | 7.17 | 8.83 | 7.00 | 7.67 | 0.98 (ja 0.96) |
+| gemini @rerun / @rerun2 | 7.44 / 7.78 | 8.22 / 8.78 | 7.11 / 7.22 | 7.59 / 7.93 | 0.98 / 0.99 |
+| gemini @general / -r2 | 7.56 / 7.78 | 8.78 / 8.22 | 7.44 / 6.67 | 7.93 / 7.56 | 1.00 / 1.00 |
+| gemini @gemini / -r2 | 7.56 / 8.00 | 8.44 / 7.33 | 7.22 / 7.44 | 7.74 / 7.59 | 1.00 / 1.00 |
+
+- **Panel: a wash for both models.** Luna: standard 8.64 (mean of 3 runs, range 8.26–8.96),
+  `general` 8.52, `luna` 8.58. Gemini (same three judges): standard 7.76, `general` 7.74,
+  `gemini` 7.67; with only the two judges every run has, standard 7.63, `general` 7.69. Three
+  standard-prompt runs of Luna spread over 0.7 points, more than any profile moved.
+- **Gemini, targeted checks:** with a profile it kept every line and scene break in 4 of 4 runs
+  (112/112 Japanese and 80/80 Korean paragraphs, all `---`/`***` separators); the standard
+  prompt dropped one to four lines and two to four separators in 3 of 3 runs. It gave the
+  Japanese panic to Paul in 4 of 4 profiled runs (2 of 3 standard), used stronger swearing in
+  the Korean chapter (6–8 "fuck/shit/bitch" against 3–5) and one word for 段 in announcements and
+  exposition in 3 of 4 (1 of 3 standard). The model-specific `gemini` profile added nothing over
+  `general`.
+- **Luna, targeted checks:** its baseline misses were mostly noise: the fresh standard runs
+  already kept every Korean separator, used "stage" consistently and gave the panic to Paul.
+  Not fixed by any prompt: 길바닥에 부쳐놓은 부침개 (vomit) stayed "pancakes on the pavement" in
+  all 14 runs of both models. 罕见的露出了一丝笑意 came out as "rarely showed a smile" in 5 of 7
+  Luna runs; the `luna` profile fixed it once in two runs, the standard prompt once in three
+  (Gemini got it right in every run).
+  No profile output had glossary tags; the crude gender-mismatch count rose slightly for Luna
+  with profiles (10–14 against 8–9), all false positives (the pronoun refers to another person).
+- **Decision:** both Gemini presets (direct and OpenRouter) use `general`: same panel score,
+  no dropped lines or scene breaks, about 8% more tokens. GPT-6 Luna keeps the standard prompt
+  (no measured gain). DeepSeek and Qwen were not tested and keep the standard prompt; custom
+  models default to it and can pick a profile in the model dialog. The direct Gemini preset was
+  not run separately (same model, different endpoint and `reasoning_effort: minimal`). The A/B
+  spent $0.317 (ledger $1.26 → $1.58).
+
 ## Recommendations
 
 | Use | Model (app preset) | ≈ $/100 ch measured | Notes |
 |---|---|---|---|
 | **Default** | gpt-6-luna, reasoning none | 0.19 | Panel 8.33, manual 8.89 (behind only the two gpt-6 sol models), 100% adherence, no errors in the manual pass, cheapest OpenAI model. Default for new installs. |
 | **Quality** | gpt-6-sol, reasoning none | 3.73 | Best on every judge (panel 8.69, manual 9.22); inside the $3–5 target. gpt-6.1-sol is a close second at the same price but twice the latency. |
-| Fast / cheap alternative | gemini-3.1-flash-lite, lowest thinking | 0.57 | Fastest (7.9 s/chapter), panel 8.36 (raw 7.92), manual 8.33; a statistical tie with Luna at 3× the price. Gemini's PROHIBITED_CONTENT block cannot be disabled, so mature novels may fail; keep a fallback. |
+| Fast / cheap alternative | gemini-3.1-flash-lite, lowest thinking | 0.57 | Fastest (7.9 s/chapter), panel 8.36 (raw 7.92), manual 8.33; a statistical tie with Luna at 3× the price. The preset uses the `general` prompt profile, which stopped it dropping lines and scene breaks. Gemini's PROHIBITED_CONTENT block cannot be disabled, so mature novels may fail; keep a fallback. |
 | Cheapest, Chinese-trained | deepseek-flash (thinking disabled) | 0.26 | Panel 8.07, manual 8.11; now clearly ahead of qwen3.8-flash (7.75 / 6.89: garbled the author's name, one gender slip, 39 s/chapter). DeepSeek is half price off-peak but rejects politically sensitive text. |
 | Fallback | gemini-3.1-flash-lite (cheap) or gpt-6-sol (quality) | — | Off by default. Pick a model from a different provider than the main one, so the same filter does not block it twice. |
 | Not recommended | gpt-5.6-terra, gpt-5.4-mini, gpt-4o, gpt-4o-mini, gpt-5-mini, mistral-small, claude-sonnet-5.5, claude-haiku-5.5 | | Terra ties Luna at 23× the price and leaked glossary tags; 5.4-mini costs 9× Luna for a lower score; 4o costs 20× Luna for less; 4o-mini, 5-mini and Mistral Small have real accuracy errors; Sonnet is over budget; Haiku refuses. |
