@@ -37,10 +37,10 @@ data class SpendCaps(
                         "This job would pass the monthly spend cap: ${SpendPricing.format(spentUsd)} spent this month + " +
                             "about ${SpendPricing.format(estimateUsd)} for this job = " +
                             "${SpendPricing.format(spentUsd + estimateUsd)}, cap ${SpendPricing.format(capUsd)}. " +
-                            "Translate fewer chapters or raise the cap in Settings → AI Translation."
+                            "Translate fewer chapters or raise the cap in Settings → AI translation."
                     }
                 is PerJobCapExceeded ->
-                    "This job's estimate (about ${SpendPricing.format(estimateUsd)}) is over the per-job cap of " +
+                    "This job's estimate (about ${SpendPricing.format(estimateUsd)}) is over the per-job spend cap of " +
                         "${SpendPricing.format(capUsd)}. Translate fewer chapters or raise the cap."
             }
     }

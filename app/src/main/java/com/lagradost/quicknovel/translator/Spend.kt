@@ -10,7 +10,7 @@ import kotlin.coroutines.CoroutineContext
 enum class SpendKind(val id: String, val label: String) {
     TRANSLATE("translate", "Translation"),
     ANALYSIS("analysis", "Analysis"),
-    READ_AHEAD("read_ahead", "Read-ahead"),
+    READ_AHEAD("read_ahead", "Read ahead"),
     BATCH("batch", "Overnight batch"),
     SEARCH("search", "Search"),
     METADATA("metadata", "Titles and synopses"),
