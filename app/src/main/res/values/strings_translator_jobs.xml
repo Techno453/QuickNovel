@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spend ledger, caps, charging conditions and overnight batch (kept apart from strings.xml to avoid merge conflicts). -->
+<resources>
+    <string name="batch_preparing_title">Preparing overnight translation</string>
+    <string name="batch_fetching">Fetching chapter %1$d/%2$d</string>
+    <string name="translate_mode_now">Translate now</string>
+    <string name="translate_mode_batch">Overnight (batch, ~50%% off, ready within 24 h)</string>
+    <string name="translate_mode_charging">Overnight (runs only while charging)</string>
+    <string name="translate_mode_charging_note">This model\'s provider has no batch API, so the overnight option runs the normal translation while the phone is charging, at the normal price.</string>
+    <string name="translate_retranslate_stale">Re-translate %1$d stale chapter(s) in this range (source changed)</string>
+    <string name="spend_month_line">Spent this month: %1$s</string>
+    <string name="spend_month_cap_line">Spent this month: %1$s of the %2$s cap</string>
+    <string name="batch_cancel">Cancel batch</string>
+    <string name="batch_translate_rest">Translate the rest now</string>
+</resources>

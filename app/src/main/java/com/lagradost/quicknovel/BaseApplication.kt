@@ -21,6 +21,13 @@ class BaseApplication : Application(), SingletonImageLoader.Factory, Configurati
         context = base
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        // Spend ledger for every paid translator call, and a poll of overnight batches.
+        com.lagradost.quicknovel.translator.SpendLedger.install(this)
+        com.lagradost.quicknovel.ui.translate.BatchScheduler.pollNow(this)
+    }
+
     override fun newImageLoader(context: PlatformContext): coil3.ImageLoader {
         // Coil Module will be initialized & setSafe globally when first loadImage() is invoked
         return ImageLoader.buildImageLoader(applicationContext)
