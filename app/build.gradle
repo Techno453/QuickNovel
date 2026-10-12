@@ -53,7 +53,11 @@ android {
     buildTypes {
         release {
             signingConfig releaseKeystore ? signingConfigs.release : signingConfigs.debug
-            minifyEnabled false
+            // R8 shrinks, optimizes and obfuscates the code and drops unused resources. Keep
+            // rules (Jackson models, reflection) are in proguard-rules.pro; the mapping file for
+            // crash traces is app/build/outputs/mapping/release/mapping.txt (docs/ci.md).
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
@@ -72,6 +76,28 @@ android {
         }
     }
 
+    // Release: one APK per ABI (most of an APK is ML Kit's libtranslate_jni.so, 11-17 MB per
+    // ABI) plus a universal APK; the in-app updater picks the one for the device (docs/ci.md).
+    // x86_64 is for emulators. Debug builds stay a single universal app-debug.apk, see
+    // androidComponents below.
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a", "armeabi-v7a", "x86_64"
+            universalApk true
+        }
+    }
+
+    packaging {
+        resources {
+            // BouncyCastle (pulled in by pdfbox-android for certificate-encrypted PDFs) ships
+            // ~8 MB of post-quantum (Picnic, SIKE) parameter tables as Java resources, which R8
+            // does not shrink. Nothing in the app or pdfbox uses post-quantum crypto.
+            excludes += ["org/bouncycastle/pqc/**"]
+        }
+    }
+
     buildFeatures.buildConfig true
     buildFeatures.compose true
 
@@ -85,6 +111,22 @@ android {
         freeCompilerArgs = ['-XXLanguage:+PropertyParamAnnotationDefaultTargetMode']
     }
     namespace 'com.lagradost.quicknovel'
+}
+
+// `splits` applies to every build type. Debug builds (CI artifact, pre-release, emulator
+// installs) keep today's single universal APK at app/build/outputs/apk/debug/app-debug.apk:
+// drop their per-ABI outputs and give the universal one its usual name (outputFileName is only
+// exposed by AGP's VariantOutputImpl).
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.outputs.each { output ->
+            if (output.filters.any { it.filterType.name() == "ABI" }) {
+                output.enabled.set(false)
+            } else {
+                output.outputFileName.set("app-debug.apk")
+            }
+        }
+    }
 }
 
 /*
