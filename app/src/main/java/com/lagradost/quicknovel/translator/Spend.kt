@@ -128,10 +128,7 @@ object SpendPricing {
 data class SpendRow(val name: String, val usd: Double, val calls: Int)
 
 object SpendBreakdown {
-    /**
-     * The [top] largest rows (by USD, as given) plus one "rest" row summing the others, if any.
-     * A null / blank name becomes [unnamed].
-     */
+    /** The [top] largest rows (by USD) plus one "rest" row summing the others, if there are more. */
     fun topWithRest(rows: List<SpendRow>, top: Int, restLabel: String = "Everything else"): List<SpendRow> {
         val sorted = rows.sortedByDescending { it.usd }
         if (sorted.size <= top) return sorted
