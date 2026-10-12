@@ -68,6 +68,7 @@ import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
 import com.lagradost.quicknovel.updates.LibraryUpdateNotifier
 import com.lagradost.quicknovel.updates.LibraryUpdateScheduler
+import com.lagradost.quicknovel.ui.setup.SetupWizard
 import com.lagradost.quicknovel.updates.LibraryUpdateStore
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiSettings
@@ -521,6 +522,12 @@ class MainActivity : AppCompatActivity() {
                 binding?.navView?.selectedItemId = R.id.navigation_download
                 return
             }
+
+            SetupWizard.ACTION_OPEN_SETTINGS -> {
+                intent.action = null
+                binding?.navView?.selectedItemId = R.id.navigation_settings
+                return
+            }
         }
         if (intent.action == Intent.ACTION_SEND) {
             val extraText = try { // I don't trust android
@@ -919,7 +926,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Build the (slow) encrypted translator prefs off the main thread.
-        ioSafe { SecurePrefs.warmUp(this@MainActivity) }
+        // ...then show the first-run translation setup if there is no key and it was never done.
+        ioSafe {
+            SecurePrefs.warmUp(this@MainActivity)
+            if (savedInstanceState == null) SetupWizard.launchIfNeeded(this@MainActivity)
+        }
 
         // New-chapter checks: opening a novel clears its "+N new", and the periodic check
         // follows the settings (an unchanged schedule keeps its timing)

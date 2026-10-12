@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- First-run translation setup wizard (ui/setup) -->
+    <string name="setup_title">Set up translation</string>
+    <string name="setup_open_from_settings">Set up translation…</string>
+    <string name="setup_open_from_settings_desc">Step-by-step: provider, API key, connection test, model</string>
+    <string name="setup_step_of">Step %1$d of %2$d</string>
+    <string name="setup_skip">Skip</string>
+    <string name="setup_back">Back</string>
+    <string name="setup_next">Next</string>
+    <string name="setup_finish">Finish</string>
+
+    <!-- Welcome -->
+    <string name="setup_welcome_title">Read Chinese, Japanese and Korean web novels in English</string>
+    <string name="setup_welcome_body">QuickNovel reads raw web novels from Chinese, Japanese and Korean sites and translates each chapter with an AI model when you open it. Names stay consistent through a per-novel character sheet.</string>
+    <string name="setup_welcome_cost">You bring your own API key and pay the provider directly, usually well under a dollar per 100 chapters. Nothing is charged until you translate a chapter.</string>
+    <string name="setup_languages_title">Which languages do you read from?</string>
+    <string name="setup_languages_hint">Search and the home page show sources in these languages. You can change this later in Settings.</string>
+    <string name="setup_languages_none">Pick at least one, or all sources stay visible.</string>
+
+    <!-- Provider and key -->
+    <string name="setup_provider_title">Choose a provider</string>
+    <string name="setup_provider_openai">OpenAI</string>
+    <string name="setup_provider_openai_desc">Recommended. Cheapest good model (GPT-6 Luna).</string>
+    <string name="setup_provider_openrouter">OpenRouter</string>
+    <string name="setup_provider_openrouter_desc">One key for OpenAI, Google and others; small fee on credits.</string>
+    <string name="setup_provider_google">Google Gemini</string>
+    <string name="setup_provider_google_desc">Gemini Flash-Lite: fast, may block mature content.</string>
+    <string name="setup_provider_later">Later</string>
+    <string name="setup_provider_later_desc">Browse and read without AI translation for now.</string>
+    <string name="setup_key_label">%1$s API key</string>
+    <string name="setup_key_show">Show</string>
+    <string name="setup_key_hide">Hide</string>
+    <string name="setup_key_paste">Paste</string>
+    <string name="setup_key_where">Create a key on the provider\'s site and paste it here. It stays on this device.</string>
+    <string name="setup_key_get">Get a %1$s key</string>
+    <string name="setup_key_saved">A key is already saved (…%1$s). Leave it as is or paste a new one.</string>
+    <string name="setup_key_open_failed">No browser found to open %1$s</string>
+    <string name="setup_key_plain_warning">Secure storage is unavailable on this device; the key is stored unencrypted.</string>
+    <string name="setup_key_missing">Without a key you can still continue; add it later in Settings.</string>
+
+    <!-- Connection test -->
+    <string name="setup_test_title">Test the connection</string>
+    <string name="setup_test_body">One free request that lists the models your key can use (no translation, nothing is charged).</string>
+    <string name="setup_test_run">Test connection</string>
+    <string name="setup_test_again">Test again</string>
+    <string name="setup_test_running">Testing…</string>
+    <string name="setup_test_no_key">No key entered. Go back to add one, or continue and add it later.</string>
+    <string name="setup_test_ok">Connected. The key works.</string>
+    <string name="setup_test_ok_rate_limited">Connected, but the provider is rate-limiting this key right now. It should work in a moment.</string>
+    <string name="setup_test_invalid_key">The provider rejected this key. Check that it was copied completely and that it belongs to %1$s.</string>
+    <string name="setup_test_network">Could not reach %1$s. Check your internet connection and try again.</string>
+    <string name="setup_test_blocked">Something blocked the connection to %1$s: a region restriction, a firewall or VPN, or a Wi-Fi login page.</string>
+    <string name="setup_test_provider_error">%1$s answered with an error unrelated to the key. Try again later.</string>
+    <string name="setup_test_detail">Details: %1$s</string>
+    <string name="setup_test_fix_key">Change key</string>
+
+    <!-- Model -->
+    <string name="setup_model_title">Choose a model</string>
+    <string name="setup_model_body">You can switch at any time, also per novel. Costs are for 100 chapters of about 4,500 %1$s characters.</string>
+    <string name="setup_model_role_default">Default</string>
+    <string name="setup_model_role_quality">Quality</string>
+    <string name="setup_model_role_google">Cheapest with Google</string>
+    <string name="setup_model_cost">Estimate %1$s · measured ≈ $%2$s / 100 ch</string>
+    <string name="setup_model_note_default">Best value in the benchmark: scores close to the best model at about a twentieth of its price.</string>
+    <string name="setup_model_note_quality">Best on every judge in the benchmark; still inside a $3–5 per 100 chapters budget.</string>
+    <string name="setup_model_note_google">Fastest model and a statistical tie with Luna; Gemini may refuse mature content.</string>
+    <string name="setup_model_estimate_note">Estimates are an upper bound; real spend is recorded in Spending.</string>
+
+    <!-- Done -->
+    <string name="setup_done_title">All set</string>
+    <string name="setup_done_languages">Reading: %1$s</string>
+    <string name="setup_done_provider">Provider: %1$s</string>
+    <string name="setup_done_provider_later">Provider: none yet (add a key in Settings → AI Translation)</string>
+    <string name="setup_done_key_saved">API key: saved (…%1$s)</string>
+    <string name="setup_done_key_missing">API key: not set</string>
+    <string name="setup_done_connection">Connection: %1$s</string>
+    <string name="setup_done_connection_ok">OK</string>
+    <string name="setup_done_connection_failed">failed (%1$s)</string>
+    <string name="setup_done_connection_untested">not tested</string>
+    <string name="setup_done_model">Model: %1$s, %2$s</string>
+    <string name="setup_done_background_title">Things that run on their own</string>
+    <string name="setup_done_read_ahead">Translate ahead while reading</string>
+    <string name="setup_done_read_ahead_desc">Keeps the next %1$d chapters after the one you are reading translated in the background. They are billed like any chapter (%2$s each with %3$s).</string>
+    <string name="setup_done_read_ahead_desc_off">Off. When on, the next chapters after the one you are reading are translated in the background and billed like any chapter.</string>
+    <string name="setup_done_library_check">Check the library for new chapters</string>
+    <string name="setup_done_library_check_desc">Looks for new chapters of the novels you are reading in the background (daily, Wi-Fi only by default) and notifies you. Uses data and battery; it never translates on its own.</string>
+    <string name="setup_done_spending">View spending</string>
+    <string name="setup_done_all_settings">All translation settings</string>
+</resources>

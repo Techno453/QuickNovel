@@ -269,6 +269,13 @@
             </intent-filter>
         </activity>
 
+        <!-- First-run translation setup wizard (ui/setup) -->
+        <activity
+            android:name=".ui.setup.SetupActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboard|keyboardHidden|navigation"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
