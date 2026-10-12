@@ -128,6 +128,9 @@ OkHttp client gets through (fixtures and live checks use it).
   removed from the text.
 
 ### Piaotia (飘天文学), zh — https://www.piaotia.com
+- Covers: the search grid and the category / ranking lists carry no cover, so the provider
+  derives it from the book id (`/files/article/image/{shard}/{id}/{id}s.jpg`, the path the
+  info page uses); books without one give a 404 and the card shows the title placeholder.
 - GBK (`charset=gb2312` meta, no charset header), decoded with `textWithEncoding()`. Classic
   jieqi CMS. Updated daily.
 - Search `GET /modules/article/search.php?searchtype=articlename&searchkey=<GBK %-encoded>`. An

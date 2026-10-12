@@ -168,6 +168,9 @@ object PiaotiaParser {
 
     fun infoUrl(mainUrl: String, ids: Pair<String, String>) = "$mainUrl/bookinfo/${ids.first}/${ids.second}.html"
 
+    /** Cover thumbnail: `/files/article/image/{shard}/{id}/{id}s.jpg` (the same path the info page uses). */
+    fun coverUrl(mainUrl: String, ids: Pair<String, String>) = "$mainUrl/files/article/image/${ids.first}/${ids.second}/${ids.second}s.jpg"
+
     /** Rows of the `table.grid` used by search results, category lists and rankings. */
     fun parseGrid(api: MainAPI, doc: Document): List<SearchResponse> {
         val seen = HashSet<String>()
@@ -177,6 +180,10 @@ object PiaotiaParser {
             if (!seen.add(ids.second)) return@mapNotNull null
             val title = a.text().trim().ifEmpty { return@mapNotNull null }
             api.newSearchResponse(title, infoUrl(api.mainUrl, ids), fix = false) {
+                // The grids carry no cover; the site stores every cover at a fixed path derived
+                // from the book id (a missing cover is a 404, which the image loader treats as
+                // "no cover" and shows the title placeholder).
+                posterUrl = coverUrl(api.mainUrl, ids)
                 latestChapter = tr.selectFirst("a[href*=/html/]")?.text()?.trim()?.ifEmpty { null }
             }
         }

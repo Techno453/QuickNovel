@@ -40,6 +40,7 @@ class PiaotiaProviderTest {
         assertEquals(listOf("测试小说甲", "测试小说乙"), results.map { it.name })
         assertEquals("https://www.piaotia.com/bookinfo/0/760.html", results[0].url)
         assertEquals("第3章 占位标题", results[1].latestChapter)
+        assertEquals("https://www.piaotia.com/files/article/image/0/760/760s.jpg", results[0].posterUrl)
     }
 
     @Test
