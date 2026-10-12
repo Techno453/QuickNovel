@@ -72,7 +72,9 @@ object BrowseRepository {
         } catch (e: Throwable) {
             Result.failure(e)
         }
-        result.onSuccess { cache[key] = it }
+        // Empty pages are not cached either: a site that briefly answers with nothing (rate
+        // limiting, a hiccup) is asked again next time instead of ending the list for the session.
+        result.onSuccess { if (it.list.isNotEmpty()) cache[key] = it }
         inFlight.remove(key, mine)
         mine.complete(result)
         return result

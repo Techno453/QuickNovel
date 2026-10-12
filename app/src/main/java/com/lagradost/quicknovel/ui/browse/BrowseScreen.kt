@@ -221,7 +221,9 @@ private fun SourceCard(source: BrowseCatalog.Source, rail: RailState?, actions: 
         modifier = Modifier
             .fillMaxWidth()
             .rounded()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            // surfaceContainer is pure black in the AMOLED theme; a tint of surfaceVariant keeps
+            // the card visible on every theme.
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
             .padding(bottom = 8.dp)
     ) {
         Row(
@@ -260,7 +262,11 @@ private fun SourceCard(source: BrowseCatalog.Source, rail: RailState?, actions: 
                 railHeight, stringResource(R.string.browse_unavailable), rail.error,
                 onRetry = { actions.retryRail(source.name) },
             )
-            rail.items.isEmpty() -> RailMessage(railHeight, stringResource(R.string.browse_empty), null, onRetry = null)
+            // An empty listing does not need a poster-high hole; Retry in case it was transient.
+            rail.items.isEmpty() -> RailMessage(
+                110.dp, stringResource(R.string.browse_empty), null,
+                onRetry = { actions.retryRail(source.name) },
+            )
             else -> LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp),

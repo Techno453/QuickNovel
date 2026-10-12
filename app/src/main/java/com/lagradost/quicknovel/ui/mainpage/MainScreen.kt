@@ -138,9 +138,12 @@ fun MainPageScreen(state: MainPageState, action: (MainPageAction) -> Unit) {
     val searchIsRow = store.getBoolean(stringResource(R.string.search_list_view_key), false)
     val searchIsRowState by searchIsRow.collectAsState()
 
-    // A different listing starts at the top.
-    LaunchedEffect(state.filter.query.category, state.filter.query.orderBy, state.filter.query.tag) {
-        if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0)
+    // A different listing (or a refresh) starts at the top. Keyed on the list becoming non-empty
+    // as well: while it is empty only the footer is shown, and the grid would otherwise keep the
+    // footer in view when the first page arrives, i.e. open the new listing scrolled down.
+    val listEmpty = state.filter.items.isEmpty()
+    LaunchedEffect(state.filter.query.category, state.filter.query.orderBy, state.filter.query.tag, listEmpty) {
+        listState.scrollToItem(0)
     }
 
     Scaffold(

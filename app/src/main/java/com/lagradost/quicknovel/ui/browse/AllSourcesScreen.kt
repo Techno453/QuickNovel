@@ -132,7 +132,7 @@ fun AllSourcesScreen(feed: FeedState, actions: BrowseActions) {
                 if (nearEnd && !feed.complete) actions.feedMore()
             }
             // Different filter: start at the top.
-            LaunchedEffect(feed.language, feed.kind) { gridState.scrollToItem(0) }
+            LaunchedEffect(feed.language, feed.kind, feed.entries.isEmpty()) { gridState.scrollToItem(0) }
 
             var refreshing by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()

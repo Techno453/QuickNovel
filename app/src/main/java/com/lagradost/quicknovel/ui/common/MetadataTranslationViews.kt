@@ -73,7 +73,8 @@ object MetadataTranslationViews {
     /**
      * Result page: binds [titleView] and [synopsisView] (collapsed to [maxSynopsis] characters,
      * tap to expand) and, once a translation exists, a small "Show original" / "Show translation"
-     * toggle added under the title.
+     * toggle added right above the synopsis. (Not under the title: the result page's header sits
+     * below its scroll view, whose transparent spacer takes every touch there.)
      */
     fun bindResult(
         owner: LifecycleOwner,
@@ -109,7 +110,7 @@ object MetadataTranslationViews {
         render()
 
         if (MetadataTranslations.langOf(apiName) == null) return
-        val toggle = toggleUnder(titleView)
+        val toggle = toggleAbove(synopsisView)
         toggle?.setOnClickListener {
             showOriginal = !showOriginal
             toggle.setText(if (showOriginal) R.string.browse_show_translation else R.string.browse_show_original)
@@ -129,21 +130,22 @@ object MetadataTranslationViews {
     }
 
     /**
-     * A small text button right under [titleView] (created once and reused), or null when the
-     * title is not inside a vertical LinearLayout. Hidden until there is a translation.
+     * A small text button right above [anchor] (created once and reused), or null when the
+     * anchor is not inside a vertical LinearLayout. Hidden until there is a translation.
      */
-    private fun toggleUnder(titleView: TextView): TextView? {
-        val parent = titleView.parent as? LinearLayout ?: return null
+    private fun toggleAbove(anchor: TextView): TextView? {
+        val parent = anchor.parent as? LinearLayout ?: return null
         if (parent.orientation != LinearLayout.VERTICAL) return null
         parent.findViewWithTag<TextView>(TOGGLE_TAG)?.let { return it }
-        val context = titleView.context
+        val context = anchor.context
         val toggle = TextView(context).apply {
             tag = TOGGLE_TAG
             isVisible = false
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor((titleView.currentTextColor and 0x00FFFFFF) or (0xB0 shl 24))
+            setTextColor((anchor.currentTextColor and 0x00FFFFFF) or (0xB0 shl 24))
             val pad = (4 * resources.displayMetrics.density).toInt()
-            setPadding(0, pad, pad * 2, pad)
+            // Line up with the anchor's text.
+            setPadding(anchor.paddingStart, pad, pad * 2, pad)
             isClickable = true
             isFocusable = true
             val attrs = context.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground))
@@ -152,8 +154,10 @@ object MetadataTranslationViews {
         }
         parent.addView(
             toggle,
-            parent.indexOfChild(titleView) + 1,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            parent.indexOfChild(anchor),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                (anchor.layoutParams as? ViewGroup.MarginLayoutParams)?.let { marginStart = it.marginStart }
+            },
         )
         return toggle
     }

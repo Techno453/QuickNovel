@@ -567,7 +567,10 @@ fun SearchResponseItem(
                 contentScale = ContentScale.Crop,
                 model = imageRequest,
                 contentDescription = response.name,
-                modifier = Modifier.fillMaxSize()
+                // Placeholder tint so a missing or slow cover still shows the poster's shape.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             )
 
             if (response.id != null) {
