@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Browse tab (docs/browse.md) -->
+    <string name="title_browse">Browse</string>
+    <string name="browse_popular">Popular</string>
+    <string name="browse_see_all">See all</string>
+    <string name="browse_unavailable">Unavailable right now</string>
+    <string name="browse_retry">Retry</string>
+    <string name="browse_empty">Nothing here</string>
+    <string name="browse_other_sources">Other sources</string>
+    <string name="browse_all_sources">All sources</string>
+    <string name="browse_all_sources_summary">Every source\'s popular list, interleaved by rank</string>
+    <string name="browse_listing">Listing</string>
+    <string name="browse_order">Order</string>
+    <string name="browse_genre">Genre</string>
+    <string name="browse_language_all">All languages</string>
+    <string name="browse_listing_popular">Popular</string>
+    <string name="browse_listing_new">New</string>
+    <string name="browse_listing_completed">Completed</string>
+    <string name="browse_sources_unavailable">%d sources unavailable</string>
+    <string name="browse_source_unavailable">1 source unavailable</string>
+    <string name="browse_also_on">+%d</string>
+    <string name="browse_also_on_description">Also on %d other sources</string>
+    <string name="browse_end_of_list">End of the list</string>
+    <string name="browse_show_original">Show original</string>
+    <string name="browse_show_translation">Show translation</string>
+</resources>

@@ -66,6 +66,7 @@ import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
+import com.lagradost.quicknovel.ui.common.MetadataTranslationViews
 import com.lagradost.quicknovel.updates.LibraryUpdateNotifier
 import com.lagradost.quicknovel.updates.LibraryUpdateScheduler
 import com.lagradost.quicknovel.updates.LibraryUpdateStore
@@ -835,30 +836,12 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
 
-                        val isTranslatableSource = TranslationLanguages.isTranslatableApi(viewModel.apiName)
-                        if (isTranslatableSource && SecurePrefs.isGoogleTranslateTitlesEnabled(this@MainActivity)) {
-                            lifecycleScope.launch {
-                                val translatedTitle = withContext(Dispatchers.IO) {
-                                    GoogleTranslate.translate(d.name)
-                                }
-                                resultviewPreviewTitle.text = translatedTitle
-
-                                d.synopsis?.let { synopsis ->
-                                    val translatedSynopsis = withContext(Dispatchers.IO) {
-                                        GoogleTranslate.translate(synopsis)
-                                    }
-                                    resultviewPreviewDescription.text = translatedSynopsis.html()
-                                    resultviewPreviewDescription.setOnClickListener { view ->
-                                        view.context?.let { ctx ->
-                                            val builder: AlertDialog.Builder =
-                                                AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
-                                            builder.setMessage(translatedSynopsis.html())
-                                                .setTitle(translatedTitle)
-                                                .show()
-                                        }
-                                    }
-                                }
-                            }
+                        // Translated title (original underneath) and synopsis, AI or Google, cached
+                        if (TranslationLanguages.isTranslatableApi(viewModel.apiName)) {
+                            MetadataTranslationViews.bindPreview(
+                                this@MainActivity, viewModel.apiName, d.name, d.synopsis,
+                                resultviewPreviewTitle, resultviewPreviewDescription,
+                            )
                         }
 
                         d.rating?.let { rating ->

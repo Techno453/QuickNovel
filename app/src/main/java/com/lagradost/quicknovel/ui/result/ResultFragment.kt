@@ -45,6 +45,7 @@ import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
+import com.lagradost.quicknovel.ui.common.MetadataTranslationViews
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
 import com.lagradost.quicknovel.translator.SecurePrefs
@@ -263,14 +264,8 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     resultTitle.text = res.name
                     resultAuthor.text = res.author ?: getString(R.string.no_author)
 
-                    // Translate title if this is a translatable (zh/ja/ko) source and the toggle is on
+                    // The translated title (and synopsis) are bound with the synopsis below.
                     val isTranslatableForTitle = TranslationLanguages.isTranslatable(repo?.api?.lang)
-                    if (isTranslatableForTitle && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
-                        viewLifecycleOwner.lifecycleScope.launch {
-                            val translated = withContext(Dispatchers.IO) { GoogleTranslate.translate(res.name) }
-                            resultTitle.text = translated
-                        }
-                    }
                     // Update chapter adapter with correct source flag now that repo is known
                     (chapterList.adapter as? ChapterAdapter)?.setIsTranslatableSource(isTranslatableForTitle)
 
@@ -381,44 +376,17 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                             }
                         }
                     }
-                    res.synopsis?.let { synopsis ->
-                        val syno = if (synopsis.length > MAX_SYNO_LENGH) {
-                            synopsis.substring(0, MAX_SYNO_LENGH) + "..."
-                        } else {
-                            synopsis
-                        }
-
-                        var isExpanded = false
-                        resultSynopsisText.setOnClickListener {
-                            isExpanded = !isExpanded
-                            resultSynopsisText.text =
-                                if (isExpanded) res.synopsis.html() else syno.html()
-                        }
-                        resultSynopsisText.text = syno.html()
-
-                        // Translate synopsis if this is a translatable (zh/ja/ko) source and the toggle is on
-                        val isTranslatableForSynopsis = TranslationLanguages.isTranslatable(repo?.api?.lang)
-                        if (isTranslatableForSynopsis && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
-                            viewLifecycleOwner.lifecycleScope.launch {
-                                val translatedFull = withContext(Dispatchers.IO) {
-                                    GoogleTranslate.translate(synopsis)
-                                }
-                                val translatedSyno = if (translatedFull.length > MAX_SYNO_LENGH) {
-                                    translatedFull.substring(0, MAX_SYNO_LENGH) + "..."
-                                } else {
-                                    translatedFull
-                                }
-                                resultSynopsisText.text = translatedSyno.html()
-                                resultSynopsisText.setOnClickListener {
-                                    isExpanded = !isExpanded
-                                    resultSynopsisText.text =
-                                        if (isExpanded) translatedFull.html() else translatedSyno.html()
-                                }
-                            }
-                        }
-                    } ?: run {
-                        resultSynopsisText.text = "..."
-                    }
+                    // Title + synopsis, translated (AI or Google, cached) for zh/ja/ko sources with a
+                    // "Show original" toggle under the title; originals until the translation arrives.
+                    MetadataTranslationViews.bindResult(
+                        owner = viewLifecycleOwner,
+                        apiName = viewModel.apiName,
+                        name = res.name,
+                        synopsis = res.synopsis,
+                        titleView = resultTitle,
+                        synopsisView = resultSynopsisText,
+                        maxSynopsis = MAX_SYNO_LENGH,
+                    )
 
                     if (res is StreamResponse) {
                         resultChaptersInfoHolder.isVisible = true

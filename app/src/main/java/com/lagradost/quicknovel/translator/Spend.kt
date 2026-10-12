@@ -13,6 +13,7 @@ enum class SpendKind(val id: String, val label: String) {
     READ_AHEAD("read_ahead", "Read-ahead"),
     BATCH("batch", "Overnight batch"),
     SEARCH("search", "Search"),
+    METADATA("metadata", "Titles and synopses"),
     OTHER("other", "Other");
 
     companion object {
