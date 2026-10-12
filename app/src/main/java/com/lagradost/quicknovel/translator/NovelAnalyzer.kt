@@ -22,6 +22,9 @@ import kotlin.coroutines.coroutineContext
 object NovelAnalyzer {
     private const val TAG = "NovelAnalyzer"
 
+    /** Error without an API key when the caller passes no message (the automatic pass only logs it). */
+    const val NO_API_KEY = "No API key"
+
     enum class Stage { FETCHING, EXTRACTING }
 
     /** Progress and completion callbacks; both optional. */
@@ -92,7 +95,11 @@ object NovelAnalyzer {
     /** True while an analysis of [novelId] runs in this process. */
     fun isRunning(novelId: String): Boolean = gate.isRunning(novelId)
 
-    /** The manual "Analyze novel" (always runs; a re-run refreshes the state). Never throws except cancellation. */
+    /**
+     * The manual "Analyze novel" (always runs; a re-run refreshes the state). Never throws except
+     * cancellation. [noKeyMessage] is the outcome's error without an API key (the app's
+     * `translator_no_api_key`; this package has no resources).
+     */
     suspend fun analyze(
         ctx: Context,
         novelId: String,
@@ -100,8 +107,9 @@ object NovelAnalyzer {
         chapterCount: Int,
         fetch: suspend (Int) -> String?,
         listener: Listener? = null,
+        noKeyMessage: String = NO_API_KEY,
     ): Outcome = gate.withLock(novelId) {
-        runLocked(ctx, novelId, sourceLang, chapterCount, fetch, listener)
+        runLocked(ctx, novelId, sourceLang, chapterCount, fetch, listener, noKeyMessage)
     }
 
     private suspend fun runLocked(
@@ -111,12 +119,13 @@ object NovelAnalyzer {
         count: Int,
         fetch: suspend (Int) -> String?,
         listener: Listener?,
+        noKeyMessage: String = NO_API_KEY,
     ): Outcome {
         val outcome = try {
             // Recorded as analysis spend; a job's per-job meter (if any) keeps counting.
             val outer = coroutineContext[SpendTag]
             withContext(SpendTag(SpendKind.ANALYSIS, novelId, batchId = outer?.batchId, meter = outer?.meter)) {
-                run(ctx, novelId, sourceLang, count, fetch, listener)
+                run(ctx, novelId, sourceLang, count, fetch, listener, noKeyMessage)
             }
         } catch (e: CancellationException) {
             throw e
@@ -135,9 +144,10 @@ object NovelAnalyzer {
         count: Int,
         fetch: suspend (Int) -> String?,
         listener: Listener?,
+        noKeyMessage: String,
     ): Outcome {
         val config = SecurePrefs.analysisEngineConfig(ctx)
-        if (config.apiKey.isBlank()) return Outcome(succeeded = false, error = "No API key")
+        if (config.apiKey.isBlank()) return Outcome(succeeded = false, error = noKeyMessage)
         val engine = TranslationEngine(config, sourceLang)
 
         val chapters = mutableListOf<AnalysisRunner.Chapter>()
