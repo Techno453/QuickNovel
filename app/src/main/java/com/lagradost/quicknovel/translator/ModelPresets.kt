@@ -148,14 +148,16 @@ object ModelPresets {
 
     private const val GEMINI_MATURE =
         "May block mature content (Gemini's PROHIBITED_CONTENT filter cannot be turned off); set a fallback for 18+ novels."
+    private const val GEMINI_TUNED =
+        "Uses the tuned prompt profile: in the A/B it stopped dropping lines and scene breaks (paragraph fidelity 1.00 in 4 of 4 runs)."
     private const val VIA_OPENROUTER = "Via OpenRouter: one key for every provider, no per-token markup (5.5% fee on credits)."
 
     val GPT_6_LUNA = ModelPreset(
         id = "gpt-6-luna", label = "GPT-6 Luna", provider = LlmProviders.OPENAI,
         baseUrl = LlmProviders.OPENAI.baseUrl, model = "gpt-6-luna",
         extraBody = OPENAI_NO_REASONING, priceIn = 0.10, priceOut = 0.50, tokensPerChar = OPENAI_TPC,
-        notes = "Default. Best value in the 2026-10-11 benchmark: judge 8.1, 100% glossary adherence, " +
-            "about \$0.19 per 100 chapters measured.",
+        notes = "Default. Best value in the 2026-10-11 benchmark: panel 8.33 (5 judges), 100% glossary adherence, " +
+            "about \$0.19 per 100 chapters measured. Standard prompt (a tuned prompt profile measured no gain).",
         tier = PresetTier.RECOMMENDED,
     )
 
@@ -163,7 +165,7 @@ object ModelPresets {
         id = "gpt-6-sol", label = "GPT-6 Sol", provider = LlmProviders.OPENAI,
         baseUrl = LlmProviders.OPENAI.baseUrl, model = "gpt-6-sol",
         extraBody = OPENAI_NO_REASONING, priceIn = 2.00, priceOut = 10.00, tokensPerChar = OPENAI_TPC,
-        notes = "Highest judge score (8.4) in the benchmark; about \$3.7 per 100 chapters measured.",
+        notes = "Highest panel score (8.69) in the benchmark; about \$3.7 per 100 chapters measured.",
         tier = PresetTier.QUALITY,
     )
 
@@ -171,7 +173,7 @@ object ModelPresets {
         id = "gpt-5.4-mini", label = "GPT-5.4 mini", provider = LlmProviders.OPENAI,
         baseUrl = LlmProviders.OPENAI.baseUrl, model = "gpt-5.4-mini",
         extraBody = OPENAI_NO_REASONING, priceIn = 0.75, priceOut = 4.50, tokensPerChar = OPENAI_TPC,
-        notes = "Judge 7.9, fast (12 s per chapter); costs more than Luna for no measured gain.",
+        notes = "Panel 8.15, fast (12 s per chapter); costs 9× Luna for a lower score.",
         tier = PresetTier.BALANCED,
     )
 
@@ -181,8 +183,9 @@ object ModelPresets {
         // Thinking cannot be fully disabled on Gemini 3; "minimal" is the lowest level.
         extraBody = mapOf("reasoning_effort" to "minimal"), sendTemperature = false,
         priceIn = 0.25, priceOut = 1.50, tokensPerChar = GEMINI_TPC,
-        notes = "Fastest in the benchmark (8 s per chapter), judge 8.0. $GEMINI_MATURE",
+        notes = "Fastest in the benchmark (8 s per chapter), panel 8.36 (raw 7.92). $GEMINI_TUNED $GEMINI_MATURE",
         tier = PresetTier.BUDGET,
+        promptProfile = PromptProfiles.GENERAL_ID,
     )
 
     val DEEPSEEK_FLASH = ModelPreset(
@@ -190,7 +193,7 @@ object ModelPresets {
         baseUrl = LlmProviders.DEEPSEEK.baseUrl, model = "deepseek-flash",
         extraBody = mapOf("thinking" to mapOf("type" to "disabled")),
         priceIn = 0.30, priceOut = 1.20, tokensPerChar = DEEPSEEK_TPC,
-        notes = "Chinese-trained, judge 7.6. Peak price shown; half price (0.15/0.60) off-peak. " +
+        notes = "Chinese-trained, panel 8.07. Peak price shown; half price (0.15/0.60) off-peak. " +
             "Rejects politically sensitive text (\"Content Exists Risk\"), so set a fallback.",
         tier = PresetTier.BUDGET,
     )
@@ -200,7 +203,7 @@ object ModelPresets {
         baseUrl = LlmProviders.QWEN.baseUrl, model = "qwen3.8-flash",
         extraBody = mapOf("enable_thinking" to false),
         priceIn = 0.15, priceOut = 0.47, tokensPerChar = QWEN_TPC,
-        notes = "Cheapest, judge 7.8, but slow (39 s per chapter). International endpoint; keys are " +
+        notes = "Cheapest, panel 7.75, but slow (39 s per chapter). International endpoint; keys are " +
             "region-locked. May reject content (data_inspection_failed).",
         tier = PresetTier.BUDGET,
     )
@@ -224,7 +227,8 @@ object ModelPresets {
         baseUrl = LlmProviders.OPENROUTER.baseUrl, model = "google/gemini-3.1-flash-lite",
         extraBody = OPENROUTER_NO_REASONING, sendTemperature = false,
         priceIn = 0.25, priceOut = 1.50, tokensPerChar = GEMINI_TPC,
-        notes = "$VIA_OPENROUTER $GEMINI_MATURE", tier = PresetTier.BUDGET,
+        notes = "$VIA_OPENROUTER $GEMINI_TUNED $GEMINI_MATURE", tier = PresetTier.BUDGET,
+        promptProfile = PromptProfiles.GENERAL_ID,
     )
 
     val OR_DEEPSEEK_FLASH = ModelPreset(
@@ -245,7 +249,7 @@ object ModelPresets {
         id = "gpt-4o-mini", label = "GPT-4o mini", provider = LlmProviders.OPENAI,
         baseUrl = LlmProviders.OPENAI.baseUrl, model = "gpt-4o-mini",
         priceIn = 0.15, priceOut = 0.60, tokensPerChar = OPENAI_TPC,
-        notes = "Previous default. Judge 7.1; GPT-6 Luna is better and cheaper.",
+        notes = "Previous default. Panel 7.40; GPT-6 Luna is better and cheaper.",
         tier = PresetTier.LEGACY,
     )
 
@@ -253,7 +257,7 @@ object ModelPresets {
         id = "gpt-4o", label = "GPT-4o", provider = LlmProviders.OPENAI,
         baseUrl = LlmProviders.OPENAI.baseUrl, model = "gpt-4o",
         priceIn = 2.50, priceOut = 10.00, tokensPerChar = OPENAI_TPC,
-        notes = "Judge 8.1 at 20× the price of GPT-6 Luna.",
+        notes = "Panel 7.89 at 20× the price of GPT-6 Luna.",
         tier = PresetTier.LEGACY,
     )
 
@@ -263,7 +267,7 @@ object ModelPresets {
         // Anthropic rejects temperature < 1 through the compatibility layer; max_tokens keeps output bounded.
         extraBody = mapOf("max_tokens" to 8192), sendTemperature = false,
         priceIn = 2.00, priceOut = 10.00, tokensPerChar = CLAUDE_TPC,
-        notes = "Over budget (about \$5.8 per 100 chapters measured) and judged 7.0. Claude Haiku 5.5 is " +
+        notes = "Over budget (about \$5.8 per 100 chapters measured), panel 7.75. Claude Haiku 5.5 is " +
             "not offered: it refused 2 of 3 benchmark chapters citing copyright and abridged its output.",
         tier = PresetTier.PREMIUM,
     )

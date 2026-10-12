@@ -64,6 +64,10 @@ class BenchConfigPresetTest {
         assertEquals("general", variant.profileId)
         assertEquals(config.model("gpt-6-luna")!!.inputPerM, variant.inputPerM, 0.0)
         assertEquals("gemini", config.model("google/gemini-3.1-flash-lite@gemini")!!.profileId)
+        // A preset reference inherits the preset's profile; the stored baseline entry pins the standard prompt.
+        assertEquals(PromptProfiles.GENERAL_ID, ModelSpec(preset = "or-gemini-3.1-flash-lite").resolved().profileId)
+        assertEquals(PromptProfiles.DEFAULT_ID, config.model("google/gemini-3.1-flash-lite")!!.profileId)
+        assertEquals(PromptProfiles.DEFAULT_ID, ModelSpec(preset = "gpt-6-luna").resolved().profileId)
         // A variant is still its model for self-judging exclusion.
         assertTrue(isSelfJudgment("gpt-6-luna", "gpt-6-luna@general"))
         assertTrue(isSelfJudgment("google/gemini-3.1-flash-lite", "google/gemini-3.1-flash-lite@gemini"))
@@ -86,6 +90,13 @@ class BenchConfigPresetTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    @Test
+    fun panelJudgesAreResolved() {
+        val mini = config.judges.panel.first { it.id == "gpt-5.4-mini" }
+        assertEquals(ModelSpec.OPENAI_KEY, mini.keyName)
+        assertEquals("OPENROUTER_API_KEY", config.judges.panel.first { it.id == "deepseek/deepseek-v4.1-flash" }.keyName)
     }
 
     @Test(expected = IllegalArgumentException::class)
