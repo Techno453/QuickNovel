@@ -120,6 +120,9 @@ class BatchTest {
         assertEquals(BatchStatus.CANCELLING, BatchStatus.fromOpenAi("cancelling", false))
         assertEquals(BatchStatus.PROCESSING, BatchStatus.fromOpenAi("completed", true))
         assertEquals(BatchStatus.FAILED, BatchStatus.fromOpenAi("completed", false))
+        // Every request failed: only an error file, still processed so each chapter gets its reason.
+        assertEquals(BatchStatus.PROCESSING, BatchStatus.fromOpenAi("completed", false, hasErrorFile = true))
+        assertEquals(BatchStatus.PROCESSING, BatchStatus.fromOpenAi("cancelled", false, hasErrorFile = true))
         assertEquals(BatchStatus.PROCESSING, BatchStatus.fromOpenAi("expired", true))
         assertEquals(BatchStatus.EXPIRED, BatchStatus.fromOpenAi("expired", false))
         assertEquals(BatchStatus.PROCESSING, BatchStatus.fromOpenAi("cancelled", true))
@@ -135,18 +138,35 @@ class BatchTest {
         assertTrue(BatchStatus.PREPARING.name in BatchStatus.UNFINISHED_NAMES)
     }
 
-    // ---- output parsing and reassembly (recorded output file) ----
+    // ---- output parsing and reassembly ----
+    // Line shapes as returned by the live Batch API on 2026-10-11 (BatchLiveTest; ids made generic):
+    // successes in the output file; requests that got an HTTP error (here 400) in the error file
+    // with `response.status_code` set and `"error": null`; requests that never ran (expired) in
+    // the error file with `"response": null` and an `error` object.
 
-    private fun outputLine(customId: String, content: String, finish: String = "stop", prompt: Int = 1000, completion: Int = 400) =
+    private fun outputLine(customId: String, content: String?, finish: String = "stop", prompt: Int = 1000, completion: Int = 400, refusal: String? = null) =
         mapper.writeValueAsString(
             mapOf(
-                "id" to "batch_req_$customId", "custom_id" to customId,
+                "id" to "batch_req_0001", "custom_id" to customId,
                 "response" to mapOf(
-                    "status_code" to 200, "request_id" to "req_x",
+                    "status_code" to 200, "request_id" to "00000000-0000-4000-8000-000000000001",
                     "body" to mapOf(
-                        "id" to "chatcmpl-x", "object" to "chat.completion", "model" to "gpt-6-luna",
-                        "choices" to listOf(mapOf("index" to 0, "message" to mapOf("role" to "assistant", "content" to content), "finish_reason" to finish)),
-                        "usage" to mapOf("prompt_tokens" to prompt, "completion_tokens" to completion, "total_tokens" to prompt + completion),
+                        "id" to "chatcmpl-0001", "object" to "chat.completion", "created" to 1791775715, "model" to "gpt-6-luna",
+                        "choices" to listOf(
+                            mapOf(
+                                "index" to 0,
+                                "message" to mapOf("role" to "assistant", "content" to content, "refusal" to refusal, "annotations" to emptyList<Any>()),
+                                "finish_reason" to finish,
+                            )
+                        ),
+                        "usage" to mapOf(
+                            "prompt_tokens" to prompt, "completion_tokens" to completion, "total_tokens" to prompt + completion,
+                            "prompt_tokens_details" to mapOf("cached_tokens" to 0, "cache_write_tokens" to 0, "audio_tokens" to 0),
+                            "completion_tokens_details" to mapOf(
+                                "reasoning_tokens" to 0, "audio_tokens" to 0, "accepted_prediction_tokens" to 0, "rejected_prediction_tokens" to 0,
+                            ),
+                        ),
+                        "service_tier" to "default", "system_fingerprint" to null,
                     ),
                 ),
                 "error" to null,
@@ -166,27 +186,34 @@ class BatchTest {
     private val recordedOutput = listOf(
         outputLine("$novelId|2|0", reply2, prompt = 900, completion = 300),
         outputLine("$novelId|0|0", reply1),
-        mapper.writeValueAsString(
-            mapOf(
-                "id" to "batch_req_y", "custom_id" to "$novelId|0|1",
-                "response" to mapOf(
-                    "status_code" to 400, "request_id" to "req_y",
-                    "body" to mapOf("error" to mapOf("message" to "Invalid value for 'temperature'", "type" to "invalid_request_error")),
-                ),
-                "error" to null,
-            )
-        ),
         outputLine("$novelId|1|0", "Cut off mid", finish = "length", prompt = 800, completion = 4096),
         outputLine("other novel|0|0", reply1), // not ours: ignored
         "not json at all",
     ).joinToString("\n")
 
-    private val recordedErrors = mapper.writeValueAsString(
-        mapOf(
-            "id" to "batch_req_z", "custom_id" to "$novelId|0|1", "response" to null,
-            "error" to mapOf("code" to "batch_expired", "message" to "This request could not be executed before the completion window expired."),
-        )
-    )
+    private val recordedErrors = listOf(
+        mapper.writeValueAsString(
+            mapOf(
+                "id" to "batch_req_0002", "custom_id" to "$novelId|0|1",
+                "response" to mapOf(
+                    "status_code" to 400, "request_id" to "00000000-0000-4000-8000-000000000002",
+                    "body" to mapOf(
+                        "error" to mapOf(
+                            "message" to "Invalid 'temperature': decimal above maximum value. Expected a value <= 2, but got 5 instead.",
+                            "type" to "invalid_request_error", "param" to "temperature", "code" to "decimal_above_max_value",
+                        )
+                    ),
+                ),
+                "error" to null,
+            )
+        ),
+        mapper.writeValueAsString(
+            mapOf(
+                "id" to "batch_req_0003", "custom_id" to "$novelId|0|1", "response" to null,
+                "error" to mapOf("code" to "batch_expired", "message" to "This request could not be executed before the completion window expired."),
+            )
+        ),
+    ).joinToString("\n")
 
     @Test
     fun parsesOutputAndErrorLines() {
@@ -198,11 +225,24 @@ class BatchTest {
         assertEquals(TokenUsage(1000, 400), ok.usage)
         val bad = results.first { it.customId == "$novelId|0|1" && it.statusCode == 400 }
         assertFalse(bad.succeeded)
-        assertEquals("Invalid value for 'temperature'", bad.error)
+        assertTrue(bad.error!!.startsWith("Invalid 'temperature'"))
         val expired = results.last()
         assertNull(expired.statusCode)
         assertTrue(expired.error!!.contains("completion window"))
         assertTrue(BatchOutputParser.parse(null).isEmpty())
+    }
+
+    @Test
+    fun aStructuredRefusalOrMissingContentIsAFailureWithAReason() {
+        val results = BatchOutputParser.parse(
+            outputLine("$novelId|0|0", null, refusal = "I can't help with that.") + "\n" + outputLine("$novelId|0|1", null)
+        )
+        assertFalse(results[0].succeeded)
+        assertEquals("refused: I can't help with that.", results[0].error)
+        assertEquals(TokenUsage(1000, 400), results[0].usage) // still billed
+        assertEquals("no content in the reply", results[1].error)
+        val outcomes = BatchAssembler.assemble(novelId, chapters.take(1), results)[0].outcomes
+        assertEquals(ChunkOutcome.Failed("refused: I can't help with that."), outcomes[0])
     }
 
     @Test
@@ -362,12 +402,21 @@ class BatchTest {
                 .body(json.toResponseBody("application/json".toMediaType())).build()
         }).build()
 
+        /** Shape of a live batch object (2026-10-11), ids made generic. */
         private fun batchJson(status: String, output: String? = null) = mapper.writeValueAsString(
             mapOf(
-                "id" to "batch_1", "object" to "batch", "endpoint" to "/v1/chat/completions", "status" to status,
-                "input_file_id" to "file-in", "output_file_id" to output, "error_file_id" to null,
+                "id" to "batch_1", "object" to "batch", "endpoint" to "/v1/chat/completions", "model" to "gpt-6-luna",
+                "errors" to null, "input_file_id" to "file-in", "completion_window" to "24h", "status" to status,
+                "output_file_id" to output, "error_file_id" to null,
+                "created_at" to 1791775563, "in_progress_at" to 1791775572, "expires_at" to 1791861963,
+                "finalizing_at" to null, "completed_at" to null, "failed_at" to null, "expired_at" to null,
+                "cancelling_at" to null, "cancelled_at" to null,
                 "request_counts" to mapOf("total" to 6, "completed" to 4, "failed" to 2),
-                "errors" to null,
+                "usage" to mapOf(
+                    "input_tokens" to 2700, "output_tokens" to 4796, "total_tokens" to 7496,
+                    "input_tokens_details" to mapOf("cached_tokens" to 0), "output_tokens_details" to mapOf("reasoning_tokens" to 0),
+                ),
+                "metadata" to mapOf("app" to "QuickNovel", "job" to "1"),
             )
         )
     }
@@ -396,6 +445,7 @@ class BatchTest {
         assertEquals(6, polled.total)
         assertEquals(4, polled.completed)
         assertEquals(2, polled.failed)
+        assertEquals(TokenUsage(2700, 4796), polled.usage)
         assertEquals(BatchStatus.PROCESSING, BatchStatus.fromOpenAi(polled.status, polled.outputFileId != null))
 
         assertEquals(recordedOutput, client.downloadFile("file-out"))
@@ -428,5 +478,13 @@ class BatchTest {
         )
         assertEquals("token_limit_exceeded: Enqueued token limit reached", info.errors)
         assertEquals(BatchStatus.FAILED, BatchStatus.fromOpenAi(info.status, false))
+        assertNull(info.usage)
+
+        val invalid = OpenAiBatchClient.parseBatch(
+            mapper.readTree(
+                """{"id":"b","status":"failed","errors":{"object":"list","data":[{"code":"invalid_request","line":2,"message":"Missing body","param":null}]}}"""
+            )
+        )
+        assertEquals("line 2: invalid_request: Missing body", invalid.errors)
     }
 }

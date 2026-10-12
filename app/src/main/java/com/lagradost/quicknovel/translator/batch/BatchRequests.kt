@@ -170,8 +170,14 @@ object BatchOutputParser {
             error = body.path("error").path("message").asText("").ifBlank { "HTTP $status" }
         }
         val choice = body.path("choices").path(0)
-        val content = choice.path("message").path("content").takeIf { it.isTextual }?.asText()
+        val message = choice.path("message")
+        val content = message.path("content").takeIf { it.isTextual }?.asText()
         val finish = choice.path("finish_reason").takeIf { it.isTextual }?.asText()
+        if (error == null && status == 200 && content == null) {
+            // Chat completions carry `message.refusal` (null normally); a refusal has no content.
+            val refusal = message.path("refusal").takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() }
+            error = if (refusal != null) "refused: ${refusal.take(200)}" else "no content in the reply"
+        }
         val usage = if (body.isObject) TranslationEngine.parseUsage(body) else null
         return BatchLineResult(customId, status, content, finish, usage, error)
     }
