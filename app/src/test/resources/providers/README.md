@@ -10,6 +10,8 @@ Recorded pages for the JVM provider tests in `app/src/test/java/com/lagradost/qu
 | `syosetu/` | `SyosetuProvider` | `search.html` (`転生`), `novel.html` + `novel_last_page.html` (n9669bk, pages 1 and 3 of the table of contents), `chapter.html` |
 | `kakuyomu/` | `KakuyomuProvider` | `search.html` (`転生`), `work.html`, `episode.html` |
 | `novelpia/` | `NovelpiaProvider` | `search.json` (`회귀`), `novel.html` (26536), `episode_list.html` (page 0), `viewer.json` |
+| `jjwxc/` | `JjwxcProvider` | GB18030-encoded. `search.html` (`难哄`), `book_vip.html` (4001734: free chapters 1-3, 14, VIP 15, 16, 77), `book_locked.html` (2456: chapters 7 and 9 locked), `chapter.html`, `locked_chapter.html` (lock notice), `list_popular.html` / `list_latest.html` / `list_completed.html` (作品库, 5 rows each), `list_login_wall.html` (page 11 logged out) |
+| `czbooks/` | `CzbooksProvider` | `search.html` (`难哄`), `novel.html` (shhmoa, chapter list trimmed), `chapter.html`, `list_popular.html` (`/c/normal/week/1`), `list_latest.html` (`/c/yanqing/new/2`), `list_completed.html` (`/c/finish/week/1`, one adult-titled card removed) |
 
 `synthetic_*` files are small hand-written pages (structure copied from the sites, text
 invented) that pin edge cases such as adult-work filtering, locked episodes, watermarks and
