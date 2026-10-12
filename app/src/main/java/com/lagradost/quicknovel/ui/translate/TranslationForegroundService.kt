@@ -22,12 +22,16 @@ import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.network.CloudflareKiller
+import com.lagradost.quicknovel.translator.BibleMerger
 import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.StoryBibleRepository
+import com.lagradost.quicknovel.translator.TermAliases
 import com.lagradost.quicknovel.translator.TranslationApiException
 import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationLanguages
-import com.lagradost.quicknovel.translator.db.TranslatedChapter
+import com.lagradost.quicknovel.translator.db.GlossaryTerm
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
+import com.lagradost.quicknovel.translator.CostEstimator
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.GoogleTranslate
 import java.io.File
@@ -64,8 +68,47 @@ class TranslationForegroundService : Service() {
         private const val PROGRESS_MAX = 1000
         private const val MIN_NOTIFY_INTERVAL_MS = 750L
 
+        private const val SUMMARY_NOTIFICATION_ID = 9002
+
         const val ACTION_START = "start_translation"
+        const val ACTION_ANALYZE = "analyze_novel"
         const val ACTION_CANCEL = "cancel_translation"
+        const val EXTRA_CHAPTER_COUNT = "chapterCount"
+
+        /**
+         * Starts the "Analyze novel" pre-pass over the first [chapterCount] chapters. Shares the
+         * single job slot with translation; returns false if a job is already running.
+         */
+        fun startAnalysis(
+            ctx: Context,
+            novelId: String,
+            apiName: String,
+            chapters: List<ChapterData>,
+            chapterCount: Int
+        ): Boolean {
+            if (!TranslationState.tryReserve(chapters)) {
+                Log.w(TAG, "A job is already running; ignoring analysis request")
+                return false
+            }
+            val intent = Intent(ctx, TranslationForegroundService::class.java).apply {
+                action = ACTION_ANALYZE
+                putExtra(EXTRA_NOVEL_ID, novelId)
+                putExtra(EXTRA_API_NAME, apiName)
+                putExtra(EXTRA_CHAPTER_COUNT, chapterCount)
+            }
+            AnalysisState.post(AnalysisProgress(novelId, ctx.getString(R.string.analyzing_novel)))
+            return try {
+                ContextCompat.startForegroundService(ctx, intent)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not start analysis", e)
+                TranslationState.release()
+                AnalysisState.post(
+                    AnalysisProgress(novelId, "", error = ctx.getString(R.string.analysis_failed, e.message ?: ""))
+                )
+                false
+            }
+        }
 
         const val EXTRA_NOVEL_ID = "novelId"
         const val EXTRA_API_NAME = "apiName"
@@ -133,6 +176,9 @@ class TranslationForegroundService : Service() {
         when (intent?.action) {
             ACTION_CANCEL -> {
                 TranslationState.postCancelled()
+                AnalysisState.lastProgress?.let {
+                    AnalysisState.post(it.copy(message = getString(R.string.analysis_cancelled), cancelled = true))
+                }
                 val job = translationJob
                 if (job?.isActive == true) {
                     // The job's finally block releases the slot and stops the service.
@@ -184,8 +230,206 @@ class TranslationForegroundService : Service() {
 
                 startTranslationJob(apiKey, novelId, apiName, novelName, novelAuthor, chapters, fromIndex, toIndex)
             }
+
+            ACTION_ANALYZE -> {
+                val startingNotification = buildNotification(getString(R.string.analysis_fetching, 0, 0), 0, 0,
+                    title = getString(R.string.analyzing_novel))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(NOTIFICATION_ID, startingNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                } else {
+                    startForeground(NOTIFICATION_ID, startingNotification)
+                }
+                if (translationJob?.isActive == true) {
+                    Log.w(TAG, "Analysis ignored: a job is already running")
+                    return START_NOT_STICKY
+                }
+
+                val novelId = intent.getStringExtra(EXTRA_NOVEL_ID)
+                val apiName = intent.getStringExtra(EXTRA_API_NAME)
+                val count = intent.getIntExtra(EXTRA_CHAPTER_COUNT, SecurePrefs.DEFAULT_ANALYZE_CHAPTERS)
+                val chapters = TranslationState.pendingChapters
+                if (novelId == null || apiName == null || chapters == null) {
+                    novelId?.let { AnalysisState.post(AnalysisProgress(it, "", error = getString(R.string.analysis_no_chapters))) }
+                    TranslationState.release()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                val apiKey = SecurePrefs.getApiKey(applicationContext)
+                if (apiKey.isNullOrBlank()) {
+                    AnalysisState.post(AnalysisProgress(novelId, "", error = getString(R.string.translator_no_api_key)))
+                    TranslationState.release()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                startAnalysisJob(apiKey, novelId, apiName, chapters, count)
+            }
         }
         return START_NOT_STICKY
+    }
+
+    /** Text of one chapter for the analysis job (plain paragraphs). */
+    private data class AnalysisChapter(val index: Int, val text: String)
+
+    /** One analysis request: consecutive chapters up to ~8k characters. */
+    private data class AnalysisSegment(val firstIndex: Int, val lastIndex: Int, val text: String)
+
+    private fun segmentChapters(chapters: List<AnalysisChapter>): List<AnalysisSegment> {
+        val limit = CostEstimator.ANALYSIS_CHARS_PER_CALL
+        val out = mutableListOf<AnalysisSegment>()
+        var first = -1
+        var last = -1
+        val sb = StringBuilder()
+        fun flush() {
+            if (sb.isNotBlank()) out += AnalysisSegment(first, last, sb.toString().trim())
+            sb.clear(); first = -1
+        }
+        for (ch in chapters) {
+            val pieces = TranslationEngine.splitIntoChunks(ch.text, limit)
+            for (piece in pieces) {
+                if (sb.isNotEmpty() && sb.length + piece.length + 2 > limit) flush()
+                if (first < 0) first = ch.index
+                last = ch.index
+                if (sb.isNotEmpty()) sb.append("\n\n")
+                sb.append(piece)
+            }
+        }
+        flush()
+        return out
+    }
+
+    private fun startAnalysisJob(
+        apiKey: String,
+        novelId: String,
+        apiName: String,
+        chapters: List<ChapterData>,
+        requestedCount: Int
+    ) {
+        val job = serviceScope.launch(start = CoroutineStart.LAZY) {
+            val ctx = applicationContext
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val title = getString(R.string.analyzing_novel)
+            fun report(message: String, current: Int, total: Int) {
+                AnalysisState.post(AnalysisProgress(novelId, message, current, total))
+                nm.notify(NOTIFICATION_ID, buildNotification(message, current, total, title = title, plainText = true))
+            }
+            try {
+                val api = Apis.getApiFromNameOrNull(apiName)
+                val sourceLang = TranslationLanguages.normalize(api?.api?.lang) ?: TranslationLanguages.DEFAULT
+                val engine = TranslationEngine(
+                    apiKey = apiKey,
+                    model = SecurePrefs.getModel(ctx),
+                    baseUrl = SecurePrefs.getBaseUrl(ctx),
+                    sourceLang = sourceLang
+                )
+                val count = requestedCount.coerceIn(1, SecurePrefs.MAX_ANALYZE_CHAPTERS).coerceAtMost(chapters.size)
+
+                val texts = mutableListOf<AnalysisChapter>()
+                for (i in 0 until count) {
+                    ensureActive()
+                    report(getString(R.string.analysis_fetching, i + 1, count), i + 1, count)
+                    val html = try {
+                        loadChapterSource(api, chapters[i])
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Analysis: could not load chapter $i", e)
+                        null
+                    } ?: continue
+                    TranslationEngine.htmlToPlainText(html).takeIf { it.isNotBlank() }?.let { texts += AnalysisChapter(i, it) }
+                }
+                if (texts.isEmpty()) {
+                    AnalysisState.post(AnalysisProgress(novelId, "", error = getString(R.string.analysis_no_chapters)))
+                    return@launch
+                }
+
+                val db = TranslatorDatabase.getInstance(ctx)
+                val style = StoryBibleRepository.loadStyle(ctx, novelId, sourceLang)
+                val known = db.glossaryDao().getAllTermsSync(novelId).flatMap { TermAliases.formsOf(it) }.toMutableSet()
+                var premise = db.novelContextDao().get(novelId)?.premise.orEmpty()
+                val originalPremise = premise
+                var added = 0
+                var lastError: String? = null
+
+                val segments = segmentChapters(texts)
+                segments.forEachIndexed { s, segment ->
+                    ensureActive()
+                    report(getString(R.string.analysis_extracting, s + 1, segments.size), s + 1, segments.size)
+                    val label = if (segment.firstIndex == segment.lastIndex) "chapter ${segment.firstIndex + 1}"
+                    else "chapters ${segment.firstIndex + 1}-${segment.lastIndex + 1}"
+                    val extraction = try {
+                        engine.extractStoryBible(segment.text, known, premise, style, label)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: TranslationApiException) {
+                        Log.e(TAG, "Analysis request failed", e)
+                        lastError = e.message
+                        if (e.message?.startsWith("Invalid API key") == true) throw e
+                        return@forEachIndexed
+                    }
+                    if (extraction.premise.isNotBlank()) premise = extraction.premise.trim()
+
+                    val newTerms = mutableListOf<GlossaryTerm>()
+                    for (d in extraction.terms.sortedByDescending { it.confidence }) {
+                        val source = d.source.trim()
+                        val english = d.english.trim()
+                        if (source.isEmpty() || english.isEmpty() || source in known) continue
+                        if (!BibleMerger.containsCjk(source) || BibleMerger.containsCjk(english)) continue
+                        if (!segment.text.contains(source)) continue // not actually in the excerpt
+                        val firstChapter = texts.firstOrNull { it.text.contains(source) }?.index ?: segment.firstIndex
+                        val aliases = d.aliases.map { it.trim() }.filter { it.isNotEmpty() && it != source && it !in known }
+                        newTerms += GlossaryTerm(
+                            novelId = novelId,
+                            source = source,
+                            english = english,
+                            category = GlossaryTerm.normalizeCategory(d.category),
+                            gender = GlossaryTerm.normalizeGender(d.gender),
+                            notes = d.notes.trim(),
+                            aliases = TermAliases.encode(aliases),
+                            firstChapter = firstChapter,
+                            autoAdded = true,
+                            locked = false,
+                        )
+                        known += source
+                        known += aliases
+                    }
+                    added += StoryBibleRepository.addAutoTerms(ctx, novelId, newTerms)
+                }
+
+                val premiseUpdated = premise.isNotBlank() && premise != originalPremise
+                if (premiseUpdated) {
+                    StoryBibleRepository.updateContext(ctx, novelId) { it.copy(premise = premise) }
+                }
+                nm.cancel(NOTIFICATION_ID)
+                if (added == 0 && !premiseUpdated && lastError != null) {
+                    AnalysisState.post(AnalysisProgress(novelId, "", error = getString(R.string.analysis_failed, lastError)))
+                } else {
+                    val msg = if (premiseUpdated) getString(R.string.analysis_done_premise, added)
+                    else getString(R.string.analysis_done, added)
+                    AnalysisState.post(
+                        AnalysisProgress(novelId, msg, completed = true, termsAdded = added, premiseUpdated = premiseUpdated)
+                    )
+                }
+            } catch (e: CancellationException) {
+                nm.cancel(NOTIFICATION_ID)
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Analysis job failed", e)
+                nm.cancel(NOTIFICATION_ID)
+                AnalysisState.post(
+                    AnalysisProgress(novelId, "", error = getString(R.string.analysis_failed, e.message ?: e.javaClass.simpleName))
+                )
+            } finally {
+                if (translationJob === coroutineContext[Job]) {
+                    TranslationState.release()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+            }
+        }
+        translationJob = job
+        job.start()
     }
 
     private fun finishWithError(message: String) {
@@ -213,8 +457,6 @@ class TranslationForegroundService : Service() {
             try {
                 val db = TranslatorDatabase.getInstance(ctx)
                 val translationDao = db.translationDao()
-                val glossaryDao = db.glossaryDao()
-                val pendingTermDao = db.pendingTermDao()
 
                 val api = Apis.getApiFromNameOrNull(apiName)
                 val sourceLang = TranslationLanguages.normalize(api?.api?.lang) ?: TranslationLanguages.DEFAULT
@@ -234,12 +476,24 @@ class TranslationForegroundService : Service() {
                 var newTermsTotal = 0
                 var failed = 0
                 var lastError: String? = null
+                var deviations = 0
+                var fragments = 0
+                var paragraphWarnings = 0
+
+                fun progress(current: Int, name: String) = TranslationProgress(
+                    current, toTranslate.size, name,
+                    newTermsFound = newTermsTotal,
+                    glossaryDeviations = deviations,
+                    untranslatedFragments = fragments,
+                    paragraphWarnings = paragraphWarnings,
+                )
 
                 toTranslate.forEachIndexed { idx, chapterIdx ->
                     ensureActive()
                     val chapter = chapters[chapterIdx]
 
-                    TranslationState.postProgress(TranslationProgress(idx + 1, toTranslate.size, chapter.name))
+                    TranslationState.postProgress(progress(idx + 1, chapter.name))
+                    val issues = progress(idx + 1, chapter.name).takeIf { it.hasQualityIssues }?.qualitySummary(ctx)
                     var lastNotify = 0L
                     fun notifyProgress(fraction: Float) {
                         val now = SystemClock.elapsedRealtime()
@@ -247,7 +501,7 @@ class TranslationForegroundService : Service() {
                         lastNotify = now
                         nm.notify(
                             NOTIFICATION_ID,
-                            buildNotification(chapter.name, idx + 1, toTranslate.size, fraction)
+                            buildNotification(chapter.name, idx + 1, toTranslate.size, fraction, detail = issues)
                         )
                     }
                     notifyProgress(0f)
@@ -258,29 +512,28 @@ class TranslationForegroundService : Service() {
                             return@forEachIndexed
                         }
 
+                        // Bible, style and continuity context are reloaded per chapter so terms
+                        // auto-added by the previous chapter are used immediately.
+                        val inputs = StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIdx, sourceLang)
                         val result = engine.translateChapter(
                             sourceText = sourceHtml,
                             novelId = novelId,
                             chapterNum = chapterIdx,
-                            glossaryTerms = glossaryDao.getAllTermsSync(novelId),
+                            glossaryTerms = inputs.bible,
+                            context = inputs.context,
+                            options = inputs.options,
                             onProgress = ::notifyProgress
                         )
 
-                        translationDao.insert(
-                            TranslatedChapter(
-                                novelId = novelId,
-                                chapterNum = chapterIdx,
-                                englishText = result.englishText,
-                                model = model,
-                                sourceLang = sourceLang
-                            )
-                        )
-
+                        val outcome = StoryBibleRepository.persistChapter(ctx, novelId, chapterIdx, result, model, sourceLang)
                         saveChapterTxt(apiName, novelAuthor, novelName, chapterIdx, chapter, result.englishText)
 
-                        if (result.pendingTerms.isNotEmpty()) {
-                            pendingTermDao.insertAll(result.pendingTerms)
-                            newTermsTotal += result.pendingTerms.size
+                        newTermsTotal += outcome.pending + outcome.autoAdded
+                        deviations += result.glossaryViolations
+                        fragments += result.untranslatedFragments
+                        paragraphWarnings += result.paragraphWarnings
+                        if (result.violatedTerms.isNotEmpty() || result.leakedFragments.isNotEmpty()) {
+                            Log.i(TAG, "Chapter $chapterIdx: deviations=${result.violatedTerms} leaks=${result.leakedFragments} retries=${result.retries}")
                         }
                     } catch (e: CancellationException) {
                         throw e
@@ -300,9 +553,9 @@ class TranslationForegroundService : Service() {
                 if (toTranslate.isNotEmpty() && done == 0 && lastError != null) {
                     TranslationState.postProgress(TranslationProgress(0, toTranslate.size, "", error = lastError))
                 } else {
-                    TranslationState.postProgress(
-                        TranslationProgress(done, toTranslate.size, "", completed = true, newTermsFound = newTermsTotal)
-                    )
+                    val final = progress(done, "").copy(completed = true)
+                    if (toTranslate.isNotEmpty()) postSummaryNotification(final)
+                    TranslationState.postProgress(final)
                 }
             } catch (e: CancellationException) {
                 nm.cancel(NOTIFICATION_ID)
@@ -398,16 +651,27 @@ class TranslationForegroundService : Service() {
     /**
      * @param chapterFraction progress within the current chapter (0..1), from the engine's chunk progress
      */
-    private fun buildNotification(chapterName: String, current: Int, total: Int, chapterFraction: Float = 0f) =
+    private fun buildNotification(
+        chapterName: String,
+        current: Int,
+        total: Int,
+        chapterFraction: Float = 0f,
+        title: String = getString(R.string.translating_chapters),
+        /** Extra line, e.g. the running consistency-check counts. */
+        detail: String? = null,
+        /** Show [chapterName] as is (no "current/total:" prefix). */
+        plainText: Boolean = false,
+    ) =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.netflix_download)
-            .setContentTitle(getString(R.string.translating_chapters))
+            .setContentTitle(title)
             .setContentText(
-                if (total > 0) {
+                if (total > 0 && !plainText) {
                     val pct = (chapterFraction.coerceIn(0f, 1f) * 100).toInt()
                     "$current/$total: $chapterName" + if (pct in 1..99) " ($pct%)" else ""
                 } else chapterName
             )
+            .apply { if (!detail.isNullOrBlank()) setSubText(detail) }
             .setProgress(
                 PROGRESS_MAX,
                 if (total > 0) (((current - 1) + chapterFraction.coerceIn(0f, 1f)) / total * PROGRESS_MAX).toInt() else 0,
@@ -417,6 +681,35 @@ class TranslationForegroundService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .build()
+
+    /** Dismissable completion notification: chapters done, consistency-check counts, new terms. */
+    private fun postSummaryNotification(p: TranslationProgress) {
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val lines = buildList {
+                add(getString(R.string.translation_finished_text, p.current, p.total))
+                add(p.qualitySummary(this@TranslationForegroundService))
+                if (p.newTermsFound > 0) {
+                    add(resources.getQuantityString(R.plurals.new_terms_to_review, p.newTermsFound, p.newTermsFound))
+                }
+            }
+            val text = lines.joinToString(" · ")
+            nm.notify(
+                SUMMARY_NOTIFICATION_ID,
+                NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.netflix_download)
+                    .setContentTitle(getString(R.string.translation_finished_title))
+                    .setContentText(text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
+                    .setContentIntent(contentIntent())
+                    .setAutoCancel(true)
+                    .setSilent(true)
+                    .build()
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not post summary notification", e)
+        }
+    }
 
     private fun createNotificationChannel(nm: NotificationManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -437,6 +730,9 @@ class TranslationForegroundService : Service() {
             // could free a slot already reserved for the next job.)
             TranslationState.postCancelled()
             TranslationState.release()
+            AnalysisState.lastProgress?.let {
+                AnalysisState.post(it.copy(message = getString(R.string.analysis_cancelled), cancelled = true))
+            }
         }
         translationJob?.cancel()
         serviceScope.cancel()
