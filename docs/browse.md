@@ -139,8 +139,8 @@ pagination, de-duplication, author matching, script folding, listing resolution,
 
 For zh / ja / ko sources, listings show the English title with the original underneath in a
 smaller font (Browse rails, All sources, source pages, search, library and history all use the
-same poster title). The preview sheet shows the translated title with the original underneath
-and the translated synopsis; the result page shows the translated title and synopsis with a
+same poster title). The preview sheet shows the translated title with the original underneath,
+the chapter count ("1431 chapters", `result_chapter_count`) and the translated synopsis; the result page shows the translated title and synopsis with a
 small "Show original" / "Show translation" toggle right above the synopsis (it switches the
 title, synopsis, latest chapter and tags, see [result-page.md](result-page.md#translated-metadata)). Rendering
 never waits: the original is shown until the translation arrives.
@@ -148,7 +148,7 @@ never waits: the original is shown until the translation arrives.
 **Engine** (`MetadataTranslations.currentPolicy`):
 
 1. The configured translation model through the OpenAI-compatible `TranslationEngine`, when
-   Settings > AI Translation > "Translate titles and synopses with AI" is on (default on;
+   Settings → AI translation → "Translate titles and synopses with AI" is on (default on;
    default preferences `translate_metadata_with_ai`), an API key is set and the monthly spend cap
    is not reached. Calls are recorded in the spend ledger as kind `metadata`.
 2. Otherwise the free Google endpoint, when "Translate titles with Google (free)" is on. Google is

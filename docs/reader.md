@@ -93,7 +93,7 @@ overscroll) are disabled and the continuous chapter window is used.
     (`PageSelection.drag`, unit tested). While a handle is dragged the pager does not swipe.
   - A selection stays inside one paragraph and the part of it on the current page.
   - A floating toolbar (`ActionMode.TYPE_FLOATING`) offers **Copy** (clipboard; a toast below
-    Android 13, which shows its own confirmation) and **Glossary** for novels with a Story Bible
+    Android 13, which shows its own confirmation) and **Glossary** for novels with a glossary
     (zh/ja/ko sources and imported books opened in the app's reader). Glossary on the untouched
     long-pressed word runs the same lookup as a scroll-mode long-press (longest matching term);
     on an extended selection it runs the selection lookup.
@@ -125,9 +125,31 @@ Bible. Nothing changes in the reading view and terms are not highlighted.
   - Approve / Dismiss for pending suggestions about this term: same source, an alias, or
     "same English as existing …".
 
-  On wide windows the sheet is capped in width.
-- **No match.** The sheet says the word is not in the Story Bible and offers **Add to glossary**,
+  On wide windows the sheet is capped in width. The title has the glossary icon; Edit, Lock and
+  Add to glossary are outlined sentence-case buttons (`TranslateOutlinedButton`, as in the
+  Translate and Analyze dialogs) with the icon next to the text; Approve / Dismiss are sentence
+  case.
+- **No match.** The sheet says the word is not in the glossary and offers **Add to glossary**,
   prefilled with the word (possessive stripped) and the current chapter.
+
+## AI translation in the reader
+
+For books that translate chapters when opened (zh / ja / ko sources, and imported books with a
+known language; `AbstractBook.translatesOnDemand`):
+
+- **Translate tab** of the reader settings: an "AI translation" section at the top with the
+  **Translate chapters when opened** switch. It is the same preference as Settings → AI
+  translation and the setup wizard (`SecurePrefs` on-demand flag); changing it reloads the loaded
+  chapters that show the original because of it. Upstream's ML Kit translation stays underneath
+  as "On-device translation (ML Kit)". Other books show only the ML Kit section.
+- **Original notice:** when such a chapter is shown as the original because the switch is off or
+  there is no API key, one small line under the chapter title says why ("Showing the original.
+  Turn on Translate chapters when opened to translate it." / "No API key. Add one in Settings →
+  AI translation."). In scroll mode it is part of the title row, in paged mode part of the title
+  page. Never after Reload / Show original, and not when a translation failed. The rule is
+  `ui/reader/OriginalNotice` (`OriginalNoticeTest`); `ChapterStartSpanned.notice` carries it.
+- **Show original:** long-press on a translated chapter's title offers "Show original" (on other
+  chapters "Reload Chapter"); both reload the original text.
 
 ## Imported books
 
@@ -136,7 +158,8 @@ as the `importedNovelId` intent extra). Chapters are split by `EpubChapters`, th
 translation pipeline uses, so chapter *i* matches the result page and the DB. When AI translation is
 enabled for the reader and the book's language is known (detected or set on the result page), chapters are translated
 on demand through `ChapterTranslationRepository.getOrTranslate` like online chapters, in scroll and
-paged mode, with glossary long-press. Long-press on the chapter title → Reload shows the original.
+paged mode, with glossary long-press. Long-press on the chapter title → Show original shows the
+original (see [AI translation in the reader](#ai-translation-in-the-reader)).
 Details: [translation-pipeline.md](translation-pipeline.md#imported-books-epub--txt).
 
 ## Chapter list status chips
