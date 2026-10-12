@@ -95,6 +95,16 @@ Bible. Nothing changes in the reading view and terms are not highlighted.
 - **No match.** The sheet says the word is not in the Story Bible and offers **Add to glossary**,
   prefilled with the word (possessive stripped) and the current chapter.
 
+## Imported books
+
+Imported EPUB and TXT books open as `RegularBook` with their translator id (`Imported/...`, passed
+as the `importedNovelId` intent extra). Chapters are split by `EpubChapters`, the same plan the
+translation pipeline uses, so chapter *i* matches the result page and the DB. When AI translation is
+enabled for the reader and the book's language is known (detected or set on the result page), chapters are translated
+on demand through `ChapterTranslationRepository.getOrTranslate` like online chapters, in scroll and
+paged mode, with glossary long-press. Long-press on the chapter title → Reload shows the original.
+Details: [translation-pipeline.md](translation-pipeline.md#imported-books-epub--txt).
+
 ## Chapter list status chips
 
 On the result page, chapters of translated novels (online zh/ja/ko sources and imported books

@@ -1,4 +1,4 @@
-# Translation pipeline: analysis, read-ahead, spend, battery, stale sources, overnight batches
+# Translation pipeline: analysis, read-ahead, spend, battery, stale sources, overnight batches, imported books
 
 How a novel goes from "never translated" to "chapters translated ahead of the reader", and what
 keeps it cheap: the spend ledger and caps, charging conditions for long jobs, source-hash cache
@@ -231,11 +231,12 @@ as valid).
   when the range has some. Those chapters' sources are fetched and compared again first: if the
   source is back to the stored hash, the translation is kept and the paid call skipped.
   `translateIfMissing(retranslateStale = true)` does the same for single chapters.
-- **Reader:** the reader does not show the flag yet (another change owns the reader UI). It can
-  use `ChapterTranslationRepository.isStale(ctx, novelId, chapter)`,
-  `staleChapters(ctx, novelId)` or the live `observeStaleChapters(ctx, novelId): Flow<List<Int>>`
-  for a "source changed" hint, and should call `checkSourceHash(ctx, novelId, chapter, source)`
-  after its Reload action fetched the original (cheap: one hash and one DB read).
+- **Shown:** the result page's chapter list marks stale chapters "Source changed" (see
+  [reader.md](reader.md#chapter-list-status-chips)). Code can also use
+  `ChapterTranslationRepository.isStale(ctx, novelId, chapter)`, `staleChapters(ctx, novelId)`
+  or `observeStaleChapters(ctx, novelId): Flow<List<Int>>`.
+- **Imported books** are re-checked when the same book is imported again (see
+  [Imported books](#imported-books-epub--txt)).
 
 ## Overnight batch (OpenAI Batch API)
 
@@ -372,6 +373,59 @@ writes the raw API responses (never the key) to `app/build/batch-live/<timestamp
 OpenAI's per-model enqueued-token limit can reject large batches at validation (the batch then
 shows FAILED with OpenAI's message, e.g. `token_limit_exceeded`). Deleting a novel removes its
 finished batch rows but keeps unfinished ones, so their cost is still recorded when they end.
+
+## Imported books (EPUB / TXT)
+
+Books imported from the library ("Import a book", EPUB or TXT; PDF is not covered) go through the
+same pipeline as online novels: translate chapter / range, overnight batch, read-ahead, analysis
+(Story Bible), glossary, source-hash stale checks and the spend ledger.
+
+- **Id:** `Imported/<title>#<8 hex>`, where the hex is the start of SHA-256 of
+  `normalize(author) \0 normalize(title)` (`ImportedBookId`). It depends only on title and author,
+  so re-importing a revised file keeps its translations, glossary and spend rows. Online novels
+  keep `apiName/novelName`. The result page opens `imported://<novelId>`; chapter URLs are
+  `imported-chapter://<index>`.
+- **Record** (`ImportedBooks`, key folder `imported_books`, one per novel id): name, author,
+  format, SHA-256 of the stored EPUB, EPUB title, synopsis, chapter count, detected language,
+  manual override, import time. Written on import (`register`); books imported before this change
+  get one the first time they are opened (`ensureRecord`).
+- **Chapters:** `EpubChapterPlan` (pure) splits an EPUB by TOC, with spine files as the
+  fallback, the same way the reader does; `EpubChapters` applies it to an epublib `Book`.
+  Chapter *i* is therefore the same text in the reader, the result page, jobs and the DB.
+- **Language:** `SourceLanguageDetector` counts scripts in the first chapters (up to 6000
+  characters): mostly Hangul → `ko`, enough kana → `ja`, otherwise Han → `zh`; fewer than 20 CJK
+  letters → undecided. The long-press menu on the result page's Translate button has "Source
+  language…", and Translate asks for the language when none was detected. The override wins over
+  detection and survives re-imports.
+- **Source text:** jobs read chapters through `ChapterTextSource` (`lang`, `size`, `load(i)`).
+  Online novels load through the provider; imported books read the stored EPUB copy, so no
+  network is used and nothing is written to the online chapter cache (`TranslatedChapterFiles`
+  skips them).
+- **TXT:** `TextDecoding` picks the charset (BOM, strict UTF-8, otherwise the best scoring of
+  GB18030, Big5, Shift_JIS, EUC-JP and EUC-KR by common characters). `TxtChapterSplitter` finds
+  heading lines (at most 40 characters) such as `第十二章 …`, `第3回`, `第五話`, `第2节`, `第一卷`,
+  `제3화`, `Chapter 12` / `CHAPTER XII`, `序章` / `楔子` / `尾声` / `后记` / `プロローグ` / `프롤로그`,
+  `番外` / `외전`. Headings with empty bodies (a table of contents) are dropped; text before the
+  first heading becomes its own chapter if it has at least 30 characters. With fewer than 2
+  headings the text is cut into "Part N" chunks of about 6000 characters at paragraph breaks.
+  The result is stored as a generated EPUB, so everything else treats TXT and EPUB the same.
+- **Re-import:** when the stored EPUB's hash changes, every translated chapter is compared with
+  `checkSourceHash` (changed → `stale`, chip "Source changed"); chapters missing from the new
+  file are marked stale.
+- **Reader:** imported chapters are translated on demand like online ones; long-press on the
+  chapter title → Reload shows the original.
+
+Files: `imported/ImportedBookId.kt`, `ImportedBooks.kt`, `EpubChapterPlan.kt`,
+`EpubChapters.kt`, `SourceLanguageDetector.kt`, `TextDecoding.kt`, `TxtChapterSplitter.kt`;
+`translator/ChapterTextSource.kt`; `ui/translate/NovelChapterSource.kt`. Tests:
+`ImportedBookIdTest`, `EpubChapterPlanTest`, `SourceLanguageDetectorTest`, `TextDecodingTest`,
+`TxtChapterSplitterTest`, `ImportedChapterPipelineTest` (same fake engine and store, online id vs
+imported id: identical translate / skip / stale / re-translate behaviour).
+
+Limitations: language detection is by script only (a Japanese text written almost entirely in
+kanji can come out as `zh`; set it by hand); the library card still says "1 Chapter" for imports
+(existing behaviour); a TOC that points to anchors inside one file still gives an empty chapter,
+as in the reader before; translations are not written back into the TXT/EPUB copy.
 
 ## Files
 
