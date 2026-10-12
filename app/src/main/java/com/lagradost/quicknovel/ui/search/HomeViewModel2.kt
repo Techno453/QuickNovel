@@ -1,5 +1,6 @@
 package com.lagradost.quicknovel.ui.search
 
+import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -53,6 +54,8 @@ data class SearchRow(
     val name: String,
     val items: ImmutableList<ImmutableSearchResponse> = persistentListOf(),
     val error: Throwable? = null,
+    /** `MainAPI.lang` of the source: raw CJK sections are listed before English ones. */
+    val lang: String? = null,
 )
 
 @Immutable
@@ -237,33 +240,44 @@ class HomeViewModel2 : ViewModel(),
             )
         }
         apis.cmap { api ->
-            // Translated search: zh/ja/ko providers get the query translated into their language
-            // ("Translate search queries" setting); falls back to the original query. The language
+            // Translated search (docs/search.md): zh/ja/ko providers get candidate queries in their
+            // language (AI known title, NovelUpdates original names, literal translation), tried in
+            // order until one answers; English and other sources get the raw query. The language
             // chip decides the target: All = each CJK source's own language, a CJK chip = that
-            // language only, English = no translation (docs/search.md).
+            // language only, English = no translation.
             val target = language.queryLanguageFor(api.lang)
-            val providerQuery =
-                if (target == null) query else SearchQueryTranslator.translateQuery(query, target)
-            APIRepository(api).searchResult(providerQuery).onSuccess { value ->
-                val row = SearchRow(name = api.name, items = value.toImmutableList())
-                updateState {
-                    if (value.isEmpty()) {
-                        copy(searchRows = searchRows.adding(row))
-                    } else {
-                        val hasResults = searchRows.count { it.items.isNotEmpty() }
-                        copy(searchRows = searchRows.addingAt(hasResults, row))
-                    }
-                }
-            }.onFailure { error ->
-                if (error is CancellationException) return@onFailure
-                val row = SearchRow(name = api.name, error = error)
-                updateState {
-                    copy(searchRows = searchRows.adding(row))
-                }
+            val candidates =
+                if (target == null) listOf(query)
+                else SearchQueryTranslator.candidatesFor(query, target).all.ifEmpty { listOf(query) }
+            val repo = APIRepository(api)
+            val outcome = CandidateSearch.run(
+                candidates,
+                urlOf = { it.url },
+                pauseMs = api.rateLimitTime,
+            ) { candidate -> repo.searchResult(candidate).getOrThrow() }
+            logOutcome(api, outcome)
+            val row = if (outcome.error != null) {
+                SearchRow(name = api.name, error = outcome.error, lang = api.lang)
+            } else {
+                SearchRow(name = api.name, items = outcome.items.toImmutableList(), lang = api.lang)
+            }
+            updateState {
+                copy(searchRows = (searchRows + row).sortedBy { r ->
+                    CandidateSearch.sectionRank(r.lang, r.items.isNotEmpty())
+                }.toPersistentList())
             }
         }
         updateState {
             copy(isLoading = false)
         }
+    }
+
+    private fun logOutcome(api: MainAPI, outcome: CandidateSearch.Outcome<*>) {
+        Log.i(
+            "SearchLanguage",
+            "${api.name} (${api.lang}): tried ${outcome.tried} → ${outcome.items.size} results" +
+                    (outcome.answeredBy?.let { " via '$it'" } ?: "") +
+                    (outcome.error?.let { " error ${it.javaClass.simpleName}" } ?: "")
+        )
     }
 }
