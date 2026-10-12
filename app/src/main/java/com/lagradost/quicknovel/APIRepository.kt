@@ -7,6 +7,7 @@ import com.lagradost.quicknovel.ui.common.ImmutableHeadMainPageResponse
 import com.lagradost.quicknovel.ui.common.ImmutableReview
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.util.Coroutines.threadSafeListOf
+import com.lagradost.quicknovel.util.PosterMemo
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.toPersistentList
 import org.jsoup.Jsoup
@@ -56,6 +57,17 @@ class APIRepository(val api: MainAPI) {
 
         // 10min cache time should be plenty per session without fucking up anything for the user with outdated data
         const val cacheTimeSec: Int = 60 * 10
+
+        /** A loaded book's cover, for cards of listings that give none (docs/images.md). */
+        private fun rememberPoster(requestedUrl: String, response: LoadResponse) {
+            PosterMemo.put(requestedUrl, response.posterUrl, response.posterHeaders)
+            if (response.url != requestedUrl) PosterMemo.put(response.url, response.posterUrl, response.posterHeaders)
+        }
+
+        private fun rememberPosters(items: List<SearchResponse>?) {
+            items ?: return
+            PosterMemo.putAll(items.map { Triple(it.url, it.posterUrl, it.posterHeaders) })
+        }
     }
 
     val name: String get() = api.name
@@ -92,6 +104,7 @@ class APIRepository(val api: MainAPI) {
                 }
 
                 api.load(fixedUrl)?.also { response ->
+                    rememberPoster(fixedUrl, response)
                     // Remove all blank tags as early as possible
                     val add = SavedLoadResponse(unixTime, response, lookingForHash)
                     if (allowCache) {
@@ -134,6 +147,7 @@ class APIRepository(val api: MainAPI) {
                 }
 
                 val response = api.load(fixedUrl) ?: throw ErrorLoadingException("No data")
+                rememberPoster(fixedUrl, response)
                 val add = SavedLoadResponse(unixTime, response, lookingForHash)
                 if (allowCache) {
                     synchronized(cache) {
@@ -171,12 +185,12 @@ class APIRepository(val api: MainAPI) {
 
     suspend fun search(query: String): Resource<List<SearchResponse>> {
         return safeApiCall {
-            api.search(query) ?: throw ErrorLoadingException("No data")
+            (api.search(query) ?: throw ErrorLoadingException("No data")).also(::rememberPosters)
         }
     }
 
     suspend fun searchResult(query: String): Result<List<ImmutableSearchResponse>> = runCatching {
-        api.search(query)?.map(ImmutableSearchResponse::from)
+        api.search(query)?.also(::rememberPosters)?.map(ImmutableSearchResponse::from)
             ?: throw ErrorLoadingException("No data")
     }
 
@@ -186,7 +200,9 @@ class APIRepository(val api: MainAPI) {
         orderBy: String?,
         tag: String?,
     ): Result<ImmutableHeadMainPageResponse> = runCatching {
-        ImmutableHeadMainPageResponse.from(api.loadMainPage(page, mainCategory, orderBy, tag))
+        ImmutableHeadMainPageResponse.from(
+            api.loadMainPage(page, mainCategory, orderBy, tag).also { rememberPosters(it.list) }
+        )
     }
 
     /**
@@ -228,7 +244,7 @@ class APIRepository(val api: MainAPI) {
         tag: String?,
     ): Resource<HeadMainPageResponse> {
         return safeApiCall {
-            api.loadMainPage(page, mainCategory, orderBy, tag)
+            api.loadMainPage(page, mainCategory, orderBy, tag).also { rememberPosters(it.list) }
         }
     }
 
