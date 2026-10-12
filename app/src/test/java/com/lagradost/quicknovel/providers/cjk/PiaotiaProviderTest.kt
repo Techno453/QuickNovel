@@ -85,10 +85,22 @@ class PiaotiaProviderTest {
         assertEquals("0" to "760", PiaotiaParser.ids("https://www.piaotia.com/html/0/760/"))
     }
 
-    /** One search, one novel and one chapter against the live site. Run with -Dlive=1. */
+    @Test
+    fun cloudflareInterceptorIsOn() {
+        assertTrue(api.usesCloudFlareKiller)
+    }
+
+    /**
+     * One search, one novel and one chapter against the live site. Run with -Dlive=1. The
+     * Cloudflare interceptor needs Android's WebView and CookieManager, so the JVM test runs the
+     * same provider on the plain client (piaotia shows no challenge, only the passive script).
+     */
     @Test
     fun live() {
         assumeTrue("live test; run with -Dlive=1", LiveTests.enabled)
+        val api = object : PiaotiaProvider() {
+            override val usesCloudFlareKiller = false
+        }
         runBlocking {
             LiveTests.smoke(api, "修仙")
             // An exact title match makes the site 302 straight to the book page.
