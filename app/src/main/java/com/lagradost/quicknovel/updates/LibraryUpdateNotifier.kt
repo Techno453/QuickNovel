@@ -57,9 +57,6 @@ object LibraryUpdateNotifier {
         manager.createNotificationChannel(channel)
     }
 
-    private val immutableFlag =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-
     private fun mainIntent(context: Context): Intent =
         Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or
@@ -74,14 +71,14 @@ object LibraryUpdateNotifier {
             putExtra(EXTRA_NOVEL_ID, novel.id)
         }
         return PendingIntent.getActivity(
-            context, novel.id, intent, PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag
+            context, novel.id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 
     private fun openLibraryIntent(context: Context): PendingIntent {
         val intent = mainIntent(context).apply { action = ACTION_OPEN_LIBRARY }
         return PendingIntent.getActivity(
-            context, 0x4C1B, intent, PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag
+            context, 0x4C1B, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 

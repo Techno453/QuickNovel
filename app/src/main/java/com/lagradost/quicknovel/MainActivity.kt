@@ -503,9 +503,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        // Taps on the "new chapters" notifications
+        // Taps on the "new chapters" notifications; the action is consumed so a recreated
+        // activity does not open the novel again
         when (intent.action) {
             LibraryUpdateNotifier.ACTION_OPEN_RESULT -> {
+                intent.action = null
                 val url = intent.getStringExtra(LibraryUpdateNotifier.EXTRA_URL)
                 val apiName = intent.getStringExtra(LibraryUpdateNotifier.EXTRA_API_NAME)
                 if (url != null && apiName != null) {
@@ -515,6 +517,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             LibraryUpdateNotifier.ACTION_OPEN_LIBRARY -> {
+                intent.action = null
                 binding?.navView?.selectedItemId = R.id.navigation_download
                 return
             }
