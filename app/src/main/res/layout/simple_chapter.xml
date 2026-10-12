@@ -10,6 +10,7 @@
         android:layout_height="50dp">
 
     <LinearLayout
+            android:id="@+id/chapter_text"
             android:layout_gravity="center"
             android:gravity="center"
             android:padding="5dp"
@@ -39,4 +40,24 @@
 
         </TextView>
     </LinearLayout>
+
+    <!-- Translation status chip (ChapterAdapter.bindStatus) -->
+    <TextView
+            android:id="@+id/translation_status"
+            android:visibility="gone"
+            tools:visibility="visible"
+            tools:text="@string/chapter_status_translated"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/chapter_status_chip"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:ignore="SmallSp" />
 </androidx.cardview.widget.CardView>
