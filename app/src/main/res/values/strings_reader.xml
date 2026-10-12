@@ -39,6 +39,8 @@
     <string name="chapter_status_translated">Translated</string>
     <string name="chapter_status_stale">Source changed</string>
     <string name="chapter_status_queued">Queued</string>
+    <!-- Only a Preview translation (no glossary); the chapter still counts as untranslated -->
+    <string name="chapter_status_preview">Preview</string>
 
     <!-- Preview (result page): the line under the chapter title (ui/reader/PreviewNotice) and the Translate tab -->
     <string name="reader_preview">Preview</string>

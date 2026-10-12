@@ -633,7 +633,10 @@ class TranslationForegroundService : Service() {
                         try {
                             // Same per-chapter lock as the reader and read-ahead: never translate a chapter twice at once.
                             val result: TranslationResult? = ChapterTranslationRepository.withChapterLock(novelId, chapterIdx) {
-                                val cached = ChapterTranslationRepository.getCachedEntry(ctx, novelId, chapterIdx)
+                                // A preview row (no glossary) is not a translation: translated and replaced.
+                                val cached = ChapterTranslationRepository.servable(
+                                    ChapterTranslationRepository.getCachedEntry(ctx, novelId, chapterIdx)
+                                )
                                 if (cached != null && !(chapterIdx in stale && cached.stale)) {
                                     sources.take(chapterIdx)
                                     return@withChapterLock null // translated meanwhile (reader / read-ahead)

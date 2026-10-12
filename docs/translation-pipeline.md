@@ -176,19 +176,36 @@ sources that are not translated read exactly as with the old Stream Read.
   auto-add, no story context, `collectTerms = false` so the terms the model reports are dropped:
   no auto-added, updated or pending terms). Same engine, model, fallback, spend tag, per-chapter
   lock and quality checks (CJK leaks, paragraphs; glossary violations do not apply).
-- **Stored like other translations:** the chapter row goes to `translated_chapters` (with its
-  source hash), so a chapter previewed twice is paid once, and later reading, Download and
-  Translate reuse it like any stored translation. It is told apart by `glossary_violations` NULL
-  ("not checked": `ChapterTranslationRepository.isPreviewTranslation`; rows from before DB v3 look
-  the same); no summary and no terms are written. No migration. Trade-off: a previewed chapter
-  keeps its glossary-less translation when the novel is later translated normally (the Translate
-  dialog skips stored chapters); there is no "re-translate with the glossary" action yet.
+- **A preview is a throwaway:** the chapter row goes to `translated_chapters` with
+  `preview = 1` (DB v9, `MIGRATION_8_9`; `glossary_violations` NULL, no summary, no terms). The
+  rule is `ChapterTranslationRepository.servable(row, preview)`: inside a preview any stored row
+  is served (a full translation, or the preview row, so a chapter previewed twice is paid once);
+  everywhere else a preview row counts as **not translated**. Concretely:
+  - the normal reader path (`getCached` / `getOrTranslate` / `translateIfMissing` and its core)
+    ignores it, translates the chapter normally (analysis first as usual, with the glossary) and
+    replaces the row with a normal one (`StoryBibleRepository.chapterRow`);
+  - the Translate dialog, translation jobs, overnight batches and read ahead count it as
+    untranslated and include it (`TranslationDao.getTranslatedChapterNums` leaves preview rows
+    out; the job's and the batch's "translated meanwhile" checks use `servable`);
+  - the result page chips show **Preview** for it instead of Translated
+    (`ChapterTranslationStatus.PREVIEW`, from `getPreviewChapterNums`); a normal translation or a
+    queue entry wins;
+  - continuity context (previous chapter's English tail), the stale checks and stale lists
+    (`checkSourceHash`, `isStale`, `getStaleChapterNums`, `observeStaleChapterNums`) and the
+    translated count ignore preview rows;
+  - chapter `.txt` files (`TranslatedChapterFiles`, used by Download / EPUB generation) are only
+    written by translation jobs and batches with normal results, never by a preview.
+  Inside a preview nothing differs: a stored full translation is served ("Preview"), a stored
+  preview row is served ("Preview · translated without the glossary"), a missing chapter is
+  previewed.
 - **Reader:** the line under the chapter title says "Preview · translated without the glossary"
   for preview translations, "Preview" for stored translations made with the glossary, and
   "Preview · <reason>" when the original is shown because the switch is off or there is no key
   (`ui/reader/PreviewNotice`, `PreviewNoticeTest`). The reader's Translate tab adds a preview note,
   and the glossary lookup (long-press / selection) is off in a preview.
-- Tests: `PreviewTranslationTest` (options preset, inputs, analysis rule, row marker),
+- Tests: `PreviewTranslationTest` (options preset, inputs, analysis rule, row marker, `servable`,
+  the normal path re-translating a preview row into a normal row, preview rows never stale),
+  `TranslatorDatabaseMigrationTest` (v9), `ChapterStatusSourceTest` (Preview chip),
   `TranslationEngineStoryBibleTest.previewTranslatesWithoutGlossaryTermsOrContext`,
   `PreviewNoticeTest`.
 
@@ -532,6 +549,8 @@ The details and the limits are in [search.md](search.md).
 - `ui/translate/SpendScreen.kt`; settings rows in `ui/settings/TranslationSettings.kt`.
 - DB v6 (`MIGRATION_5_6`, additive): `translated_chapters.source_hash` / `stale`,
   `spend_entries` (+ index on timestamp), `batch_jobs`, `batch_chapters`.
+- DB v9 (`MIGRATION_8_9`, additive): `translated_chapters.preview` INTEGER NOT NULL DEFAULT 0
+  (rows made by the result page's [Preview](#preview); existing rows are normal translations).
 - Tests: `SpendCapsTest`, `SpendLedgerTest`, `PowerPolicyTest`, `SourceHashTest`, `BatchTest`,
   `TranslatorDatabaseMigrationTest` (also compares the migration with Room's generated schema).
 - `translator/AuthorNotes.kt`, `AnalysisFilter.kt`, `AnalysisRunner.kt`: pure analysis logic.

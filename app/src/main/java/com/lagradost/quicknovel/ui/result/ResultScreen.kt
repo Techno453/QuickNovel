@@ -1028,6 +1028,7 @@ private fun ChapterRow(
 @Composable
 private fun StatusChip(status: ChapterTranslationStatus) {
     val (text, color) = when (status) {
+        ChapterTranslationStatus.PREVIEW -> R.string.chapter_status_preview to MaterialTheme.colorScheme.onSurfaceVariant
         ChapterTranslationStatus.TRANSLATED -> R.string.chapter_status_translated to MaterialTheme.colorScheme.primary
         ChapterTranslationStatus.STALE -> R.string.chapter_status_stale to colorResource(R.color.ratingColorBg)
         ChapterTranslationStatus.QUEUED -> R.string.chapter_status_queued to MaterialTheme.colorScheme.onSurfaceVariant

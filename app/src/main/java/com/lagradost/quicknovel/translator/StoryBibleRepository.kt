@@ -93,8 +93,8 @@ object StoryBibleRepository {
 
     /**
      * Stores the translation and everything it discovered. Never overwrites a locked term.
-     * A [preview] translation stores only the chapter row, with `glossary_violations` NULL (not
-     * checked against a glossary); no summary, no terms.
+     * A [preview] translation stores only the chapter row, marked `preview` (served only inside a
+     * preview, see [chapterRow]); no summary, no terms. A normal translation replaces a preview row.
      */
     suspend fun persistChapter(
         ctx: Context,
@@ -108,21 +108,7 @@ object StoryBibleRepository {
         preview: Boolean = false,
     ): PersistOutcome {
         val db = TranslatorDatabase.getInstance(ctx)
-        db.translationDao().insert(
-            TranslatedChapter(
-                sourceHash = sourceHash,
-                stale = false,
-                novelId = novelId,
-                chapterNum = chapterNum,
-                englishText = result.englishText,
-                model = result.modelUsed.ifBlank { model },
-                sourceLang = lang,
-                glossaryViolations = if (preview) null else result.glossaryViolations,
-                cjkLeaks = result.untranslatedFragments,
-                paragraphWarnings = result.paragraphWarnings,
-                usedFallback = result.usedFallback,
-            )
-        )
+        db.translationDao().insert(chapterRow(novelId, chapterNum, result, model, lang, sourceHash, preview))
         if (preview) return PersistOutcome(0, 0)
         if (result.chapterSummary.isNotBlank() || result.charactersPresent.isNotEmpty()) {
             db.chapterSummaryDao().upsert(
@@ -139,6 +125,33 @@ object StoryBibleRepository {
         val pending = addPending(ctx, novelId, result.pendingTerms)
         return PersistOutcome(added, pending)
     }
+
+    /**
+     * The `translated_chapters` row for [result] (pure). A [preview] row is flagged and has no
+     * glossary check (`glossary_violations` NULL); a normal one is never flagged.
+     */
+    fun chapterRow(
+        novelId: String,
+        chapterNum: Int,
+        result: TranslationResult,
+        model: String,
+        lang: String,
+        sourceHash: String,
+        preview: Boolean,
+    ) = TranslatedChapter(
+        sourceHash = sourceHash,
+        stale = false,
+        novelId = novelId,
+        chapterNum = chapterNum,
+        englishText = result.englishText,
+        model = result.modelUsed.ifBlank { model },
+        sourceLang = lang,
+        glossaryViolations = if (preview) null else result.glossaryViolations,
+        cjkLeaks = result.untranslatedFragments,
+        paragraphWarnings = result.paragraphWarnings,
+        usedFallback = result.usedFallback,
+        preview = preview,
+    )
 
     /** Inserts auto-added terms whose source is not in the bible yet. Returns the number inserted. */
     suspend fun addAutoTerms(ctx: Context, novelId: String, terms: List<GlossaryTerm>): Int {
