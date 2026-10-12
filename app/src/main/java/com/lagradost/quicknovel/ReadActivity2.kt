@@ -27,7 +27,12 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.animation.doOnEnd
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
+import androidx.window.layout.WindowLayoutInfo
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -36,8 +41,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.children
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.slider.Slider
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
@@ -550,6 +557,44 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         updatePadding()
     }
 
+    /** Height of the lower half below a horizontal hinge in tabletop posture, 0 otherwise. */
+    private var tabletopLowerHeight = 0
+
+    /**
+     * Tabletop posture (foldable half opened with a horizontal hinge): keep the text in the
+     * upper half and leave the lower half to the controls and the settings sheet. No-op on
+     * devices without a folding feature.
+     */
+    private fun applyWindowLayout(info: WindowLayoutInfo) {
+        val fold = info.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull {
+            it.state == FoldingFeature.State.HALF_OPENED &&
+                    it.orientation == FoldingFeature.Orientation.HORIZONTAL
+        }
+        val root = binding.root
+        var lowerHeight = 0
+        if (fold != null && root.height > 0) {
+            val location = IntArray(2)
+            root.getLocationInWindow(location)
+            val foldTop = fold.bounds.top - location[1]
+            val foldBottom = fold.bounds.bottom - location[1]
+            if (foldTop > 0 && foldTop < root.height) {
+                lowerHeight = (root.height - foldBottom).coerceAtLeast(0)
+                binding.readNormalLayout.updateLayoutParams<FrameLayout.LayoutParams> {
+                    bottomMargin = root.height - foldTop
+                }
+            }
+        }
+        if (lowerHeight == 0) {
+            binding.readNormalLayout.updateLayoutParams<FrameLayout.LayoutParams> {
+                bottomMargin = 0
+            }
+        }
+        if (lowerHeight != tabletopLowerHeight) {
+            tabletopLowerHeight = lowerHeight
+            postDesired(binding.realText)
+        }
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         // Safety net for the rare case the activity is still recreated (process death, a config
         // change we do not handle): make sure the exact position is on disk, init() resumes from it.
@@ -803,6 +848,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         binding.realText.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
             if (right - left != oldRight - oldLeft) {
                 v.post { updatePadding() }
+            }
+        }
+
+        // foldable postures, see applyWindowLayout
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                WindowInfoTracker.getOrCreate(this@ReadActivity2)
+                    .windowLayoutInfo(this@ReadActivity2)
+                    .collect { info -> binding.root.post { applyWindowLayout(info) } }
             }
         }
 
@@ -1221,6 +1275,12 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             bottomSheetDialog.setContentView(binding.root)
             // max width + expanded on wide/short windows (foldable inner screen, landscape)
             bottomSheetDialog.adaptToWindow()
+            if (tabletopLowerHeight > 0) {
+                // tabletop: the sheet lives below the hinge
+                bottomSheetDialog.behavior.maxHeight = tabletopLowerHeight
+                bottomSheetDialog.behavior.skipCollapsed = true
+                bottomSheetDialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+            }
 
             //Create and Order tabs
             val tabsToViews = listOf(
