@@ -130,7 +130,9 @@ on-demand translation depend on it). The fixtures contain no copyrighted prose: 
 ```
 
 (`LIVE=1` / `LIVE_PROVIDER=…` environment variables work too; without them the test is
-skipped.) Each provider is a separate parameterized case, so one failing site does not hide the
+skipped.) `BrowseListingsLiveTest` (every browse listing of 69shuba, Quanben and Syosetu: page 1
+non-empty, page 2 new) and `ProviderFixesLiveTest` (chapter-name alignment, titles, status, tags)
+are gated the same way. Each provider is a separate parameterized case, so one failing site does not hide the
 others; a failed step is retried once after 5 s. 69shuba is checked with a known novel because
 its search needs Android's WebView for a Cloudflare Turnstile, and it is *skipped* rather than
 failed when Cloudflare blocks the network.
