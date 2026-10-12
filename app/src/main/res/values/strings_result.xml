@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose result page (docs/result-page.md) -->
+    <string name="result_back">Back</string>
+    <string name="result_rating">Rating</string>
+    <string name="result_translate">Translate</string>
+    <string name="result_glossary">Glossary</string>
+    <string name="result_translate_starting">Starting…</string>
+    <string name="result_more_actions">More actions</string>
+    <string name="result_source_language">Source language</string>
+    <string name="result_language_detected">%s (detected)</string>
+    <string name="result_language_chosen">%s (chosen)</string>
+    <string name="result_language_unknown">Not detected, tap to choose</string>
+    <string name="result_mark_read">Mark as read</string>
+    <string name="result_mark_unread">Mark as unread</string>
+    <string name="result_translate_chapter">Translate this chapter…</string>
+    <string name="result_download_from_here">Download from this chapter</string>
+    <string name="result_search_chapters">Search chapters</string>
+    <string name="result_no_matching_chapters">No chapters match the filter</string>
+    <string name="result_retry">Retry</string>
+    <string name="result_filter_sort">Filter and sort</string>
+    <string name="result_sort_ascending">ascending</string>
+    <string name="result_sort_descending">descending</string>
+    <plurals name="result_chapter_count">
+        <item quantity="one">%d chapter</item>
+        <item quantity="other">%d chapters</item>
+    </plurals>
+</resources>

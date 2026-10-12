@@ -129,8 +129,8 @@ For zh / ja / ko sources, listings show the English title with the original unde
 smaller font (Browse rails, All sources, source pages, search, library and history all use the
 same poster title). The preview sheet shows the translated title with the original underneath
 and the translated synopsis; the result page shows the translated title and synopsis with a
-small "Show original" / "Show translation" toggle right above the synopsis (it switches both;
-the header under the title is covered by the page's scroll view and takes no taps). Rendering
+small "Show original" / "Show translation" toggle right above the synopsis (it switches the
+title, synopsis, latest chapter and tags, see [result-page.md](result-page.md#translated-metadata)). Rendering
 never waits: the original is shown until the translation arrives.
 
 **Engine** (`MetadataTranslations.currentPolicy`):
