@@ -28,9 +28,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # The action's default package list includes the long-gone "tools" package, which makes
+      # sdkmanager fail; platform-tools is all it needs to install. AGP downloads the compileSdk
+      # platform and build-tools itself once the licences are accepted.
       - uses: android-actions/setup-android@v3
-      - name: Install Android platform (compileSdk 37)
-        run: sdkmanager --install "platforms;android-37.0"
+        with:
+          packages: platform-tools
 
       - uses: gradle/actions/setup-gradle@v4
 
