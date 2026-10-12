@@ -49,11 +49,11 @@ class BrowseListingsLiveTest(private val case: Case) {
                                 paged: Boolean = true) = Case(this, label, main, order, tag, paged)
             return listOf(
                 shuba.default("default (popular, monthly)"),
-                shuba.default("popular, weekly", order = "weekvisit"),
-                shuba.default("recommended", order = "allvote"),
-                shuba.default("latest updates", order = BiqugeProvider.LATEST, paged = false),
-                shuba.default("completed", main = "1"),
-                shuba.default("ongoing", main = "2"),
+                shuba.default("popular, weekly", main = "weekvisit|0"),
+                shuba.default("recommended", main = "allvote|0"),
+                shuba.default("latest updates", main = BiqugeProvider.LATEST, paged = false),
+                shuba.default("completed", main = "monthvisit|1"),
+                shuba.default("ongoing", main = "monthvisit|2"),
                 shuba.default("romance genre", tag = "3"),
 
                 quanben.default("default (recommended)", paged = false),

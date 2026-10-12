@@ -57,16 +57,21 @@ class Shuba69FixtureTest {
         assertEquals("https://www.69shuba.com/novels/monthvisit_0_0_1.htm", api.mainPageUrl(1, null, null, null))
         assertEquals(
             "https://www.69shuba.com/novels/monthvisit_0_0_1.htm",
-            api.mainPageUrl(1, api.mainCategories.first().second, api.orderBys.first().second, api.tags.first().second),
+            api.mainPageUrl(1, api.mainCategories.first().second, api.orderBys.firstOrNull()?.second, api.tags.first().second),
         )
-        // Romance (3), ongoing (2), weekly popularity, page 2 (verified live: 50 ongoing romance works).
+        // Listings carry ranking and status: weekly popularity, romance (3), page 2.
+        assertEquals("https://www.69shuba.com/novels/weekvisit_3_0_2.htm", api.mainPageUrl(2, "weekvisit|0", null, "3"))
+        assertEquals("https://www.69shuba.com/novels/allvote_0_1_1.htm", api.mainPageUrl(0, "allvote|1", null, ""))
+        assertEquals("https://www.69shuba.com/novels/monthvisit_0_2_1.htm", api.mainPageUrl(1, "monthvisit|2", null, null))
+        // The old shape (status in mainCategory, ranking in orderBy) still works: romance (3),
+        // ongoing (2), weekly popularity, page 2 (verified live: 50 ongoing romance works).
         assertEquals("https://www.69shuba.com/novels/weekvisit_3_2_2.htm", api.mainPageUrl(2, "2", "weekvisit", "3"))
-        assertEquals("https://www.69shuba.com/novels/allvote_0_1_1.htm", api.mainPageUrl(0, "1", "allvote", ""))
-        // Latest updates is a single page that ignores category and status.
+        // Latest updates is a single page that ignores genre and status.
+        assertEquals("https://www.69shuba.com/last.html", api.mainPageUrl(1, BiqugeProvider.LATEST, null, "3"))
         assertEquals("https://www.69shuba.com/last.html", api.mainPageUrl(1, "1", BiqugeProvider.LATEST, "3"))
         // No dead URL shapes from before the redesign.
-        for (o in api.orderBys) for (c in api.mainCategories) for (t in api.tags) {
-            val url = api.mainPageUrl(2, c.second, o.second, t.second)
+        for (c in api.mainCategories) for (t in api.tags) {
+            val url = api.mainPageUrl(2, c.second, null, t.second)
             assertTrue(url, url.matches(Regex("""https://www\.69shuba\.com/(novels/[a-z]+_\d+_[012]_2\.htm|last\.html)""")))
         }
         assertEquals(api.tags.size, api.tags.map { it.second }.toSet().size)
@@ -75,13 +80,14 @@ class Shuba69FixtureTest {
     @Test
     fun browseListingsCoverPopularLatestAndCompleted() {
         // Default (first) entries are the most-popular listing over everything.
-        assertEquals("monthvisit", api.orderBys.first().second)
-        assertEquals("0", api.mainCategories.first().second)
+        // The Browse rail shows the first listing's label: the site's default ranking, not "All".
+        assertEquals("Popular, monthly (人气榜)" to "monthvisit|0", api.mainCategories.first())
+        assertTrue(api.orderBys.isEmpty())
         assertEquals("0", api.tags.first().second)
-        assertTrue(api.orderBys.any { it.second == BiqugeProvider.LATEST })
-        assertTrue(api.mainCategories.any { it.second == "1" && it.first.startsWith("Completed") })
+        assertTrue(api.mainCategories.any { it.second == BiqugeProvider.LATEST })
+        assertTrue(api.mainCategories.any { it.second.endsWith("|1") && it.first.startsWith("Completed") })
         // English labels (the site's term may follow in parentheses).
-        for ((label, _) in api.orderBys + api.mainCategories + api.tags) {
+        for ((label, _) in api.mainCategories + api.tags) {
             assertTrue(label, label.first() in 'A'..'Z')
         }
     }

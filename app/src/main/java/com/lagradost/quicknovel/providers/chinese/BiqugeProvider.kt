@@ -71,18 +71,19 @@ class BiqugeProvider : MainAPI() {
     // (50 per page). Not offered: newhot (新书榜) answers with a Cloudflare managed challenge
     // outside a browser; lastupdate/allvisit/goodnum/postdate/dayvisit rankings are empty. The
     // site has no monthly-ticket (月票) or bookmark (收藏) ranking.
-    override val orderBys = listOf(
-        "Popular, monthly (人气榜)" to "monthvisit",
-        "Popular, weekly (周榜)"    to "weekvisit",
-        "Recommended (推荐榜)"      to "allvote",
-        // /last.html: one page of the 30 latest updated books; ignores category and status.
-        "Latest updates (最近更新)" to LATEST,
-    )
-
+    //
+    // Listings ("<ranking>|<status>", status 0 = all, 2 = ongoing 连载, 1 = completed 全本), most
+    // popular first like the other sources, so the Browse rail is labelled with the site's
+    // default ranking (人气榜) instead of a bare status. Genres ([tags]) apply to every ranking.
     override val mainCategories = listOf(
-        "All"               to "0",
-        "Ongoing (连载)"    to "2",
-        "Completed (全本)"  to "1",
+        "Popular, monthly (人气榜)"             to "monthvisit|0",
+        "Popular, weekly (周榜)"                to "weekvisit|0",
+        "Recommended (推荐榜)"                  to "allvote|0",
+        "Ongoing: popular, monthly (连载人气榜)"   to "monthvisit|2",
+        "Completed: popular, monthly (全本人气榜)" to "monthvisit|1",
+        "Completed: recommended (全本推荐榜)"     to "allvote|1",
+        // /last.html: one page of the 30 latest updated books; ignores genre and status.
+        "Latest updates (最近更新)"              to LATEST,
     )
 
     // Category ids as used by the site's own filters (same ids as /novels/class/{id}.htm).
@@ -171,20 +172,25 @@ class BiqugeProvider : MainAPI() {
     ): HeadMainPageResponse {
         val url = mainPageUrl(page, mainCategory, orderBy, tag)
         // The latest-updates page has no further pages; repeating it would duplicate the list.
-        if (orderBy == LATEST && page > 1) return HeadMainPageResponse(url, emptyList())
+        if (url.endsWith("/last.html") && page > 1) return HeadMainPageResponse(url, emptyList())
         val doc = Jsoup.parse(get(url).textWithEncoding(), url)
         return HeadMainPageResponse(url, parseBookList(doc))
     }
 
     /**
      * Browse URL: a ranking page such as `/novels/monthvisit_3_2_1.htm` (romance, ongoing,
-     * page 1), or `/last.html` for the latest updates.
+     * page 1), or `/last.html` for the latest updates. [mainCategory] is a [mainCategories]
+     * value ("ranking|status" or [LATEST]); a bare status with the ranking in [orderBy] (the
+     * shape before 2026-10-12) is still accepted.
      */
     internal fun mainPageUrl(page: Int, mainCategory: String?, orderBy: String?, tag: String?): String {
-        val order = orderBy?.takeIf { it.isNotBlank() } ?: orderBys.first().second
-        if (order == LATEST) return "$mainUrl/last.html"
+        val listing = mainCategory?.takeIf { it.isNotBlank() } ?: mainCategories.first().second
+        val (order, status) = when {
+            listing == LATEST || orderBy == LATEST -> return "$mainUrl/last.html"
+            '|' in listing -> listing.substringBefore('|') to listing.substringAfter('|')
+            else -> (orderBy?.takeIf { it.isNotBlank() } ?: "monthvisit") to listing
+        }
         val category = tag?.takeIf { it.isNotBlank() } ?: "0"
-        val status = mainCategory?.takeIf { it.isNotBlank() } ?: "0"
         return "$mainUrl/novels/${order}_${category}_${status}_${page.coerceAtLeast(1)}.htm"
     }
 
@@ -470,7 +476,7 @@ class BiqugeProvider : MainAPI() {
     companion object {
         private const val TAG = "BiqugeProvider"
 
-        /** [orderBys] value for the latest-updates page. */
+        /** [mainCategories] value for the latest-updates page. */
         internal const val LATEST = "last"
 
         /** Pause after this many chapter fetches (any caller). */
