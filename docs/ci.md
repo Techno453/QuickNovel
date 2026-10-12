@@ -25,6 +25,13 @@ the nightly check in the Actions tab if that happens.
 
 ## Signing secrets
 
+**Status (2026-10-12):** the four secrets are set. Releases 3.9.0 and 3.9.1 were published before
+that, each signed with the runner's throwaway debug key, so neither can be updated in place: the
+updater shows *Can't install this update* (different signing key). Back up (Settings -> Backup),
+uninstall, install 3.9.2 or later, restore; from 3.9.2 on every release and pre-release is signed
+with the same key and updates in place. The keystore and its credentials are kept by the owner
+outside the repository; losing them means another reinstall for every user.
+
 Add these in *GitHub → repository → Settings → Secrets and variables → Actions → New repository
 secret* (or with `gh secret set NAME`):
 
