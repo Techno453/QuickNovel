@@ -440,6 +440,20 @@ Limitations: language detection is by script only (a Japanese text written almos
 kanji can come out as `zh`; set it by hand); a TOC that points to anchors inside one file still gives an empty chapter,
 as in the reader before; translations are not written back into the TXT/EPUB copy.
 
+## Translated search
+
+The Search tab sends Chinese, Japanese and Korean sources candidate queries in their own language,
+and its language chips (All languages / Chinese / Japanese / Korean / English) choose the sources
+and the target language. Candidates come in this order:
+
+1. The known original title from the **Title lookup model**. This is a separate setting, default
+   GPT-6 Sol: one short call per search and language, cached, search kind in the spend ledger.
+2. The NovelUpdates associated names. This is a key-free index, and it only works where
+   NovelUpdates is reachable.
+3. The Google literal translation.
+
+The details and the limits are in [search.md](search.md).
+
 ## Files
 
 - `translator/Spend.kt` (kinds, tags, meter, pricing, periods), `SpendCaps.kt`, `SpendLedger.kt`.

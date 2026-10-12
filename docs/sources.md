@@ -12,8 +12,10 @@ needed:
 
 - `TranslationLanguages.normalize(api.lang)` picks the translator's source language, the
   translate button, title auto-translation and the reader's on-demand translation.
-- `SearchQueryTranslator.translateQuery(query, api.lang)` translates the user's search query
-  into the source language before calling `search()`.
+- `SearchQueryTranslator.candidatesFor(query, lang)` turns the user's search query into candidate
+  queries in the source language (AI known title, NovelUpdates original names, literal
+  translation). The source tries them in order before calling `search()` (see
+  [search.md](search.md)). The Search tab's language chips pick the sources by this `lang` too.
 - The provider-language setting (`getApiProviderLangSettings`, `zh`/`ja`/`ko` on by default) shows or
   hides the source.
 
