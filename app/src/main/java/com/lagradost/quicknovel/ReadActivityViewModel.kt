@@ -456,14 +456,14 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
     fun translatesOnDemand(): Boolean = this::book.isInitialized && book.translatesOnDemand()
 
     /**
-     * "Translate chapters when opened" changed in the reader: load again the chapters around the
-     * current one that show the original because of it (translated now, or a new notice).
+     * "Translate chapters when opened" changed in the reader: load again the loaded chapters that
+     * show the original because of it (translated now, or a new notice).
      */
     fun onTranslateOnDemandChanged() = ioSafe {
         if (!this@ReadActivityViewModel::book.isInitialized) return@ioSafe
-        val cIndex = currentIndex
-        val targets = (cIndex - chapterPaddingBottom..cIndex + chapterPaddingTop)
+        val targets = chapterMutex.withLock { chapterData.keys.toList() }
             .filter { it >= 0 && book.originalNotice(it) != null }
+            .sortedBy { kotlin.math.abs(it - currentIndex) }
         for (index in targets) loadIndividualChapter(index, reload = false, reTranslate = true, notify = true)
         if (targets.isNotEmpty()) updateReadArea(seekToDesired = false)
     }
