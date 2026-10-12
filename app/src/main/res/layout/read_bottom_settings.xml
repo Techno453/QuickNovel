@@ -453,18 +453,44 @@
 
                 <!-- Caps the line length on wide windows (foldable inner screen, tablets).
                      The right end of the slider means no limit. -->
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/read_settings_text_max_width"
-                    style="@style/SettingsSliderTheme"
+                <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="24dp"
-                    android:layout_marginTop="15dp"
-                    android:layout_marginEnd="24dp"
-                    android:stepSize="40"
-                    android:value="640"
-                    android:valueFrom="320"
-                    android:valueTo="1280" />
+                    android:layout_marginTop="15dp">
+
+                    <ImageView
+                        android:id="@+id/icon_width_less"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/text_width_narrow_24dp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/read_settings_text_max_width"
+                        style="@style/SettingsSliderTheme"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:stepSize="40"
+                        android:value="640"
+                        android:valueFrom="320"
+                        android:valueTo="1280"
+                        app:layout_constraintEnd_toStartOf="@id/icon_width_more"
+                        app:layout_constraintStart_toEndOf="@id/icon_width_less"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/icon_width_more"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/text_width_wide_24dp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <TextView
                     android:id="@+id/read_settings_text_padding_text_top"
