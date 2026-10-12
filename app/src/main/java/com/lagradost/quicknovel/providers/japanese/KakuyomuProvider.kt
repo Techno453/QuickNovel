@@ -55,13 +55,12 @@ class KakuyomuProvider : MainAPI() {
         "New works" to "published_at",
     )
 
+    /** Genres. Romance (恋愛) and rom-com (ラブコメ) are left out on purpose. */
     override val tags = listOf(
         "All" to "",
         "Fantasy (異世界ファンタジー)" to "fantasy",
         "Modern fantasy (現代ファンタジー)" to "action",
         "Sci-fi (SF)" to "sf",
-        "Romance (恋愛)" to "love_story",
-        "Rom-com (ラブコメ)" to "romance",
         "Modern drama (現代ドラマ)" to "drama",
         "Horror (ホラー)" to "horror",
         "Mystery (ミステリー)" to "mystery",

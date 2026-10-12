@@ -14,13 +14,12 @@ open class QuanbenProvider : MainAPI() {
     // home page ("推荐小说" plus a few books per genre, one page) and the genre listings
     // /c/{genre}.html, /c/{genre}_{page}.html in the site's own order (best known works first).
     // Every book on the site is finished (全本 = "complete"), so there is no status filter.
+    // Left out on purpose: the romance genres 言情, 现言 and 耽美, and 穿越 / 青春, which on this
+    // site list romance only (palace and CEO romances, campus romances).
     override val tags = listOf(
         "Recommended (推荐小说)" to "",
         "Xuanhuan fantasy (玄幻)" to "xuanhuan",
         "Urban (都市)" to "dushi",
-        "Romance (言情)" to "yanqing",
-        "Time travel (穿越)" to "chuanyue",
-        "Youth (青春)" to "qingchun",
         "Xianxia (仙侠)" to "xianxia",
         "Supernatural (灵异)" to "lingyi",
         "Mystery (悬疑)" to "xuanyi",
@@ -31,8 +30,6 @@ open class QuanbenProvider : MainAPI() {
         "Sci-fi (科幻)" to "kehuan",
         "Workplace (职场)" to "zhichang",
         "Officialdom (官场)" to "guanchang",
-        "Modern romance (现言)" to "xianyan",
-        "Danmei (耽美)" to "danmei",
         "Other (其它)" to "qita"
     )
 

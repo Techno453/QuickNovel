@@ -44,9 +44,9 @@ class CzbooksProviderTest {
         assertEquals("https://czbooks.net/c/normal/week/1", CzbooksParser.listUrl("", "week", 1))
         assertEquals("https://czbooks.net/c/normal/total/2", CzbooksParser.listUrl(null, "total", 2))
         assertEquals("https://czbooks.net/c/finish/week/3", CzbooksParser.listUrl("", "finish", 3))
-        assertEquals("https://czbooks.net/c/yanqing/new/2", CzbooksParser.listUrl("yanqing", "new", 2))
-        assertEquals("https://czbooks.net/c/danmei/finish/1", CzbooksParser.listUrl("danmei", "finish", 1))
-        assertEquals("https://czbooks.net/c/danmei/day/4", CzbooksParser.listUrl("danmei", "day", 4))
+        assertEquals("https://czbooks.net/c/xuanhuan/new/2", CzbooksParser.listUrl("xuanhuan", "new", 2))
+        assertEquals("https://czbooks.net/c/xianxia/finish/1", CzbooksParser.listUrl("xianxia", "finish", 1))
+        assertEquals("https://czbooks.net/c/xianxia/day/4", CzbooksParser.listUrl("xianxia", "day", 4))
         assertNull("no site-wide latest list", CzbooksParser.listUrl("", "new", 1))
     }
 
@@ -134,8 +134,8 @@ class CzbooksProviderTest {
                 "popular (all genres)" to ("week" to ""),
                 "popular all time" to ("total" to ""),
                 "completed (all genres)" to ("finish" to ""),
-                "latest (romance)" to ("new" to "yanqing"),
-                "completed (danmei)" to ("finish" to "danmei"),
+                "latest (xuanhuan)" to ("new" to "xuanhuan"),
+                "completed (xianxia)" to ("finish" to "xianxia"),
             )) {
                 val p1 = api.loadMainPage(1, null, args.first, args.second)
                 val p2 = api.loadMainPage(2, null, args.first, args.second)
@@ -144,8 +144,8 @@ class CzbooksProviderTest {
                 assertTrue("$label page 2 empty", p2.list.isNotEmpty())
                 assertNotEquals("$label page 2 repeats page 1", p1.list.first().url, p2.list.first().url)
             }
-            val far = api.loadMainPage(5000, null, "new", "yanqing")
-            println("[live] ${api.name}: latest (romance) page 5000 → ${far.list.size}")
+            val far = api.loadMainPage(5000, null, "new", "xuanhuan")
+            println("[live] ${api.name}: latest (xuanhuan) page 5000 → ${far.list.size}")
             assertTrue(far.list.isEmpty())
             val err = runCatching { api.loadMainPage(1, null, "new", "") }.exceptionOrNull()
             assertTrue(err is ErrorLoadingException)

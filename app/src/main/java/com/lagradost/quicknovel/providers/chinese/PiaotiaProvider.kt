@@ -66,7 +66,8 @@ open class PiaotiaProvider : MainAPI() {
         "All" to "",
         "Xuanhuan / magic (玄幻魔法)" to "1",
         "Wuxia / xianxia (武侠修真)" to "2",
-        "Urban / romance (都市言情)" to "3",
+        // The site calls it 都市言情, but the list is mostly urban fiction (its completed list is 全本都市).
+        "Urban (都市)" to "3",
         "History / military (历史军事)" to "4",
         "Games (网游竞技)" to "5",
         "Sci-fi (科幻小说)" to "6",

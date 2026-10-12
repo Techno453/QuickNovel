@@ -55,7 +55,7 @@ class SyosetuFixtureTest {
         val latest = SyosetuProvider.LATEST
         assertEquals("https://yomou.syosetu.com/search.php?order=new&p=2", api.mainPageUrl(2, "total", latest, ""))
         assertEquals("https://yomou.syosetu.com/search.php?order=new&genre=201&type=er&p=1", api.mainPageUrl(1, "201", latest, "er"))
-        assertEquals("https://yomou.syosetu.com/search.php?order=new&istt=1&biggenre=1&p=1", api.mainPageUrl(1, "i1", latest, null))
+        assertEquals("https://yomou.syosetu.com/search.php?order=new&istt=1&biggenre=2&p=1", api.mainPageUrl(1, "i2", latest, null))
         for ((label, _) in api.orderBys + api.mainCategories + api.tags) assertTrue(label, label.first() in 'A'..'Z')
         assertTrue(api.tags.any { it.second == "er" && it.first.startsWith("Completed") })
     }

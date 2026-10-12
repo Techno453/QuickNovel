@@ -14,13 +14,12 @@ class SyosetuProvider : MainAPI() {
     override val hasMainPage = true
     private val ncodeUrl = "https://ncode.syosetu.com"
 
+    // Genres. The romance ones (isekai romance i1, 101 異世界〔恋愛〕, 102 現実世界〔恋愛〕) are left
+    // out on purpose.
     override val mainCategories = listOf(
         "All genres (総合)" to ALL_GENRES,
-        "Isekai Romance" to "i1",
         "Isekai Fantasy" to "i2",
         "Isekai Lit/SF/Other" to "io",
-        "Romance (Fantasy World)" to "101",
-        "Romance (Real World)" to "102",
         "High Fantasy" to "201",
         "Low Fantasy" to "202",
         "Literary Fiction" to "301",
@@ -85,8 +84,7 @@ class SyosetuProvider : MainAPI() {
         if (order == LATEST) {
             val filter = when (genre) {
                 // The isekai rankings are works tagged 異世界転生/転移 (istt) in a big genre:
-                // romance, fantasy, or literature/SF/other/non-genre.
-                "i1" -> "istt=1&biggenre=1"
+                // fantasy, or literature/SF/other/non-genre (isekai romance, i1, is not offered).
                 "i2" -> "istt=1&biggenre=2"
                 "io" -> "istt=1&biggenre=3-4-99-98"
                 ALL_GENRES -> null

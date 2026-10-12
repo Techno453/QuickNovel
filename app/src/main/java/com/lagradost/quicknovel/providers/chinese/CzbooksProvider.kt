@@ -46,16 +46,14 @@ class CzbooksProvider : MainAPI() {
         "Completed (完本)" to "finish",
     )
 
-    /** Genres. The two adult categories (情色工口, 耽美工口) are left out on purpose. */
+    /**
+     * Genres. Left out on purpose: the two adult categories (情色工口, 耽美工口) and the romance ones
+     * (言情, 耽美, 百合, and 女性向 / 女生同人, which list romance and adult romance only).
+     */
     override val tags = listOf(
         "All genres" to "",
-        "Romance (言情)" to "yanqing",
         "Xuanhuan / fantasy (玄幻奇幻)" to "xuanhuan",
         "Wuxia / xianxia (武俠仙俠)" to "xianxia",
-        "BL / danmei (耽美)" to "danmei",
-        "GL (百合)" to "baihe",
-        "Female-oriented (女性向)" to "girl",
-        "Fan fiction, female (女生同人)" to "tongren",
         "Fan fiction, original (原創同人)" to "erciyuan",
         "History / military (軍事歷史)" to "lishi",
         "Sci-fi / future (科幻未來)" to "wangyou",

@@ -59,6 +59,7 @@ class IxdzsProvider : MainAPI() {
         "In genre: latest updates" to "genre:0-0",
     )
 
+    /** Genres. The romance ones (言情穿越 7, 耽美同人 8, 台言古言 9) are left out on purpose. */
     override val tags = listOf(
         "Xuanhuan (玄幻奇幻)" to "1",
         "Xianxia (修真仙侠)" to "2",
@@ -66,9 +67,6 @@ class IxdzsProvider : MainAPI() {
         "History / military (军事历史)" to "4",
         "Games (网游竞技)" to "5",
         "Sci-fi / supernatural (科幻灵异)" to "6",
-        "Romance / time travel (言情穿越)" to "7",
-        "BL / fan fiction (耽美同人)" to "8",
-        "Ancient romance (台言古言)" to "9",
         "Wuxia (武侠小说)" to "10",
         "Other (其他小说)" to "0",
     )
