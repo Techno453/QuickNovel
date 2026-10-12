@@ -20,7 +20,7 @@ object BrowseCatalog {
     /**
      * Label under a source card on the Browse home: what the provider's default listing is
      * called. The default is index 0 of every axis, so the first label that is not a bare "All"
-     * (a status or filter axis whose default means "no filter", as on JJWXC) wins; null when every
+     * (a status or filter axis whose default means "no filter") wins; null when every
      * axis is "All" or the source has no listings (the caller shows "Popular").
      */
     fun defaultRailLabel(source: Source): String? =

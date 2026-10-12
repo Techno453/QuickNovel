@@ -13,7 +13,6 @@ import com.lagradost.quicknovel.providers.AllNovelProvider
 import com.lagradost.quicknovel.providers.chinese.BiqugeProvider
 import com.lagradost.quicknovel.providers.chinese.IxdzsProvider
 import com.lagradost.quicknovel.providers.chinese.PiaotiaProvider
-import com.lagradost.quicknovel.providers.chinese.JjwxcProvider
 import com.lagradost.quicknovel.providers.chinese.CzbooksProvider
 import com.lagradost.quicknovel.providers.japanese.AlphapolisProvider
 import com.lagradost.quicknovel.providers.japanese.HamelnProvider
@@ -169,7 +168,6 @@ class Apis {
             AlphapolisProvider(),
             PixivNovelProvider(),
             NaverWebNovelProvider(),
-            JjwxcProvider(),
             CzbooksProvider(),
             HamelnProvider(),
         ).sortedBy { it.name }
