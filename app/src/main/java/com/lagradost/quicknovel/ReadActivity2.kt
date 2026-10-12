@@ -1,106 +1,54 @@
 package com.lagradost.quicknovel
 
 import android.animation.ObjectAnimator
-import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.content.res.ColorStateList
 import android.content.res.Configuration
-import android.content.res.Resources
-import android.graphics.Color
-import android.os.BatteryManager
-import android.os.Build
 import android.os.Bundle
-import android.speech.tts.Voice
 import android.view.KeyEvent
-import android.view.MotionEvent
-import android.view.View
-import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
-import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.LinearLayout
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.animation.doOnEnd
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.window.layout.FoldingFeature
-import androidx.window.layout.WindowInfoTracker
-import androidx.window.layout.WindowLayoutInfo
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.view.children
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.bottomsheet.BottomSheetBehavior
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.slider.Slider
-import com.jaredrummler.android.colorpicker.ColorPickerDialog
+import androidx.lifecycle.lifecycleScope
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
-import com.lagradost.quicknovel.CommonActivity.showToast
-import com.lagradost.quicknovel.DataStore.getKey
-import com.lagradost.quicknovel.TTSNotifications.TTS_NOTIFICATION_ID
-import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
-import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
-import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.observe
-import com.lagradost.quicknovel.mvvm.observeNullable
+import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.ui.CONFIG_COLOR
 import com.lagradost.quicknovel.ui.CONFIG_FONT
 import com.lagradost.quicknovel.ui.CONFIG_FONT_BOLD
-import com.lagradost.quicknovel.ui.OrientationType
-import com.lagradost.quicknovel.ui.ReadingType
-import com.lagradost.quicknovel.ui.ScrollIndex
-import com.lagradost.quicknovel.ui.ScrollVisibilityIndex
-import com.lagradost.quicknovel.ui.ScrollVisibilityItem
+import com.lagradost.quicknovel.util.toPx
 import com.lagradost.quicknovel.ui.TextAdapter
 import com.lagradost.quicknovel.ui.TextConfig
-import com.lagradost.quicknovel.ui.TextVisualLine
-import com.lagradost.quicknovel.ui.ViewHolderState
-import com.lagradost.quicknovel.translator.SecurePrefs
-import com.lagradost.quicknovel.util.Coroutines.ioSafe
+import com.lagradost.quicknovel.ui.TextInteraction
+import com.lagradost.quicknovel.ui.UiText
+import com.lagradost.quicknovel.ui.reader.ReaderChromeController
+import com.lagradost.quicknovel.ui.reader.ReaderGlossaryController
+import com.lagradost.quicknovel.ui.reader.ReaderLayoutController
+import com.lagradost.quicknovel.ui.reader.ReaderScrollController
+import com.lagradost.quicknovel.ui.reader.ReaderSettingsSheet
+import com.lagradost.quicknovel.ui.reader.ReaderTtsController
+import com.lagradost.quicknovel.ui.reader.paged.PagedReaderController
 import com.lagradost.quicknovel.util.GoogleTranslate
-import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
-import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
-import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
-import com.lagradost.quicknovel.util.UIHelper.getStatusBarHeight
-import com.lagradost.quicknovel.util.UIHelper.popupMenu
-import com.lagradost.quicknovel.util.UIHelper.systemFonts
-import com.lagradost.quicknovel.util.divCeil
-import com.lagradost.quicknovel.util.toPx
-import java.lang.Integer.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
-import java.util.Locale
-import kotlin.math.absoluteValue
-import kotlin.math.roundToInt
-import kotlin.properties.Delegates
-import com.google.android.material.tabs.TabLayout
-import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
-import com.lagradost.quicknovel.util.SubtitleHelper
-import com.lagradost.quicknovel.util.AdaptiveLayout
-import com.lagradost.quicknovel.util.AdaptiveLayout.adaptToWindow
-import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
-import kotlin.collections.map
-import com.lagradost.quicknovel.util.translation.models.TranslatorAgents
 
-class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
+/**
+ * The reader. This class only wires the collaborators together (see docs/reader.md):
+ * - [ReaderChromeController]: system bars, cutout, toolbar/bottom bar, clock/battery, orientation
+ * - [ReaderLayoutController]: text column padding/cap, density changes, tabletop posture
+ * - [ReaderScrollController]: the scrolling text list, position, TTS lock, overscroll, volume paging
+ * - [ReaderTtsController]: TTS buttons, status, sleep timer, media actions
+ * - [ReaderSettingsSheet]: the settings bottom sheet
+ * - [ReaderGlossaryController]: long-press / selection glossary lookup
+ * - [PagedReaderController]: the page-flip reading mode, shown instead of the scrolling list
+ */
+class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayoutController.Host {
     companion object {
         private var _readActivity: WeakReference<ReadActivity2>? = null
         var readActivity
@@ -110,142 +58,28 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
     }
 
-    private fun hideSystemUI() {
-
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, binding.readerContainer).let { controller ->
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes.layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        }
-
-        fun lowerBottomNav(v: View) {
-            v.translationY = 0f
-            ObjectAnimator.ofFloat(v, "translationY", v.height.toFloat()).apply {
-                duration = 200
-                start()
-            }.doOnEnd {
-                v.isVisible = false
-            }
-        }
-
-        lowerBottomNav(binding.readerBottomViewHolder)
-
-        binding.readToolbarHolder.translationY = 0f
-        ObjectAnimator.ofFloat(
-            binding.readToolbarHolder,
-            "translationY",
-            -binding.readToolbarHolder.height.toFloat()
-        ).apply {
-            duration = 200
-            start()
-        }.doOnEnd {
-            binding.readToolbarHolder.isVisible = false
-        }
-    }
-
-    private fun showSystemUI() {
-        WindowCompat.setDecorFitsSystemWindows(window, true)
-        WindowInsetsControllerCompat(
-            window,
-            binding.readerContainer
-        ).show(WindowInsetsCompat.Type.systemBars())
-
-        binding.readToolbarHolder.isVisible = true
-
-        fun higherBottomNavView(v: View) {
-            v.isVisible = true
-            v.translationY = v.height.toFloat()
-            ObjectAnimator.ofFloat(v, "translationY", 0f).apply {
-                duration = 200
-                start()
-            }
-        }
-
-        higherBottomNavView(binding.readerBottomViewHolder)
-
-        binding.readToolbarHolder.translationY = -binding.readToolbarHolder.height.toFloat()
-
-        ObjectAnimator.ofFloat(binding.readToolbarHolder, "translationY", 0f).apply {
-            duration = 200
-            start()
-        }
-    }
-
     lateinit var binding: ReadMainBinding
     private val viewModel: ReadActivityViewModel by viewModels()
 
-    private var _imageHolder: WeakReference<LinearLayout>? = null
-    var imageHolder
-        get() = _imageHolder?.get()
-        set(value) {
-            _imageHolder = WeakReference(value)
-        }
+    private lateinit var chrome: ReaderChromeController
+    private lateinit var layout: ReaderLayoutController
+    private lateinit var scroll: ReaderScrollController
+    private lateinit var tts: ReaderTtsController
+    private lateinit var settingsSheet: ReaderSettingsSheet
+    private lateinit var glossary: ReaderGlossaryController
+    private lateinit var paged: PagedReaderController
+
+    /** Reading mode "Pages": the paged display replaces the scrolling list. */
+    private val isPaged: Boolean get() = paged.isActive
+
+    private val textAdapter: TextAdapter get() = scroll.textAdapter
 
     override fun onColorSelected(dialog: Int, color: Int) {
-        when (dialog) {
-            0 -> setBackgroundColor(color)
-            1 -> setTextColor(color)
-        }
-    }
-
-    private fun setBackgroundColor(color: Int) {
-        viewModel.backgroundColor = color
-    }
-
-    private fun setTextColor(color: Int) {
-        viewModel.textColor = color
+        settingsSheet.onColorSelected(dialog, color)
     }
 
     override fun onDialogDismissed(dialog: Int) {
-        updateImages()
-    }
-
-    private fun updateImages() {
-        val bgColors = resources.getIntArray(R.array.readerBgColors)
-        val textColors = resources.getIntArray(R.array.readerTextColors)
-        val color = viewModel.backgroundColor
-        val colorPrimary = colorFromAttribute(R.attr.colorPrimary)
-        val colorPrim = ColorStateList.valueOf(colorPrimary)
-        val colorTrans = ColorStateList.valueOf(Color.TRANSPARENT)
-        var foundCurrentColor = false
-        val fullAlpha = 200
-        val fadedAlpha = 50
-
-        for ((index, imgHolder) in imageHolder?.children?.withIndex() ?: return) {
-            val img = imgHolder.findViewById<ImageView>(R.id.image1) ?: return
-
-            if (index == bgColors.size) { // CUSTOM COLOR
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    img.foregroundTintList = colorPrim
-                    img.foreground = ContextCompat.getDrawable(
-                        this,
-                        if (foundCurrentColor) R.drawable.ic_baseline_add_24 else R.drawable.ic_baseline_check_24
-                    )
-                }
-                img.imageAlpha = if (foundCurrentColor) fadedAlpha else fullAlpha
-                img.backgroundTintList =
-                    ColorStateList.valueOf(if (foundCurrentColor) Color.parseColor("#161616") else color)
-                continue
-            }
-
-            if ((color == bgColors[index] && viewModel.textColor == textColors[index])) {
-                foundCurrentColor = true
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    img.foregroundTintList = colorPrim
-                }
-                img.imageAlpha = fullAlpha
-            } else {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    img.foregroundTintList = colorTrans
-                }
-                img.imageAlpha = fadedAlpha
-            }
-        }
+        settingsSheet.onColorDialogDismissed()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -258,341 +92,37 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         // if we have the bottom bar up then we ignore the override functionality
         if (viewModel.bottomVisibility.isInitialized && viewModel.bottomVisibility.value == true) return false
 
-        when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (viewModel.isTTSRunning()) {
-                    viewModel.forwardsTTS()
-                    return true
-                } else if (viewModel.scrollWithVolume) {
-                    val bottomY = getBottomY()
-                    val lines = getAllLines()
-                    val line = lines.firstOrNull {
-                        it.bottom >= bottomY
-                    } ?: lines.lastOrNull() ?: return true
-                    binding.realText.scrollBy(0, line.top - getTopY())
-
-                    return true
-                }
+        val down = keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (tts.onVolumeKey(down)) return true
+        if (viewModel.scrollWithVolume) {
+            if (isPaged) {
+                if (down) paged.nextPage() else paged.previousPage()
+            } else {
+                if (down) scroll.pageDown() else scroll.pageUp()
             }
-
-            KeyEvent.KEYCODE_VOLUME_UP -> {
-                if (viewModel.isTTSRunning()) {
-                    viewModel.backwardsTTS()
-                    return true
-                } else if (viewModel.scrollWithVolume) {
-                    binding.realText.scrollBy(0, getTopY() - getBottomY())
-                    binding.realText.post {
-                        val lines = getAllLines()
-                        val topY = getTopY()
-                        val line = lines.firstOrNull {
-                            it.top >= topY
-                        } ?: return@post
-                        binding.realText.scrollBy(0, line.top - getTopY())
-                    }
-
-                    return true
-                }
-            }
+            return true
         }
-
         return false
     }
 
     private fun kill() {
-        with(NotificationManagerCompat.from(this)) { // KILLS NOTIFICATION
-            cancel(TTS_NOTIFICATION_ID)
-        }
+        tts.cancelNotification()
         finish()
     }
 
-    val mBatInfoReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(ctxt: Context?, intent: Intent) {
-            val batteryPct: Float = run {
-                val level: Int = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                val scale: Int = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                level * 100 / scale.toFloat()
-            }
-            binding.readBattery.text =
-                binding.readBattery.context?.getString(R.string.battery_format)
-                    ?.format(batteryPct.toInt())
-        }
-    }
-
-    private fun registerBattery() {
-        this.registerReceiver(mBatInfoReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-    }
-
     fun parseAction(input: TTSHelper.TTSActionType): Boolean {
-        return viewModel.parseAction(input)
-    }
-
-    private lateinit var textAdapter: TextAdapter
-    private lateinit var textLayoutManager: LinearLayoutManager
-
-    private fun transformIndexToScrollVisibilityItem(adapterPosition: Int): ScrollVisibilityItem {
-        return ScrollVisibilityItem(
-            adapterPosition = adapterPosition,
-            viewHolder = binding.realText.findViewHolderForAdapterPosition(adapterPosition),
-        )
-    }
-
-    private fun getTopY(): Int {
-        val outLocation = IntArray(2)
-        binding.readTopItem.getLocationInWindow(outLocation)
-        val (_, topY) = outLocation
-        return topY + binding.realText.paddingTop
-    }
-
-    private fun getBottomY(): Int {
-        val outLocation = IntArray(2)
-        binding.readBottomItem.getLocationInWindow(outLocation)
-        val (_, bottomY) = outLocation
-        return bottomY - max(
-            binding.realText.paddingBottom,
-            if (viewModel.showTime || viewModel.showBattery) binding.readOverlay.height else 0
-        )
-    }
-
-    /**
-
-    ________________
-    [ hello ]
-    -- screen cut --
-    [ world ]
-    [ ! ]
-    [ From kotlin ]
-    ________________
-
-    here the first index of "world" would be stored as it is the first whole line visible,
-    while "hello" would be stored as the first invisible line, this is used to scroll the exact char
-    you are on. so while rotating you would rotate to the first line that contains "world"
-
-    This is also used for TTS because TTS *must* start at the first visible whole sentence,
-    so in this case it would start at "From kotlin" because hello is not visible.
-     */
-
-    private fun getAllLines(): ArrayList<TextVisualLine> {
-        val lines: ArrayList<TextVisualLine> = arrayListOf()
-
-        for (i in textLayoutManager.findFirstVisibleItemPosition()..textLayoutManager.findLastVisibleItemPosition()) {
-            lines.addAll(textAdapter.getLines(transformIndexToScrollVisibilityItem(i)))
-        }
-        return lines
-    }
-
-    private fun postLines(lines: ArrayList<TextVisualLine>) {
-        if (lines.isEmpty()) {
-            return
-        }
-
-        val topY = getTopY()
-        val bottomY = getBottomY()
-
-        viewModel.onScroll(
-            ScrollVisibilityIndex(
-                firstInMemory = lines.first(),
-                lastInMemory = lines.last(),
-                firstFullyVisible = lines.firstOrNull {
-                    it.top >= topY
-                },
-                firstFullyVisibleUnderLine = lines.firstOrNull {
-                    it.top >= topBarHeight
-                },
-                lastHalfVisible = lines.firstOrNull {
-                    it.bottom >= bottomY
-                },
-            )
-        )
+        return tts.parseAction(input)
     }
 
     fun onScroll() {
-        postLines(getAllLines())
+        scroll.onScroll()
     }
-
-    private var cachedChapter: List<SpanDisplay> = emptyList()
-    private fun scrollToDesired() {
-        val desired: ScrollIndex = viewModel.desiredIndex ?: return
-        val adapterPosition =
-            cachedChapter.indexOfFirst { display -> display.index == desired.index && display.innerIndex == desired.innerIndex }
-        if (adapterPosition == -1) return
-
-        //val offset = 7.toPx
-        textLayoutManager.scrollToPositionWithOffset(adapterPosition, 1)
-
-        // don't inner-seek if zero because that is chapter break
-        if (desired.innerIndex == 0) return
-
-        binding.realText.post {
-            getAllLines().also { postLines(it) }.firstOrNull { line ->
-                line.index == desired.index && line.endChar >= desired.char
-            }?.let { line ->
-                //binding.tmpTtsStart2.fixLine(line.top)
-                //binding.tmpTtsEnd2.fixLine(line.bottom)
-                binding.realText.scrollBy(0, line.top - getTopY())
-            }
-        }
-
-        /*desired.firstVisibleChar?.let { visible ->
-                binding.realText.post {
-                    binding.realText.scrollBy(
-                        0,
-                        (textAdapter.getViewOffset(
-                            transformIndexToScrollVisibilityItem(adapterPosition),
-                            visible
-                        ) ?: 0) + offset
-                    )
-                }
-            }*/
-
-    }
-
-    private fun View.fixLine(offset: Int) {
-        // this.setPadding(0, 200, 0, 0)
-        val layoutParams =
-            this.layoutParams as FrameLayout.LayoutParams// FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,offset)
-        layoutParams.setMargins(0, offset, 0, 0)
-        this.layoutParams = layoutParams
-    }
-
-    var lockTop: Int? = null
-    var lockBottom: Int? = null
-    var currentScroll: Int = 0
-
-    private fun updateTTSLine(line: TTSHelper.TTSLine?, depth: Int = 0) {
-        // update the visual component
-        /*println("LINE: ${line?.speakOutMsg} =>")
-        line?.speakOutMsg?.codePoints()?.forEachOrdered {
-            println(">>" + String(intArrayOf(it), 0, 1) + "|" + it.toString())
-        }*/
-
-        textAdapter.updateTTSLine(line)
-        val first = textLayoutManager.findFirstVisibleItemPosition()
-        val last = textLayoutManager.findLastVisibleItemPosition()
-        textAdapter.notifyItemRangeChanged(first, last + 1 - first)
-        /*for (position in textLayoutManager.findFirstVisibleItemPosition()..textLayoutManager.findLastVisibleItemPosition()) {
-            val viewHolder = binding.realText.findViewHolderForAdapterPosition(position)
-            if (viewHolder !is TextAdapter.TextAdapterHolder) continue
-            viewHolder.updateTTSLine(line)
-        }*/
-
-        // update the lock area
-        if (line == null || !viewModel.ttsLock) {
-            lockTop = null
-            lockBottom = null
-            return
-        }
-
-        val lines = getAllLines()
-        postLines(lines)
-
-        val top = lines.firstOrNull { it.index == line.index && it.endChar > line.startChar }
-        val bottom =
-            lines.firstOrNull { it.index == line.index && it.startChar <= line.endChar && line.endChar <= it.endChar }
-
-        if (top == null || bottom == null) {
-            lockTop = null
-            lockBottom = null
-
-            // this should never happened as tts line must be valid
-            val innerIndex = viewModel.innerCharToIndex(line.index, line.startChar) ?: return
-
-            // scroll to the top of that line, first search the adapter
-            val adapterPosition =
-                cachedChapter.indexOfFirst { display -> display.index == line.index && display.innerIndex == innerIndex }
-
-            // if we tts out of bounds somehow? we scroll to that and refresh everything
-            if (adapterPosition == -1) {
-                viewModel.scrollToDesired(
-                    ScrollIndex(
-                        index = line.index,
-                        innerIndex = innerIndex,
-                        line.startChar
-                    )
-                )
-                return
-            }
-
-            if (depth < 3) {
-                textLayoutManager.scrollToPositionWithOffset(adapterPosition, 1)
-                textLayoutManager.postOnAnimation {
-                    updateTTSLine(line, depth = depth + 1)
-                }
-            }
-
-            return
-        }
-
-        val topScroll = top.top - getTopY()
-        lockTop = currentScroll + topScroll
-        val bottomScroll =
-            bottom.bottom - getBottomY()
-        lockBottom = currentScroll + bottomScroll
-
-        // binding.tmpTtsStart.fixLine(top.top)
-        //binding.tmpTtsEnd.fixLine(bottom.bottom)
-
-        // we have reached the end, scroll to the top
-        if (bottomScroll > 0) {
-            binding.realText.scrollBy(0, topScroll)
-        }
-        // we have scrolled up while being on top
-        else if (topScroll < 0) {
-            binding.realText.scrollBy(0, topScroll)
-        }
-    }
-
-    private var lastDensityDpi = 0
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         // we save this just in case the user fucks it up somehow
-        postDesired(binding.realText)
+        if (!isPaged) scroll.postDesired()
         super.onConfigurationChanged(newConfig)
-        // Foldables can change density between the cover and the inner screen; we handle that
-        // ourselves (manifest configChanges) so rebind the text so sp sizes use the new density.
-        if (lastDensityDpi != 0 && newConfig.densityDpi != lastDensityDpi) {
-            updateTextAdapterConfig()
-        }
-        lastDensityDpi = newConfig.densityDpi
-        // the new window width arrives with the next layout, see the realText layout listener
-        updatePadding()
-    }
-
-    /** Height of the lower half below a horizontal hinge in tabletop posture, 0 otherwise. */
-    private var tabletopLowerHeight = 0
-
-    /**
-     * Tabletop posture (foldable half opened with a horizontal hinge): keep the text in the
-     * upper half and leave the lower half to the controls and the settings sheet. No-op on
-     * devices without a folding feature.
-     */
-    private fun applyWindowLayout(info: WindowLayoutInfo) {
-        val fold = info.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull {
-            it.state == FoldingFeature.State.HALF_OPENED &&
-                    it.orientation == FoldingFeature.Orientation.HORIZONTAL
-        }
-        val root = binding.root
-        var lowerHeight = 0
-        if (fold != null && root.height > 0) {
-            val location = IntArray(2)
-            root.getLocationInWindow(location)
-            val foldTop = fold.bounds.top - location[1]
-            val foldBottom = fold.bounds.bottom - location[1]
-            if (foldTop > 0 && foldTop < root.height) {
-                lowerHeight = (root.height - foldBottom).coerceAtLeast(0)
-                binding.readNormalLayout.updateLayoutParams<FrameLayout.LayoutParams> {
-                    bottomMargin = root.height - foldTop
-                }
-            }
-        }
-        if (lowerHeight == 0) {
-            binding.readNormalLayout.updateLayoutParams<FrameLayout.LayoutParams> {
-                bottomMargin = 0
-            }
-        }
-        if (lowerHeight != tabletopLowerHeight) {
-            tabletopLowerHeight = lowerHeight
-            postDesired(binding.realText)
-        }
+        layout.onConfigurationChanged(newConfig)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -602,72 +132,32 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         super.onSaveInstanceState(outState)
     }
 
+    // ReaderLayoutController.Host
+    override fun onTextAreaChanged() {
+        if (isPaged) paged.refresh() else scroll.scrollToDesired()
+    }
+
+    override fun onDensityChanged() {
+        updateTextAdapterConfig()
+    }
+
+    override fun keepPositionAfterLayout() {
+        if (isPaged) binding.root.post { paged.refresh() } else scroll.postDesired()
+    }
+
     private fun updateOtherTextConfig(config: TextConfig) {
         config.setArgs(binding.loadingText, CONFIG_FONT or CONFIG_COLOR)
         config.setArgs(binding.readBattery, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readTimeClock, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
+        config.setArgs(binding.readPageNumber, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readLoadingBar)
     }
 
-    private fun updatePadding() {
-        val density = resources.displayMetrics.density
-        val userPad = (viewModel.paddingHorizontal * density).toInt()
-        val v = (viewModel.paddingVertical * density).toInt()
-        // Cap the line length on wide windows (foldable inner screen, tablets, landscape) by
-        // centring a column of at most maxTextWidth dp; never narrower than the user's margin.
-        val width = binding.realText.width.takeIf { it > 0 }
-            ?: (resources.configuration.screenWidthDp * density).toInt()
-        val h = AdaptiveLayout.centeredPadding(
-            widthPx = width,
-            userPaddingPx = userPad,
-            maxMeasurePx = (viewModel.maxTextWidth * density).toInt()
-        )
-        // keep the bottom actions and the clock/battery overlay aligned with the text column
-        val extra = h - userPad
-        val overlayPad = (10 * density).toInt() + extra
-        binding.readOverlay.apply {
-            if (paddingLeft != overlayPad || paddingRight != overlayPad) {
-                setPadding(overlayPad, paddingTop, overlayPad, paddingBottom)
-            }
-        }
-        for (bar in listOf(binding.readerBottomView, binding.readerBottomViewTts)) {
-            if (bar.paddingLeft != extra || bar.paddingRight != extra) {
-                bar.setPadding(extra, bar.paddingTop, extra, bar.paddingBottom)
-            }
-        }
-        binding.realText.apply {
-            if (paddingLeft == h && paddingRight == h && paddingBottom == v && paddingTop == v) return
-            setPadding(
-                h,
-                v,
-                h,
-                v
-            )
-            scrollToDesired()
-        }
-    }
-
-    @SuppressLint("NotifyDataSetChanged")
     private fun updateTextAdapterConfig() {
         // this did not work so I just rebind everything, it does not happend often so idc
-        textAdapter.notifyDataSetChanged()
+        scroll.rebindAll()
         updateOtherTextConfig(textAdapter.config)
-        /* binding.realText.apply {
-             for (idx in 0..childCount) {//textLayoutManager.findFirstVisibleItemPosition()..textLayoutManager.findLastVisibleItemPosition()) {
-                 val viewHolder = getChildViewHolder(getChildAt(idx) ?: continue) ?: continue
-                 if (viewHolder !is TextAdapter.TextAdapterHolder) continue
-                 viewHolder.setConfig(textAdapter.config)
-             }
-         }*/
-    }
-
-    private fun postDesired(view: View) {
-        val currentDesired = viewModel.desiredIndex
-        view.post {
-            viewModel.desiredIndex = currentDesired
-            scrollToDesired()
-            updateTTSLine(viewModel.ttsLine.value)
-        }
+        if (this::paged.isInitialized) paged.refresh()
     }
 
     override fun onResume() {
@@ -680,131 +170,29 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         super.onPause()
     }
 
-    /*private fun pendingPost() {
-        binding.readToolbarHolder.post {
-            val height = binding.readToolbarHolder.height
-            // height cant be 0
-            if(height == 0) {
-                pendingPost()
-                return@post
-            }
-
-            if(textAdapter.changeHeight(binding.readToolbarHolder.height + getStatusBarHeight())) {
-                updateTextAdapterConfig()
-            }
-        }
-    }*/
-    private fun showFonts() {
-        val builder =
-            AlertDialog.Builder(this, R.style.AlertDialogCustom).setView(R.layout.font_bottom_sheet)
-
-        val dialog = builder.create()
-        dialog.show()
-
-        val res = dialog.findViewById<RecyclerView>(R.id.sort_click)!!
-
-        val fonts = systemFonts
-        val items = listOf(FontFile(null)) + fonts.map { FontFile(it) }
-
-        val currentName = getKey(EPUB_FONT) ?: ""
-        val storingIndex = items.indexOfFirst { (it.file?.name ?: "") == currentName }
-
-        val adapter = FontAdapter(this, storingIndex) { file ->
-            viewModel.textFont = file.file?.name ?: ""
-            dialog.dismiss()
-        }
-        res.adapter = adapter
-        adapter.submitIncomparableList(items)
-        res.scrollToPosition(storingIndex)
-    }
-
-    /*  private fun updateTimeText() {
-          val string = if (viewModel.time12H) "hh:mm a" else "HH:mm"
-
-          val currentTime: String = SimpleDateFormat(string, Locale.getDefault()).format(Date())
-
-          binding.readTime.text = currentTime
-          binding.readTime.postDelayed({ -> updateTimeText() }, 1000)
-      }*/
-    private var topBarHeight by Delegates.notNull<Int>()
-
-
-    private var currentOverScrollValue = 0.0f
-
-    private fun setProgressOfOverscroll(index: Int, progress: Float) {
-        val id = generateId(5, index, 0, 0)
-        ((binding.realText.findViewHolderForItemId(id) as? ViewHolderState<*>)?.view as? SingleOverscrollChapterBinding)?.let {
-            it.progress.max = 10000
-            it.progress.progress = (progress.absoluteValue * 10000.0f).toInt()
-            it.progress.alpha = if (progress.absoluteValue > 0.05f) 1.0f else 0.0f
-        }
-    }
-
-    private var currentOverScroll: Float
-        get() = currentOverScrollValue
-        set(value) {
-            currentOverScrollValue = if (viewModel.readerType != ReadingType.OVERSCROLL_SCROLL) {
-                0.0f
-            } else {
-                val setTo = value.coerceIn(-1.0f, 1.0f)
-                if (setTo == 0.0f) {
-                    setProgressOfOverscroll(viewModel.currentIndex + 1, setTo)
-                    setProgressOfOverscroll(viewModel.currentIndex - 1, setTo)
-                    if (currentOverScrollValue > 0.9) {
-                        viewModel.seekToChapter(viewModel.currentIndex - 1)
-                    } else if (currentOverScrollValue < -0.9) {
-                        viewModel.seekToChapter(viewModel.currentIndex + 1)
-                    }
-                } else {
-                    setProgressOfOverscroll(
-                        viewModel.currentIndex + if (setTo < 0.0f) 1 else -1,
-                        setTo
-                    )
-                }
-                setTo
-            }
-            // binding.realText.alpha = (1.0f - currentOverScrollValue.absoluteValue)
-
-
-            //  val nextId = generateId(5, viewModel.currentIndex+1,0,0)
-            //  val prevId = generateId(5, viewModel.currentIndex-1,0,0)
-
-
-            // binding.realText.translationY =
-            //     overscrollMaxTranslation * currentOverScrollValue //alpha = (1.0f - currentOverScrollValue.absoluteValue)
-        }
-
     override fun onDestroy() {
-        viewModel.stopTTS()
-        this.unregisterReceiver(mBatInfoReceiver)
+        tts.onDestroy()
+        chrome.onDestroy()
         super.onDestroy()
     }
 
-    fun Slider.setValueRounded(value: Float) {
-        this.value = (value.coerceIn(this.valueFrom, this.valueTo) / this.stepSize).roundToInt()
-            .toFloat() * this.stepSize
-    }
-
-
-    @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         CommonActivity.loadThemes(this)
         super.onCreate(savedInstanceState)
         readActivity = this
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        fixSystemBarsPadding(binding.readerBottomViewHolder, padTop = false, overlayCutout = false)
-        fixSystemBarsPadding(binding.readToolbarHolder, padBottom = false, overlayCutout = false)
 
-        registerBattery()
+        chrome = ReaderChromeController(this, binding, viewModel)
+        chrome.onCreate()
 
         viewModel.init(intent, this)
-        topBarHeight = binding.readToolbarHolder.minimumHeight + getStatusBarHeight()
-        binding.readToolbarHolder.minimumHeight = topBarHeight
-        textAdapter = TextAdapter(
+        chrome.bind()
+
+        val textAdapter = TextAdapter(
             viewModel,
             TextConfig(
-                toolbarHeight = topBarHeight,
+                toolbarHeight = chrome.topBarHeight,
                 defaultFont = binding.readText.typeface,
                 textColor = viewModel.textColor,
                 textSize = viewModel.textSize,
@@ -819,52 +207,61 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         ).apply {
             setHasStableIds(true)
         }
+        scroll = ReaderScrollController(this, binding, viewModel, textAdapter) { chrome.topBarHeight }
+        layout = ReaderLayoutController(this, binding, viewModel, this)
+        tts = ReaderTtsController(this, binding, viewModel) { line ->
+            if (isPaged) paged.updateTTSLine(line) else scroll.updateTTSLine(line)
+        }
+        settingsSheet = ReaderSettingsSheet(this, viewModel) { layout.tabletopLowerHeight }
+        glossary = ReaderGlossaryController(this, viewModel)
+        paged = PagedReaderController(
+            this, binding, viewModel,
+            config = { textAdapter.config },
+            insets = {
+                PagedReaderController.insetsFor(
+                    h = layout.horizontalPadding.takeIf { it > 0 } ?: 20.toPx,
+                    v = layout.verticalPadding,
+                    density = resources.displayMetrics.density
+                )
+            },
+            onLongPress = { span, offset -> glossary.lookupAt(span.text, offset, span.index) }
+        )
+        textAdapter.interaction = object : TextInteraction {
+            override fun onLongPress(span: TextSpan, offset: Int): Boolean =
+                glossary.lookupAt(span.text, offset, span.index)
 
-        binding.readToolbar.apply {
-            setNavigationIcon(R.drawable.ic_baseline_arrow_back_24)
-            setNavigationOnClickListener {
-                this@ReadActivity2.onBackPressed()
-            }
+            override val selectionLookupEnabled: Boolean get() = glossary.isAvailable
+
+            override fun onSelectionLookup(span: TextSpan, start: Int, end: Int) =
+                glossary.lookupSelection(span.text, start, end, span.index)
         }
 
-        //updateTimeText()
-        fixPaddingStatusbar(binding.readToolbarHolder)
+        layout.bind()
+        bindTextConfig()
+        tts.bind()
+        bindToolbar()
+        bindVisibility()
+        bindLoadingStatus()
+        scroll.bind()
+        paged.bind()
 
-        observe(viewModel.paddingHorizontalLive) {
-            updatePadding()
+        // before the chapter observer, so the first chapter goes to the right display
+        observe(viewModel.readingModeLive) { mode ->
+            paged.setActive(mode == READING_MODE_PAGES)
         }
 
-        observe(viewModel.paddingVerticalLive) {
-            updatePadding()
+        //here inserted novel chapter text into recyclerview
+        observe(viewModel.chapter) { chapter ->
+            if (isPaged) paged.submit(chapter) else scroll.submit(chapter)
         }
 
-        observe(viewModel.maxTextWidthLive) {
-            updatePadding()
+        binding.readActionSettings.setOnClickListener {
+            settingsSheet.show()
         }
+    }
 
-        lastDensityDpi = resources.configuration.densityDpi
-        // Re-centre the text column whenever the window width changes (fold/unfold, split screen,
-        // rotation). scrollToDesired in updatePadding keeps the reading position.
-        binding.realText.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
-            if (right - left != oldRight - oldLeft) {
-                v.post { updatePadding() }
-            }
-        }
-
-        // foldable postures, see applyWindowLayout
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                WindowInfoTracker.getOrCreate(this@ReadActivity2)
-                    .windowLayoutInfo(this@ReadActivity2)
-                    .collect { info -> binding.root.post { applyWindowLayout(info) } }
-            }
-        }
-
-
-        //observe(viewModel.time12HLive) { time12H ->
-        //    binding.readTimeClock.is24HourModeEnabled = !time12H
-        //}
-
+    /** Font, size, colours, spacing: update the adapter's TextConfig and rebind. */
+    private fun bindTextConfig() {
         observe(viewModel.backgroundColorLive) { color ->
             binding.root.setBackgroundColor(color)
             binding.readOverlay.setBackgroundColor(color)
@@ -879,7 +276,6 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
         }
 
-
         observe(viewModel.bionicReadingLive) { color ->
             if (textAdapter.changeBionicReading(color)) {
                 updateTextAdapterConfig()
@@ -891,27 +287,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
         }
 
-        observe(viewModel.showBatteryLive) { show ->
-            binding.readBattery.isVisible = show
-            binding.readOverlay.isVisible = show && viewModel.showTime
-        }
-
-        observe(viewModel.showTimeLive) { show ->
-            binding.readTimeClock.isVisible = show
-            binding.readOverlay.isVisible = show && viewModel.showBattery
-        }
-
-        observe(viewModel.screenAwakeLive) { awake ->
-            if (awake)
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            else
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-
         observe(viewModel.textSizeLive) { size ->
             if (textAdapter.changeSize(size)) {
                 updateTextAdapterConfig()
-                postDesired(binding.realText)
+                scroll.postDesired()
             }
         }
 
@@ -926,53 +305,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 updateTextAdapterConfig()
             }
         }
+    }
 
-        textLayoutManager = LinearLayoutManager(binding.realText.context)
-
-        binding.ttsActionPausePlay.setOnClickListener {
-            viewModel.pausePlayTTS()
-        }
-
-        binding.ttsActionStop.setOnClickListener {
-            viewModel.stopTTS()
-        }
-
-        binding.readActionTts.setOnClickListener {
-            //scrollToDesired()
-            viewModel.startTTS()
-        }
-
-        binding.ttsActionForward.setOnClickListener {
-            viewModel.forwardsTTS()
-        }
-
-        binding.ttsActionBack.setOnClickListener {
-            viewModel.backwardsTTS()
-        }
-
-        observe(viewModel.orientationLive) { position ->
-            val org = OrientationType.fromSpinner(position)
-            requestedOrientation = org.flag
-            binding.readActionRotate.setImageResource(org.iconRes)
-
-            binding.readActionRotate.apply {
-                setOnClickListener {
-                    popupMenu(
-                        items = OrientationType.entries.map { it.prefValue to it.stringRes },
-                        selectedItemId = org.prefValue
-                    ) {
-                        viewModel.orientation = itemId
-                    }
-                }
-            }
-        }
-
-        observeNullable(viewModel.ttsLine) { line ->
-            updateTTSLine(line)
-        }
-
+    /** Title, chapter subtitle and the chapter list button. */
+    private fun bindToolbar() {
         observe(viewModel.title) { title ->
             binding.readToolbar.title = title
+            // the book is loaded: load its Story Bible for the long-press lookup
+            glossary.prepare()
         }
 
         observe(viewModel.chapterTile) { title ->
@@ -981,85 +321,64 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.chaptersTitles) { titles ->
             binding.readActionChapters.setOnClickListener {
-                val shouldTranslate = viewModel.book.isTranslatableSource() &&
-                    SecurePrefs.isGoogleTranslateTitlesEnabled(this)
+                showChapterList(titles)
+            }
+        }
+    }
 
-                fun showChapterDialog(displayTitles: List<String>) {
-                    val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
-                    val currentChapter = viewModel.desiredIndex?.index
-                    val validChapter =
-                        currentChapter != null && currentChapter >= 0 && currentChapter < displayTitles.size
-                    if (validChapter) {
-                        builderSingle.setTitle(displayTitles[currentChapter])
-                    } else {
-                        builderSingle.setTitle(R.string.select_chapter)
-                    }
+    private fun showChapterList(titles: List<UiText>) {
+        val shouldTranslate = viewModel.book.isTranslatableSource() &&
+                SecurePrefs.isGoogleTranslateTitlesEnabled(this)
 
-                    val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
-                    arrayAdapter.addAll(displayTitles)
+        fun showChapterDialog(displayTitles: List<String>) {
+            val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
+            val currentChapter = viewModel.desiredIndex?.index
+            val validChapter =
+                currentChapter != null && currentChapter >= 0 && currentChapter < displayTitles.size
+            if (validChapter) {
+                builderSingle.setTitle(displayTitles[currentChapter])
+            } else {
+                builderSingle.setTitle(R.string.select_chapter)
+            }
 
-                    builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
-                    builderSingle.setAdapter(arrayAdapter) { _, which ->
-                        viewModel.seekToChapter(which)
-                    }
+            val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
+            arrayAdapter.addAll(displayTitles)
 
-                    val dialog = builderSingle.create()
-                    dialog.show()
+            builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
+            builderSingle.setAdapter(arrayAdapter) { _, which ->
+                viewModel.seekToChapter(which)
+            }
 
-                    dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
-                    if (validChapter) {
-                        dialog.listView.setSelection(currentChapter)
-                        dialog.listView.setItemChecked(currentChapter, true)
-                    }
-                }
+            val dialog = builderSingle.create()
+            dialog.show()
 
-                if (shouldTranslate) {
-                    lifecycleScope.launch {
-                        val translated = withContext(Dispatchers.IO) {
-                            titles.map { title ->
-                                try { GoogleTranslate.translate(title.asString(this@ReadActivity2)) }
-                                catch (_: Exception) { title.asString(this@ReadActivity2) }
-                            }
-                        }
-                        showChapterDialog(translated)
-                    }
-                } else {
-                    showChapterDialog(titles.map { it.asString(this) })
-                }
+            dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
+            if (validChapter) {
+                dialog.listView.setSelection(currentChapter)
+                dialog.listView.setItemChecked(currentChapter, true)
             }
         }
 
-        /*binding.readToolbar.setOnMenuItemClickListener {
-            TimePickerDialog(
-                binding.readToolbar.context,
-                { _, hourOfDay, minute -> println("TIME PICKED: $hourOfDay , $minute") },
-                Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
-                Calendar.getInstance().get(Calendar.MINUTE),
-                true
-            )
-            true
-        }*/
-
-        observe(viewModel.ttsStatus) { status ->
-            val isTTSRunning = status != TTSHelper.TTSStatus.IsStopped
-
-            /*if (isTTSRunning) {
-                binding.readToolbar.inflateMenu(R.menu.sleep_timer)
-            } else {
-                binding.readToolbar.menu.clear()
-            }*/
-
-            binding.readerBottomView.isGone = isTTSRunning
-            binding.readerBottomViewTts.isVisible = isTTSRunning
-            binding.ttsActionPausePlay.setImageResource(
-                when (status) {
-                    TTSHelper.TTSStatus.IsPaused -> R.drawable.ic_baseline_play_arrow_24
-                    TTSHelper.TTSStatus.IsRunning -> R.drawable.ic_baseline_pause_24
-                    TTSHelper.TTSStatus.IsStopped -> R.drawable.ic_baseline_play_arrow_24
+        if (shouldTranslate) {
+            lifecycleScope.launch {
+                val translated = withContext(Dispatchers.IO) {
+                    titles.map { title ->
+                        try {
+                            GoogleTranslate.translate(title.asString(this@ReadActivity2))
+                        } catch (_: Exception) {
+                            title.asString(this@ReadActivity2)
+                        }
+                    }
                 }
-            )
+                showChapterDialog(translated)
+            }
+        } else {
+            showChapterDialog(titles.map { it.asString(this) })
         }
+    }
 
+    /** Tap to toggle the bars; the bars follow [ReadActivityViewModel.bottomVisibility]. */
+    private fun bindVisibility() {
         binding.apply {
             realText.setOnClickListener {
                 viewModel.switchVisibility()
@@ -1074,18 +393,20 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.bottomVisibility) { visibility ->
             if (visibility) {
-                showSystemUI()
+                chrome.showSystemUI()
                 // here we actually do not want to fix the tts bug, as it will cause a bad behavior
                 // when the text is very low
             } else {
-                hideSystemUI()
+                chrome.hideSystemUI()
                 // otherwise we have a shitty bug with tts locking range
                 binding.root.post {
-                    updateTTSLine(viewModel.ttsLine.value)
+                    if (!isPaged) scroll.updateTTSLine(viewModel.ttsLine.value)
                 }
             }
         }
+    }
 
+    private fun bindLoadingStatus() {
         var last: Resource<Boolean> = Resource.Loading() // very dirty
         observe(viewModel.loadingStatus) { loading ->
             val different = last != loading
@@ -1126,697 +447,6 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     binding.readNormalLayout.isVisible = false
                 }
             }
-        }
-
-        binding.realText.apply {
-            layoutManager = textLayoutManager
-            adapter = textAdapter
-            itemAnimator = null
-            // testing overscroll
-            setOnTouchListener { _, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_MOVE -> {
-                        if (event.historySize <= 1) return@setOnTouchListener false
-                        val start = event.getHistoricalY(0, event.historySize - 1)
-                        val end = event.getY(0)
-                        val dy = (end - start).div(Resources.getSystem().displayMetrics.density)
-                            .coerceIn(-1.5f, 1.5f)
-                        // if cant scroll in the direction then translate Y with the dy
-                        val translated = !canScrollVertically(-1) || !canScrollVertically(1)
-                        if (translated) {
-                            // * (maxScrollOver - currentOverScroll.absoluteValue))
-                            currentOverScroll += dy * 0.1f
-                        }
-
-                        // if we can scroll down then we cant translate down
-                        if (canScrollVertically(1) && currentOverScroll < 0.0f) {
-                            currentOverScroll = 0.0f
-                            return@setOnTouchListener false
-                        }
-
-                        // if we can scroll up then we cant translate up
-                        if (canScrollVertically(-1) && currentOverScroll > 0.0f) {
-                            currentOverScroll = 0.0f
-                            return@setOnTouchListener false
-                        }
-
-                        return@setOnTouchListener false
-                    }
-
-                    MotionEvent.ACTION_UP -> {
-                        currentOverScroll = 0.0f
-                    }
-
-                    else -> {}
-                }
-                return@setOnTouchListener false
-            }
-
-
-            addOnScrollListener(object :
-                RecyclerView.OnScrollListener() {
-                var updateFromCode = false
-                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    if (dy != 0 && !updateFromCode) {
-                        var rdy = dy
-
-                        lockTop?.let { lock ->
-                            if (currentScroll + rdy > lock) {
-                                rdy = lock - currentScroll
-                                fling(0, 0)
-                            }
-                        }
-
-                        lockBottom?.let { lock ->
-                            if (currentScroll + rdy < lock) {
-                                rdy = lock - currentScroll
-                                fling(0, 0)
-                            }
-                        }
-
-                        if (currentOverScroll < 0.0f && rdy < 0) {
-                            rdy = 0
-                        } else if (currentOverScroll > 0.0f && rdy > 0) {
-                            rdy = 0
-                        }
-                        /*println("currentOverScrollTranslation=$currentOverScrollTranslation rdy=$rdy")
-                        val dscroll = minOf(currentOverScrollTranslation.absoluteValue.toInt(), rdy.absoluteValue)
-                        if(currentOverScrollTranslation < 0 && rdy < 0) {
-                            currentOverScrollTranslation += dscroll
-                            rdy += dscroll
-                        }
-                        if(currentOverScrollTranslation > 0 && rdy > 0) {
-                            currentOverScrollTranslation -= dscroll
-                            rdy -= dscroll
-                        }*/
-
-                        currentScroll += dy
-                        val delta = rdy - dy
-                        if (delta != 0 && canScrollVertically(delta)) {
-                            //updateFromCode = true
-                            scrollBy(0, delta)
-                        }
-                    } else {
-                        updateFromCode = false
-                        onScroll()
-                    }
-
-                    super.onScrolled(recyclerView, dx, dy)
-
-                    // binding.tmpTtsEnd.fixLine((getBottomY()- remainingBottom) + 7.toPx)
-                    // binding.tmpTtsStart.fixLine(remainingTop + 7.toPx)
-
-                }
-
-                //this is to reduce onScroll calls
-                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
-                    super.onScrollStateChanged(recyclerView, newState)
-                    if(newState == RecyclerView.SCROLL_STATE_SETTLING || newState == RecyclerView.SCROLL_STATE_IDLE){
-                        onScroll()
-                    }
-                }
-            })
-
-        }
-
-        //here inserted novel chapter text into recyclerview
-        observe(viewModel.chapter) { chapter ->
-            cachedChapter = chapter.data
-
-            if (chapter.seekToDesired) {
-                textAdapter.submitIncomparableList(chapter.data) {
-                    viewModel._loadingStatus.postValue(Resource.Success(true))
-                    scrollToDesired()
-                    onScroll()
-                }
-            } else {
-                textAdapter.submitList(chapter.data) {
-                    viewModel._loadingStatus.postValue(Resource.Success(true))
-                    onScroll()
-                }
-            }
-        }
-
-        observeNullable(viewModel.ttsTimeRemaining) { time ->
-            if (time == null) {
-                binding.ttsStopTime.isVisible = false
-            } else {
-                binding.ttsStopTime.isVisible = true
-                binding.ttsStopTime.text =
-                    binding.ttsStopTime.context.getString(R.string.sleep_format_stop)
-                        .format(time.divCeil(60_000L))
-            }
-        }
-
-        binding.readActionSettings.setOnClickListener {
-            val bottomSheetDialog = BottomSheetDialog(this)
-
-            val binding = ReadBottomSettingsBinding.inflate(layoutInflater, null, false)
-            bottomSheetDialog.setContentView(binding.root)
-            // max width + expanded on wide/short windows (foldable inner screen, landscape)
-            bottomSheetDialog.adaptToWindow()
-            if (tabletopLowerHeight > 0) {
-                // tabletop: the sheet lives below the hinge
-                bottomSheetDialog.behavior.maxHeight = tabletopLowerHeight
-                bottomSheetDialog.behavior.skipCollapsed = true
-                bottomSheetDialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
-            }
-
-            //Create and Order tabs
-            val tabsToViews = listOf(
-                R.string.read_display_settings to binding.tabSettingsContainer,     // Tab 0 — Settings
-                R.string.tab_translation to binding.tabTranslationContainer,  // Tab 1 — Translation
-                R.string.tts_voice to binding.tabVoiceContainer,        // Tab 2 — Voice
-                R.string.read_text_size to binding.tabTextContainer,         // Tab 3 — Text
-            )
-            tabsToViews.forEachIndexed { index, (resId, view) ->
-                binding.readSettingsTabs.addTab(binding.readSettingsTabs.newTab().setText(resId))
-                view.isVisible = index == 0
-            }
-
-            // Show specific tab
-            binding.readSettingsTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab) {
-                    tabsToViews.forEachIndexed { index, (_, view) ->
-                        view.isVisible = index == tab.position
-                    }
-                }
-                override fun onTabUnselected(tab: TabLayout.Tab) {}
-                override fun onTabReselected(tab: TabLayout.Tab) {}
-            })
-
-            binding.readReadingType.setText(viewModel.readerType.stringRes)
-            binding.readReadingType.setOnLongClickListener {
-                it.popupMenu(items = listOf(1 to R.string.reset_value), selectedItemId = null) {
-                    if (itemId == 1) {
-                        binding.readReadingType.setText(ReadingType.DEFAULT.stringRes)
-                        viewModel.readerType = ReadingType.DEFAULT
-                    }
-                }
-                return@setOnLongClickListener true
-            }
-            binding.readReadingType.setOnClickListener {
-                it.popupMenu(
-                    items = ReadingType.entries.map { v -> v.prefValue to v.stringRes },
-                    selectedItemId = viewModel.readerType.prefValue
-                ) {
-                    val set = ReadingType.fromSpinner(itemId)
-                    binding.readReadingType.setText(set.stringRes)
-                    viewModel.readerType = set
-                }
-            }
-
-            binding.readSettingsTextSizeText.setOnClickListener {
-                it.popupMenu(items = listOf(1 to R.string.reset_value), selectedItemId = null) {
-                    if (itemId == 1) {
-                        viewModel.textSize = DEF_FONT_SIZE
-                        binding.readSettingsTextSize.setValueRounded(
-                            DEF_FONT_SIZE.toFloat()
-                        )
-                    }
-                }
-            }
-
-            binding.readSettingsTextSize.apply {
-                valueTo = 30.0f
-                valueFrom = 10.0f
-                setValueRounded((viewModel.textSize).toFloat())
-                addOnChangeListener { slider, value, fromUser ->
-                    viewModel.textSize = value.roundToInt()
-                }
-            }
-
-            binding.readSettingsTtsPitchText.setOnClickListener {
-                it.popupMenu(
-                    items = listOf(1 to R.string.reset_value),
-                    selectedItemId = null
-                ) {
-                    if (itemId == 1) {
-                        viewModel.ttsPitch = 1.0f
-                        binding.readSettingsTtsPitch.setValueRounded(viewModel.ttsPitch)
-                    }
-                }
-            }
-
-            binding.readSettingsTtsSpeedText.setOnClickListener {
-                it.popupMenu(
-                    items = listOf(1 to R.string.reset_value),
-                    selectedItemId = null
-                ) {
-                    if (itemId == 1) {
-                        viewModel.ttsSpeed = 1.0f
-                        binding.readSettingsTtsSpeed.setValueRounded(viewModel.ttsSpeed)
-                    }
-                }
-            }
-
-            binding.readSettingsTextVerticalPaddingText.setOnClickListener {
-                it.popupMenu(
-                    items = listOf(1 to R.string.reset_value),
-                    selectedItemId = null
-                ) {
-                    if (itemId == 1) {
-                        viewModel.textVerticalPadding = 7.5f
-                        binding.readSettingsTextVerticalPadding.setValueRounded(viewModel.textVerticalPadding)
-                    }
-                }
-            }
-
-            binding.readSettingsTtsPitch.apply {
-                setValueRounded(viewModel.ttsPitch)
-                addOnChangeListener { slider, value, fromUser ->
-                    viewModel.ttsPitch = value
-                }
-            }
-
-            binding.readSettingsTtsSpeed.apply {
-                setValueRounded(viewModel.ttsSpeed)
-                addOnChangeListener { slider, value, fromUser ->
-                    viewModel.ttsSpeed = value
-                }
-            }
-
-            binding.readSettingsTextPaddingText.setOnClickListener {
-                it.popupMenu(
-                    items = listOf(1 to R.string.reset_value),
-                    selectedItemId = null
-                ) {
-                    if (itemId == 1) {
-                        viewModel.paddingHorizontal = DEF_HORIZONTAL_PAD
-                        binding.readSettingsTextPadding.setValueRounded(DEF_HORIZONTAL_PAD.toFloat())
-                    }
-                }
-            }
-
-            binding.readSettingsTextPaddingTextTop.setOnClickListener {
-                it.popupMenu(
-                    items = listOf(1 to R.string.reset_value),
-                    selectedItemId = null
-                ) {
-                    if (itemId == 1) {
-                        viewModel.paddingVertical = DEF_VERTICAL_PAD
-                        binding.readSettingsTextPaddingTop.setValueRounded(DEF_VERTICAL_PAD.toFloat())
-                    }
-                }
-            }
-
-            binding.readSettingsTextPadding.apply {
-                valueTo = 50.0f
-                setValueRounded(viewModel.paddingHorizontal.toFloat())
-                addOnChangeListener { slider, value, fromUser ->
-                    viewModel.paddingHorizontal = value.roundToInt()
-                }
-            }
-
-            binding.readSettingsTextMaxWidth.apply {
-                fun label(value: Int) {
-                    binding.readSettingsTextMaxWidthText.text = getString(
-                        R.string.text_max_width_value,
-                        getString(R.string.text_max_width),
-                        if (value <= 0) getString(R.string.no_limit)
-                        else getString(R.string.text_max_width_dp, value)
-                    )
-                }
-                // right end of the slider = no limit (stored as 0)
-                setValueRounded(
-                    viewModel.maxTextWidth.takeIf { it > 0 }?.toFloat() ?: valueTo
-                )
-                label(viewModel.maxTextWidth)
-                setLabelFormatter { value ->
-                    if (value >= valueTo) getString(R.string.no_limit) else "${value.roundToInt()}"
-                }
-                addOnChangeListener { slider, value, fromUser ->
-                    val newWidth = if (value >= slider.valueTo) 0 else value.roundToInt()
-                    viewModel.maxTextWidth = newWidth
-                    label(newWidth)
-                }
-            }
-
-            binding.readSettingsTextMaxWidthText.setOnClickListener {
-                it.popupMenu(
-                    items = listOf(1 to R.string.reset_value),
-                    selectedItemId = null
-                ) {
-                    if (itemId == 1) {
-                        binding.readSettingsTextMaxWidth.setValueRounded(DEF_MAX_TEXT_WIDTH.toFloat())
-                    }
-                }
-            }
-
-            binding.readSettingsTextPaddingTop.apply {
-                valueTo = 50.0f
-                setValueRounded(viewModel.paddingVertical.toFloat())
-                addOnChangeListener { slider, value, fromUser ->
-                    viewModel.paddingVertical = value.roundToInt()
-                }
-            }
-
-            binding.readSettingsTextVerticalPadding.apply {
-                setValueRounded(viewModel.textVerticalPadding)
-                addOnChangeListener { slider, value, fromUser ->
-                    viewModel.textVerticalPadding = value
-                }
-            }
-
-
-            binding.readShowFonts.apply {
-                //text = UIHelper.parseFontFileName(getKey(EPUB_FONT))
-                setOnClickListener {
-                    showFonts()
-                }
-            }
-
-            binding.readSettingsTextFontText.setOnClickListener {
-                it.popupMenu(items = listOf(1 to R.string.reset_value), selectedItemId = null) {
-                    if (itemId == 1) {
-                        viewModel.textFont = ""
-                    }
-                }
-            }
-
-            binding.readMlTo.setOnClickListener { view ->
-                if (view == null) return@setOnClickListener
-                val context = view.context
-
-                val items = ReadActivityViewModel.MLSettings.mapList
-
-                context.showDialog(
-                    items.map { (key,value) ->
-                        "${SubtitleHelper.getFlagFromIso(key)} $value"
-                    },
-                    items.map { it.first }.indexOf(viewModel.mlToLanguage),
-                    context.getString(R.string.translate_to), false, {}
-                ) { index ->
-                    viewModel.mlToLanguage = items[index].first
-                    binding.readMlTo.text =
-                        ReadActivityViewModel.MLSettings.fromShortToDisplay(viewModel.mlToLanguage)
-                }
-            }
-
-            binding.readOnlineTranslationSwitch.isChecked = viewModel.currentAgent != TranslatorAgents.OFFLINE
-            binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
-                viewModel.mlTranslationAgent = if (isChecked) TranslatorAgents.ONLINE.name
-                else TranslatorAgents.OFFLINE.name
-
-                //Do not allow automatic detection of the target language; the user should know that themselves (they should know the name of their own language).
-                //It could probably be automated, but I have no idea.
-                if (isChecked == false && viewModel.mlFromLanguage == AUTO_LANG) {
-                    viewModel.mlFromLanguage = "en"
-                    binding.readMlFrom.text = ReadActivityViewModel.MLSettings.fromShortToDisplay("en")
-                }
-            }
-
-            binding.readMlFrom.setOnClickListener { view ->
-                if (view == null) return@setOnClickListener
-                val context = view.context
-
-                val items = if (viewModel.currentAgent != TranslatorAgents.OFFLINE) {
-                    ReadActivityViewModel.MLSettings.mapOnlineList
-                } else {
-                    ReadActivityViewModel.MLSettings.mapList
-                }
-
-
-                context.showDialog(
-                    items.map { (key,value) ->
-                        "${SubtitleHelper.getFlagFromIso(key)} $value"
-                    },
-                    items.map { item -> item.first }.indexOf(viewModel.mlFromLanguage),
-                    context.getString(R.string.translate_from), false, {}
-                ) { index ->
-                    viewModel.mlFromLanguage = items[index].first
-                    binding.readMlFrom.text =
-                        ReadActivityViewModel.MLSettings.fromShortToDisplay(viewModel.mlFromLanguage)
-                }
-            }
-
-            binding.readApplyTranslation.setOnClickListener { view ->
-                if (view == null) return@setOnClickListener
-                ioSafe {
-                    try {
-                        if (!viewModel.requireMLDownload()) {
-                            viewModel.applyMLSettings(false)
-                            runOnUiThread { bottomSheetDialog.dismiss() }
-                        } else {
-                            runOnUiThread {
-                                AlertDialog.Builder(view.context, R.style.AlertDialogCustom)
-                                    .setTitle(R.string.download_ml)
-                                    .setMessage(R.string.download_ml_long)
-                                    .setPositiveButton(R.string.download) { _, _ ->
-                                        viewModel.applyMLSettings(true)
-                                        bottomSheetDialog.dismiss()
-                                    }
-                                    .setNegativeButton(R.string.cancel, null)
-                                    .show()
-                            }
-                        }
-                    } catch (t: Throwable) {
-                        showToast(t.message ?: t.toString())
-                    }
-                }
-            }
-
-            binding.readMlTo.text =
-                ReadActivityViewModel.MLSettings.fromShortToDisplay(viewModel.mlToLanguage)
-            binding.readMlFrom.text =
-                ReadActivityViewModel.MLSettings.fromShortToDisplay(viewModel.mlFromLanguage)
-
-            val mlSettings = viewModel.mlSettings
-
-            if (mlSettings.isInvalid()) {
-                binding.readMlTitle.setText(R.string.google_translate)
-            } else {
-                binding.readMlTitle.text =
-                    "${binding.readMlTitle.context.getString(R.string.google_translate)} (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
-            }
-
-            binding.readLanguage.setOnClickListener { _ ->
-                ioSafe {
-                    val tts = viewModel.ttsSession?.requireTTS() ?: return@ioSafe
-
-                    runOnUiThread {
-                        val languages = mutableListOf<Locale?>(null).apply {
-                            addAll(tts.availableLanguages?.filterNotNull() ?: emptySet())
-                        }
-                        val ctx = binding.readLanguage.context ?: return@runOnUiThread
-                        ctx.showDialog(
-                            languages.map {
-                                it?.displayName ?: ctx.getString(R.string.default_text)
-                            },
-                            languages.indexOf(tts.voice?.locale),
-                            ctx.getString(R.string.tts_locale), false, {}
-                        ) { index ->
-                            viewModel.setTTSLanguage(languages.getOrNull(index))
-                        }
-                    }
-                }
-            }
-
-            binding.readLanguage.setOnLongClickListener {
-                it.popupMenu(items = listOf(1 to R.string.reset_value), selectedItemId = null) {
-                    if (itemId == 1) {
-                        viewModel.setTTSLanguage(null)
-                    }
-                }
-
-                return@setOnLongClickListener true
-            }
-
-            binding.readVoice.setOnLongClickListener {
-                it.popupMenu(items = listOf(1 to R.string.reset_value), selectedItemId = null) {
-                    if (itemId == 1) {
-                        viewModel.setTTSVoice(null)
-                    }
-                }
-
-                return@setOnLongClickListener true
-            }
-
-            binding.readSleepTimer.setOnClickListener { view ->
-                if (view == null) return@setOnClickListener
-                val context = view.context
-
-                val items =
-                    mutableListOf(
-                        context.getString(R.string.default_text) to 0L,
-                    )
-
-                for (i in 1L..120L) {
-                    items.add(
-                        context.getString(R.string.sleep_format).format(i.toInt()) to (i * 60000L)
-                    )
-                }
-
-                context.showDialog(
-                    items.map {
-                        it.first
-                    },
-                    items.map { it.second }.indexOf(viewModel.ttsTimer),
-                    context.getString(R.string.sleep_timer), false, {}
-                ) { index ->
-                    viewModel.ttsTimer = items[index].second
-                }
-            }
-
-            binding.readVoice.setOnClickListener {
-                ioSafe {
-                    val tts = viewModel.ttsSession?.requireTTS() ?: return@ioSafe
-
-                    runOnUiThread {
-                        val matchAgainst = tts.voice.locale
-                        val ctx = binding.readLanguage.context ?: return@runOnUiThread
-                        val voices =
-                            mutableListOf<Pair<String, Voice?>>(ctx.getString(R.string.default_text) to null).apply {
-                                val voices =
-                                    tts.voices.filter { it != null && it.locale == matchAgainst }
-                                        .map {
-                                            // ${"★".repeat(it.quality / 100) }
-                                            ("${it.name} ${
-                                                if (it.isNetworkConnectionRequired) {
-                                                    "(☁)"
-                                                } else {
-                                                    ""
-                                                }
-                                            }") to it
-                                        }
-
-                                addAll(voices.sortedBy { (name, _) -> name })
-                            }
-
-                        ctx.showDialog(
-                            voices.map { it.first },
-                            voices.map { it.second }.indexOf(tts.voice),
-                            ctx.getString(R.string.tts_locale), false, {}
-                        ) { index ->
-                            val voice = voices.getOrNull(index)?.second
-                            viewModel.setTTSVoice(voice)
-                        }
-                    }
-                }
-            }
-
-            binding.apply {
-                hardResetStream.isVisible = viewModel.canReload()
-                hardResetStream.setOnClickListener {
-                    showToast(getString(R.string.reload_chapter_format).format(""))
-                    viewModel.reloadChapter()
-                }
-
-                readSettingsScrollVol.isChecked = viewModel.scrollWithVolume
-                readSettingsScrollVol.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.scrollWithVolume = isChecked
-                }
-
-                readSettingsAuthorNotes.isChecked = viewModel.authorNotes
-                readSettingsAuthorNotes.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.authorNotes = isChecked
-                    viewModel.refreshChapters()
-                }
-
-                readSettingsShowBionic.isChecked = viewModel.bionicReading
-                readSettingsShowBionic.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.bionicReading = isChecked
-                }
-
-                readSettingsIsTextSelectable.isChecked = viewModel.isTextSelectable
-                readSettingsIsTextSelectable.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.isTextSelectable = isChecked
-                }
-
-                readSettingsLockTts.isChecked = viewModel.ttsLock
-                readSettingsLockTts.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.ttsLock = isChecked
-                }
-
-                readSettingsShowTime.isChecked = viewModel.showTime
-                readSettingsShowTime.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.showTime = isChecked
-                }
-
-                //readSettingsTwelveHourTime.isChecked = viewModel.time12H
-                //readSettingsTwelveHourTime.setOnCheckedChangeListener { _, isChecked ->
-                //    viewModel.time12H = isChecked
-                //}
-
-                readSettingsShowBattery.isChecked = viewModel.showBattery
-                readSettingsShowBattery.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.showBattery = isChecked
-                }
-
-                readSettingsKeepScreenActive.isChecked = viewModel.screenAwake
-                readSettingsKeepScreenActive.setOnCheckedChangeListener { _, isChecked ->
-                    viewModel.screenAwake = isChecked
-                }
-
-            }
-
-            val bgColors = resources.getIntArray(R.array.readerBgColors)
-            val textColors = resources.getIntArray(R.array.readerTextColors)
-
-            imageHolder = binding.readSettingsColors
-            for ((newBgColor, newTextColor) in bgColors zip textColors) {
-                ColorRoundCheckmarkBinding.inflate(
-                    layoutInflater,
-                    binding.readSettingsColors,
-                    true
-                ).image1.apply {
-                    backgroundTintList = ColorStateList.valueOf(newBgColor)
-                    //foregroundTintList = ColorStateList.valueOf(newTextColor)
-                    setOnClickListener {
-                        viewModel.backgroundColor = newBgColor
-                        viewModel.textColor = newTextColor
-                        updateImages()
-                    }
-                }
-            }
-
-            ColorRoundCheckmarkBinding.inflate(
-                layoutInflater,
-                binding.readSettingsColors,
-                true
-            ).image1.apply {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    foreground =
-                        ContextCompat.getDrawable(this.context, R.drawable.ic_baseline_add_24)
-                }
-
-                setOnClickListener {
-                    val builder: AlertDialog.Builder = AlertDialog.Builder(this.context)
-                    builder.setTitle(getString(R.string.reading_color))
-
-                    val colorAdapter =
-                        ArrayAdapter<String>(this.context, R.layout.chapter_select_dialog)
-                    val array = arrayListOf(
-                        getString(R.string.background_color),
-                        getString(R.string.text_color)
-                    )
-                    colorAdapter.addAll(array)
-
-                    builder.setPositiveButton(R.string.ok) { dialog, _ ->
-                        dialog.dismiss()
-                        updateImages()
-                    }
-
-                    builder.setAdapter(colorAdapter) { _, which ->
-                        ColorPickerDialog.newBuilder()
-                            .setDialogId(which)
-                            .setColor(
-                                when (which) {
-                                    0 -> viewModel.backgroundColor
-                                    1 -> viewModel.textColor
-                                    else -> 0
-                                }
-                            )
-                            .show(readActivity ?: return@setAdapter)
-                    }
-
-                    builder.show()
-                    updateImages()
-                }
-            }
-            updateImages()
-
-            bottomSheetDialog.show()
         }
     }
 }

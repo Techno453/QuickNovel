@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="reader_glossary_action" type="id" />
+    <item name="reader_touch_x" type="id" />
+    <item name="reader_touch_y" type="id" />
+</resources>

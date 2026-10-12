@@ -1,12 +1,17 @@
 package com.lagradost.quicknovel.ui
 
+import android.annotation.SuppressLint
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
+import android.view.ActionMode
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -261,12 +266,27 @@ data class TextConfig(
     }
 }
 
+/** Long-press and selection hooks of the reader text (glossary lookup). */
+interface TextInteraction {
+    /** Long-press at [offset] (relative to [span]); return true if handled. */
+    fun onLongPress(span: TextSpan, offset: Int): Boolean
+
+    /** Whether the selection menu should offer the "Glossary" item. */
+    val selectionLookupEnabled: Boolean
+
+    /** "Glossary" chosen for the selection [start, end) of [span]. */
+    fun onSelectionLookup(span: TextSpan, start: Int, end: Int)
+}
+
 class TextAdapter(
     private val viewModel: ReadActivityViewModel,
     var config: TextConfig
 ) :
     NoStateAdapter<SpanDisplay>(DiffCallback()) {
     private var currentTTSLine: TTSHelper.TTSLine? = null
+
+    /** Set by the reader; null = long-press does nothing (selection as before). */
+    var interaction: TextInteraction? = null
 
     fun changeHeight(height: Int): Boolean {
         if (config.toolbarHeight == height) return false
@@ -659,6 +679,7 @@ class TextAdapter(
             }
 
             is SingleTextBinding -> {
+                bindTextInteraction(binding.root, obj, config)
                 binding.root.apply {
                     // this is set to fix the nonclick https://stackoverflow.com/questions/8641343/android-clickablespan-not-calling-onclick
                     text = if (config.bionicReading) {
@@ -692,6 +713,62 @@ class TextAdapter(
             }
 
             else -> {}
+        }
+    }
+
+    /**
+     * Glossary lookup hooks: with selectable text, a "Glossary" item in the selection menu;
+     * otherwise long-press looks up the word under the finger. Nothing is drawn in the text.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun bindTextInteraction(textView: TextView, obj: TextSpan, config: TextConfig) {
+        val hooks = interaction
+        if (hooks == null) {
+            textView.setOnLongClickListener(null)
+            textView.isLongClickable = config.isTextSelectable
+            textView.customSelectionActionModeCallback = null
+            return
+        }
+        if (config.isTextSelectable) {
+            // the TextView's own long-press selects; add our item to its menu
+            textView.setOnLongClickListener(null)
+            textView.customSelectionActionModeCallback = object : ActionMode.Callback {
+                override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                    if (hooks.selectionLookupEnabled) {
+                        menu.add(Menu.NONE, R.id.reader_glossary_action, 0, R.string.reader_glossary_action)
+                    }
+                    return true
+                }
+
+                override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
+
+                override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                    if (item.itemId != R.id.reader_glossary_action) return false
+                    val start = minOf(textView.selectionStart, textView.selectionEnd)
+                    val end = maxOf(textView.selectionStart, textView.selectionEnd)
+                    if (start >= 0 && end > start) hooks.onSelectionLookup(obj, start, end)
+                    mode.finish()
+                    return true
+                }
+
+                override fun onDestroyActionMode(mode: ActionMode) {}
+            }
+        } else {
+            textView.customSelectionActionModeCallback = null
+            textView.setOnTouchListener { v, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    v.setTag(R.id.reader_touch_x, event.x)
+                    v.setTag(R.id.reader_touch_y, event.y)
+                }
+                false
+            }
+            textView.setOnLongClickListener { v ->
+                val x = v.getTag(R.id.reader_touch_x) as? Float ?: return@setOnLongClickListener false
+                val y = v.getTag(R.id.reader_touch_y) as? Float ?: return@setOnLongClickListener false
+                val offset = (v as TextView).getOffsetForPosition(x, y)
+                if (offset < 0 || offset >= v.text.length) return@setOnLongClickListener false
+                hooks.onLongPress(obj, offset)
+            }
         }
     }
 

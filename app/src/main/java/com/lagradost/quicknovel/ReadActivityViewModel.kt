@@ -114,397 +114,6 @@ import java.util.concurrent.TimeoutException
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
-const val DEF_FONT_SIZE: Int = 14
-const val DEF_HORIZONTAL_PAD: Int = 20
-const val DEF_VERTICAL_PAD: Int = 0
-const val DEF_MAX_TEXT_WIDTH: Int = com.lagradost.quicknovel.util.AdaptiveLayout.DEFAULT_READER_MEASURE_DP
-
-class PreferenceDelegate<T : Any>(
-    val key: String, val default: T, private val klass: KClass<T>
-) {
-    // simple cache to make it not get the key every time it is accessed, however this requires
-    // that ONLY this changes the key
-    private var cache: T? = null
-
-    operator fun getValue(self: Any?, property: KProperty<*>) =
-        cache ?: getKeyClass(key, klass.java).also { newCache -> cache = newCache } ?: default
-
-    operator fun setValue(
-        self: Any?,
-        property: KProperty<*>,
-        t: T?
-    ) {
-        cache = t
-        if (t == null) {
-            removeKey(key)
-        } else {
-            setKeyClass(key, t)
-        }
-    }
-}
-
-class PreferenceDelegateLiveView<T : Any>(
-    val key: String, val default: T, klass: KClass<T>, private val _liveData: MutableLiveData<T>
-) {
-    // simple cache to make it not get the key every time it is accessed, however this requires
-    // that ONLY this changes the key
-    private var cache: T
-
-    init {
-        cache = getKeyClass(key, klass.java) ?: default
-        _liveData.postValue(cache)
-    }
-
-    operator fun getValue(self: Any?, property: KProperty<*>) = cache
-
-    operator fun setValue(
-        self: Any?,
-        property: KProperty<*>,
-        t: T?
-    ) {
-        cache = t ?: default
-        _liveData.postValue(cache)
-        if (t == null) {
-            removeKey(key)
-        } else {
-            setKeyClass(key, t)
-        }
-    }
-}
-
-abstract class AbstractBook {
-    open fun resolveUrl(url: String): String {
-        return url
-    }
-
-    abstract val canReload: Boolean
-
-    abstract fun size(): Int
-    abstract fun title(): String
-    abstract fun getChapterTitle(index: Int): UiText
-    abstract fun getLoadingStatus(index: Int): String?
-
-    @Throws
-    open fun loadImage(image: String): InputStream? = null
-
-    fun loadImageBitmap(image: String): Bitmap? {
-        return try {
-            // read file and not save
-            val stream = this.loadImage(image)
-            return if (stream != null) {
-                 BookDownloader2Helper.decodeSafeBitmap(data = stream.readBytes())
-            }
-            else null
-        } catch (t: Throwable) {
-            logError(t)
-            null
-        }
-    }
-
-    @WorkerThread
-    @Throws
-    abstract suspend fun getChapterData(index: Int, reload: Boolean): String
-
-    abstract fun expand(last: String): Boolean
-
-    @WorkerThread
-    @Throws
-    protected abstract suspend fun posterBytes(): ByteArray?
-
-    private var poster: Bitmap? = null
-
-    init {
-        ioSafe {
-            poster = posterBytes()?.let { byteArray ->
-                BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
-            }
-        }
-    }
-
-    fun poster(): Bitmap? {
-        return poster
-    }
-
-    abstract fun author(): String?
-
-    /** Returns true if this book comes from a translatable (zh/ja/ko) source. */
-    open fun isTranslatableSource(): Boolean = false
-
-    /** Chapters whose text was last served from the AI translation DB (or translated on demand). */
-    val aiTranslatedChapters: MutableSet<Int> = ConcurrentHashMap.newKeySet()
-
-    /** Translator novel id ("apiName/novelName") for translatable sources, else null. */
-    open fun translatorNovelId(): String? = null
-
-    /** The reader moved to chapter [index]: keep the next chapters translated (read-ahead mode). */
-    fun onChapterOpened(index: Int) {
-        val ctx = context ?: return
-        val novelId = translatorNovelId() ?: return
-        ReadAheadScheduler.onChapterOpened(ctx, novelId, index)
-    }
-}
-
-class QuickBook(val data: QuickStreamData) : AbstractBook() {
-    override fun resolveUrl(url: String): String {
-        return Apis.getApiFromNameNull(data.meta.apiName)?.fixUrl(url) ?: url
-    }
-
-    override fun author(): String? {
-        return data.meta.author
-    }
-
-    override fun isTranslatableSource(): Boolean =
-        TranslationLanguages.isTranslatableApi(data.meta.apiName)
-
-    override fun translatorNovelId(): String? =
-        if (isTranslatableSource()) TranslatorNovelId.from(data.meta.apiName, data.meta.name).also {
-            // Lets the read-ahead worker find the chapter list without reloading the novel page.
-            NovelChapterSource.remember(it, data.meta.apiName, data.meta.name, data.meta.author, data.data)
-        } else null
-
-    /** Toast once when the reader's on-demand path runs the automatic analysis. */
-    private val analysisListener = object : NovelAnalyzer.Listener {
-        @Volatile
-        private var announced = false
-        override fun onProgress(stage: NovelAnalyzer.Stage, current: Int, total: Int) {
-            if (!announced) {
-                announced = true
-                showToast(R.string.analysis_reader_started)
-            }
-        }
-    }
-
-    override val canReload = true
-
-    override fun size(): Int {
-        return data.data.size
-    }
-
-    override fun title(): String {
-        return data.meta.name
-    }
-
-    override fun getChapterTitle(index: Int): UiText {
-        return data.data[index].name.toUiText()
-    }
-
-    override fun getLoadingStatus(index: Int): String {
-        return data.data[index].url
-    }
-
-    override suspend fun getChapterData(index: Int, reload: Boolean): String {
-        val ctx = context ?: throw ErrorLoadingException("Invalid context")
-
-        // Translatable (zh/ja/ko) sources: stored AI translation, or on-demand translation if enabled
-        val sourceLang = TranslationLanguages.langOfApi(data.meta.apiName)
-        if (sourceLang != null && !reload) {
-            val novelId = TranslatorNovelId.from(data.meta.apiName, data.meta.name)
-            ChapterTranslationRepository.getOrTranslate(
-                ctx, novelId, index, sourceLang,
-                chapterCount = data.data.size,
-                // Before the novel's first translation, the first chapters are analyzed (once).
-                fetchChapter = { i -> data.data.getOrNull(i)?.let { ctx.getQuickChapter(data.meta, it, i, false)?.html } },
-                analysisListener = analysisListener,
-            ) {
-                ctx.getQuickChapter(data.meta, data.data[index], index, false)?.html
-            }?.let { aiTranslatedChapters += index; return it }
-        }
-        aiTranslatedChapters -= index
-
-        return ctx.getQuickChapter(
-            data.meta,
-            data.data[index],
-            index,
-            reload
-        )?.html ?: throw ErrorLoadingException("Error loading chapter")
-    }
-
-    override fun expand(last: String): Boolean {
-        try {
-            val elements =
-                Jsoup.parse(last).allElements.filterNotNull()
-
-            for (element in elements) {
-                val href = element.attr("href") ?: continue
-
-                val text =
-                    element.ownText().replace(Regex("[\\[\\]().,|{}<>]"), "").trim()
-                if (text.equals("next", true) || text.equals(
-                        "next chapter",
-                        true
-                    ) || text.equals("next part", true)
-                ) {
-                    val name = RedditProvider.getName(href) ?: "Next"
-                    data.data.add(ChapterData(name, href, null, null))
-                    return true
-                }
-            }
-        } catch (e: Exception) {
-            logError(e)
-        }
-        return false
-    }
-
-    override suspend fun posterBytes(): ByteArray? {
-        val poster = data.poster
-        if (poster != null) {
-            try {
-                return MainActivity.app.get(poster).okhttpResponse.body.bytes()
-            } catch (t: Throwable) {
-                logError(t)
-            }
-        }
-        return null
-    }
-}
-
-class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBook() {
-    private val allTocReferences: List<TOCReference>
-    init {
-        val flatTOC = mutableListOf<TOCReference>()
-        fun flatten(refs: List<TOCReference>) {
-            refs.forEach { ref ->
-                //this variable is to corrupted epubs
-                val isValid = data.spine.getResourceIndex(ref.resource) != -1
-                if(isValid){
-                    flatTOC.add(ref)
-                    if (ref.children != null && ref.children.isNotEmpty()) {
-                        flatten(ref.children)
-                    }
-                }
-            }
-        }
-        flatten(data.tableOfContents.tocReferences)
-
-        //this is to corrupted epubs
-        allTocReferences = if (flatTOC.size <= 1) {
-            data.spine.spineReferences
-                .filter { it.isLinear }
-                .mapIndexed { index, spineRef ->
-                    val res = spineRef.resource
-                    TOCReference(res.title ?: "Chapter ${index + 1}", res)
-                }
-        } else {
-            flatTOC
-        }
-    }
-
-    override val canReload = false
-
-    // novelId is only set when opened from the translation pipeline (zh/ja/ko source)
-    override fun isTranslatableSource(): Boolean = novelId != null
-
-    override fun translatorNovelId(): String? = novelId
-
-    override fun author(): String? {
-        val author = data.metadata.authors.firstOrNull() ?: return null
-        return listOfNotNull(author.firstname, author.lastname).joinToString(" ").ifBlank { null }
-    }
-
-    override fun loadImage(image: String): InputStream? {
-        val decodedImage = try { URLDecoder.decode(image, "UTF-8") } catch (e: Exception) { image }
-        val res = data.resources.resourceMap[decodedImage]
-            ?: data.resources.resourceMap[image]
-        return res?.inputStream
-    }
-
-    override fun size(): Int = allTocReferences.size
-
-    override fun title(): String = data.title ?: "Unknown Book"
-
-    override fun getChapterTitle(index: Int): UiText {
-        return allTocReferences.getOrNull(index)?.title?.toUiText()
-            ?: txt(R.string.chapter_format, (index + 1).toString())
-    }
-
-    override fun getLoadingStatus(index: Int): String? = null
-
-    override suspend fun getChapterData(index: Int, reload: Boolean): String {
-        // Check if a translation exists in the Room DB for this chapter
-        if (novelId != null && !reload) {
-            val ctx = context
-            if (ctx != null) {
-                ChapterTranslationRepository.getCached(ctx, novelId, index)?.let { aiTranslatedChapters += index; return it }
-            }
-        }
-        aiTranslatedChapters -= index
-
-        val start = allTocReferences[index].resource
-        val startIdx = data.spine.getResourceIndex(start)
-
-        val end = allTocReferences.getOrNull(index + 1)?.resource
-        var endIdx = data.spine.getResourceIndex(end)
-        if (endIdx == -1) {
-            endIdx = data.spine.spineReferences.size
-        }
-        val builder = StringBuilder()
-
-        for (i in startIdx until endIdx) {
-            try {
-                val ref = data.spine.spineReferences[i]
-
-                // I have no idea, but nonlinear = stop?
-                if (!ref.isLinear && i != startIdx) continue
-
-                val html = ref.resource.reader.readText()
-                val doc = Jsoup.parse(html)
-                val basePath = ref.resource.href.substringBeforeLast("/", "")
-
-                doc.select("img, image").forEach { img ->
-                    val attrName = if (img.tagName() == "image") "xlink:href" else "src"
-                    var src = img.attr(attrName)
-                    if (src.isNotEmpty() && !src.startsWith("http") && !src.startsWith("data:")) {
-                        try {
-                            val decodedSrc = URLDecoder.decode(src, "UTF-8")
-                            src = resolveRelativePath(basePath, decodedSrc)
-                        } catch (e: Throwable) {
-                            logError(e)
-                        }
-                    }
-                    if (img.tagName() == "image") {
-                        val newImg = doc.createElement("img")
-                        newImg.attr("src", src)
-                        img.replaceWith(newImg)
-                    } else {
-                        img.attr("src", src)
-                    }
-                }
-
-                builder.append(doc.body().html())
-            } catch (t: Throwable) {
-                logError(t)
-            }
-        }
-        return builder.toString()
-    }
-
-    private fun resolveRelativePath(basePath: String, relativePath: String): String {
-        val cleanRelative = relativePath.substringBefore("?").substringBefore("#")
-
-        val fullPath = if (cleanRelative.startsWith("/") || basePath.isEmpty()) {
-            cleanRelative
-        } else {
-            "$basePath/$cleanRelative"
-        }
-
-        val parts = fullPath.split("/")
-        val resolvedParts = ArrayDeque<String>()
-
-        for (part in parts) {
-            when (part) {
-                "", "." -> continue
-                ".." -> if (resolvedParts.isNotEmpty()) resolvedParts.removeLast()
-                else -> resolvedParts.addLast(part)
-            }
-        }
-        return resolvedParts.joinToString("/")
-    }
-
-    override fun expand(last: String): Boolean = false
-
-    override suspend fun posterBytes(): ByteArray? = data.coverImage?.data
-}
-
 class MLException(cause: Throwable) : Exception(cause)
 
 data class LiveChapterData(
@@ -528,12 +137,16 @@ data class LiveChapterData(
     }
 }
 
+const val EPUB_READING_MODE: String = "reader_reading_mode"
+const val READING_MODE_SCROLL = 0
+const val READING_MODE_PAGES = 1
+
 data class ChapterUpdate(
     val data: ArrayList<SpanDisplay>,
     val seekToDesired: Boolean
 )
 
-class ReadActivityViewModel : ViewModel() {
+class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreferenceStore() {
     lateinit var book: AbstractBook
     private lateinit var markwon: Markwon
     private var isInApp: Boolean = true
@@ -572,6 +185,10 @@ class ReadActivityViewModel : ViewModel() {
     fun canReload(): Boolean {
         return book.canReload
     }
+
+    /** Translator novel id of the open book (zh/ja/ko sources), null before load or otherwise. */
+    fun translatorNovelIdOrNull(): String? =
+        if (this::book.isInitialized) book.translatorNovelId() else null
 
 
     var mlSettings
@@ -831,7 +448,8 @@ class ReadActivityViewModel : ViewModel() {
         val cIndex = currentIndex
         val chapters = ArrayList<SpanDisplay>()
         val canReload = this.book.canReload
-        when (readerType) {
+        // pages always use the continuous window; the scroll types only apply to the scroll view
+        when (if (pagedMode) ReadingType.DEFAULT else readerType) {
             ReadingType.DEFAULT, ReadingType.INF_SCROLL -> {
                 for (idx in cIndex - chapterPaddingBottom..cIndex + chapterPaddingTop) {
                     if (idx < chaptersTitlesInternal.size && idx >= 0)
@@ -1044,97 +662,14 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
-    private fun hashString(text: ByteArray): String {
-        val digest = MessageDigest.getInstance("MD5").digest(text)
-        val sb = StringBuilder()
-        for (b in digest) {
-            sb.append(String.format("%02x", b))
-        }
-        return sb.toString()
-    }
-
-    private fun getFinalTranslatedText(spans: ArrayList<TextSpan>, translatedLines: List<String>):Pair<SpannableStringBuilder, ArrayList<TextSpan>>{
-        val builder = SpannableStringBuilder()
-        val out = ArrayList<TextSpan>()
-        spans.forEachIndexed { i, originalSpan ->
-            val hasImage = originalSpan.text.getSpans<AsyncDrawableSpan>().isNotEmpty()
-            val finalText =
-                if (hasImage)
-                    originalSpan.text
-                else
-                    (translatedLines.getOrNull(i)?: return@forEachIndexed).toSpanned()
-            val start = builder.length
-            builder.append(finalText)
-            val end = builder.length
-            builder.append('\n')
-            out.add(TextSpan(finalText, start, end, originalSpan.index, originalSpan.innerIndex))
-        }
-        return builder to out
-    }
-
+    private val mlTranslator by lazy { MlChapterTranslator(translationManager) }
 
     @Throws(MLException::class)
     private suspend fun translate(
         text: Spanned,
         spans: ArrayList<TextSpan>,
         loading: suspend (Triple<Int, Int, Int>) -> Unit
-    ): Pair<Spanned, ArrayList<TextSpan>> {
-        try {
-            val currentSettings = mlSettings
-            if (spans.isEmpty() || currentSettings.isInvalid()) return text to spans
-            val textHash = hashString(
-                text.trim().toString().toByteArray()
-            )
-            val agentSuffix = currentSettings.agent.title.ifEmpty { TranslatorAgents.OFFLINE.title }
-
-            //the file
-            val filePrefix = "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.$agentSuffix"
-
-            // read from cache if it exists
-            // we assume that parseTextToSpans is equivalent from restoring from the builder
-            // aka out == parseTextToSpans(builder)
-            val cachedData = safe {
-                context?.cacheDir?.let { dir ->
-                    val cache = File(dir, "$filePrefix.txt")
-                    if (cache.exists()) {
-                        Log.i(TAG, "Cache exists for $filePrefix")
-                        val lines = cache.readLines()
-                        val (builder, out) = getFinalTranslatedText(spans, lines)
-                        return@safe builder to out
-                    }
-                }
-                return@safe null
-            }
-            if(cachedData != null) return cachedData
-
-
-            val translatedList = translationManager.translate(
-                textList = spans.map { it.text.toString() },
-                from = currentSettings.from,
-                to = currentSettings.to,
-                agent = currentSettings.agent,
-                progress = { progress, total ->
-                    loading.invoke(Triple(spans[0].index, progress, total))
-                }
-            )
-
-            val (builder, out) = getFinalTranslatedText(spans, translatedList)
-
-            // atomically write the file by rename
-            safe {
-                context?.cacheDir?.let {
-                    val cache = File(it, "$filePrefix.tmp")
-                    cache.writeText(builder.toString())
-                    safe { File(it, "$filePrefix.txt").delete() } // just in case
-                    cache.renameTo(File(it, "$filePrefix.txt"))
-                }
-            }
-
-            return builder to out
-        } catch (t: Throwable) {
-            throw MLException(t)
-        }
-    }
+    ): Pair<Spanned, ArrayList<TextSpan>> = mlTranslator.translate(mlSettings, text, spans, loading)
 
     @Throws
     suspend fun requireMLDownload(): Boolean {
@@ -1854,11 +1389,37 @@ class ReadActivityViewModel : ViewModel() {
             updateReadArea(seekToDesired = true)
         }
 
+    /** Reading mode: [READING_MODE_SCROLL] (default) or [READING_MODE_PAGES], see PagedReaderController. */
+    val readingModeLive: MutableLiveData<Int> = MutableLiveData(null)
+    private var readingModeInternal by PreferenceDelegateLiveView(
+        EPUB_READING_MODE, READING_MODE_SCROLL, Int::class, readingModeLive
+    )
 
-    var scrollWithVolume by PreferenceDelegate(EPUB_SCROLL_VOL, true, Boolean::class)
-    var authorNotes by PreferenceDelegate(EPUB_AUTHOR_NOTES, true, Boolean::class)
-    var ttsLock by PreferenceDelegate(EPUB_TTS_LOCK, true, Boolean::class)
-    //var ttsOSSpeed by PreferenceDelegate(EPUB_TTS_OS_SPEED, true, Boolean::class)
+    var readingMode: Int
+        get() = readingModeInternal
+        set(value) {
+            if (value == readingModeInternal) return
+            readingModeInternal = value
+            if (this::book.isInitialized) updateReadArea(seekToDesired = true)
+        }
+
+    val pagedMode: Boolean get() = readingModeInternal == READING_MODE_PAGES
+
+    /**
+     * Paged mode: the user turned to a page starting at [position] (char -1 = the chapter's
+     * title page). Same bookkeeping as [onScroll] for the scrolling view.
+     */
+    fun onPagedPosition(position: ScrollIndex) {
+        if (position.index !in chaptersTitlesInternal.indices) return
+        val current = currentIndex
+        desiredTTSIndex = position
+        changeIndex(position)
+        if (current != position.index) updateReadArea()
+        updateIndex(position.index)
+    }
+
+
+    // scrollWithVolume, authorNotes, ttsLock: see ReaderPreferences
 
     private var ttsSpeedKey by PreferenceDelegate(EPUB_TTS_SET_SPEED, 1.0f, Float::class)
     private var ttsPitchKey by PreferenceDelegate(EPUB_TTS_SET_PITCH, 1.0f, Float::class)
@@ -1878,121 +1439,11 @@ class ReadActivityViewModel : ViewModel() {
         }
 
 
-    val textFontLive: MutableLiveData<String> = MutableLiveData(null)
-    var textFont by PreferenceDelegateLiveView(EPUB_FONT, "", String::class, textFontLive)
-    val textSizeLive: MutableLiveData<Int> = MutableLiveData(null)
-    var textSize by PreferenceDelegateLiveView(
-        EPUB_TEXT_SIZE,
-        DEF_FONT_SIZE,
-        Int::class,
-        textSizeLive
-    )
-
-    val bionicReadingLive: MutableLiveData<Boolean> = MutableLiveData(null)
-    var bionicReading by PreferenceDelegateLiveView(
-        EPUB_TEXT_BIONIC,
-        false,
-        Boolean::class,
-        bionicReadingLive
-    )
-
-    val isTextSelectableLive: MutableLiveData<Boolean> = MutableLiveData(null)
-    var isTextSelectable by PreferenceDelegateLiveView(
-        EPUB_TEXT_SELECTABLE,
-        false,
-        Boolean::class,
-        isTextSelectableLive
-    )
-
-    val orientationLive: MutableLiveData<Int> = MutableLiveData(null)
-    var orientation by PreferenceDelegateLiveView(
-        EPUB_LOCK_ROTATION,
-        OrientationType.DEFAULT.prefValue,
-        Int::class, orientationLive
-    )
-
-    val textColorLive: MutableLiveData<Int> = MutableLiveData(null)
-    var textColor by PreferenceDelegateLiveView(
-        EPUB_TEXT_COLOR, "#cccccc".toColorInt(), Int::class, textColorLive
-    )
-
-    val textVerticalPaddingLive: MutableLiveData<Float> = MutableLiveData(null)
-    var textVerticalPadding by PreferenceDelegateLiveView(
-        EPUB_TEXT_VERTICAL_PADDING, 7.5f, Float::class, textVerticalPaddingLive
-    )
-
-    val backgroundColorLive: MutableLiveData<Int> = MutableLiveData(null)
-    var backgroundColor by PreferenceDelegateLiveView(
-        EPUB_BG_COLOR, "#292832".toColorInt(), Int::class, backgroundColorLive
-    )
-
-    val showBatteryLive: MutableLiveData<Boolean> = MutableLiveData(null)
-    var showBattery by PreferenceDelegateLiveView(
-        EPUB_HAS_BATTERY, true, Boolean::class, showBatteryLive
-    )
-
-    val showTimeLive: MutableLiveData<Boolean> = MutableLiveData(null)
-    var showTime by PreferenceDelegateLiveView(
-        EPUB_HAS_TIME, true, Boolean::class, showTimeLive
-    )
-
-    val paddingHorizontalLive: MutableLiveData<Int> = MutableLiveData(null)
-    var paddingHorizontal by PreferenceDelegateLiveView(
-        EPUB_TEXT_PADDING, DEF_HORIZONTAL_PAD, Int::class, paddingHorizontalLive
-    )
-
-    val paddingVerticalLive: MutableLiveData<Int> = MutableLiveData(null)
-    var paddingVertical by PreferenceDelegateLiveView(
-        EPUB_TEXT_PADDING_TOP, DEF_VERTICAL_PAD, Int::class, paddingVerticalLive
-    )
-
-    /** Max width of the text column in dp, centred on wide windows (foldables, tablets). 0 = no limit. */
-    val maxTextWidthLive: MutableLiveData<Int> = MutableLiveData(null)
-    var maxTextWidth by PreferenceDelegateLiveView(
-        EPUB_TEXT_MAX_WIDTH, DEF_MAX_TEXT_WIDTH, Int::class, maxTextWidthLive
-    )
-
-    //val time12HLive: MutableLiveData<Boolean> = MutableLiveData(null)
-    //var time12H by PreferenceDelegateLiveView(
-    //    EPUB_TWELVE_HOUR_TIME, false, Boolean::class, time12HLive
-    //)
-
-    val screenAwakeLive: MutableLiveData<Boolean> = MutableLiveData(null)
-    var screenAwake by PreferenceDelegateLiveView(
-        EPUB_KEEP_SCREEN_ACTIVE, true, Boolean::class, screenAwakeLive
-    )
-
-    // in milliseconds
-    val ttsTimerLive: MutableLiveData<Long> = MutableLiveData(null)
-    var ttsTimer by PreferenceDelegateLiveView(
-        EPUB_SLEEP_TIMER, 0, Long::class, ttsTimerLive
-    )
+    // text, colour, layout and TTS timer preferences: see ReaderPreferences
 
     val ttsTimeRemaining: MutableLiveData<Long?> = MutableLiveData(null)
 
-    val mlFromLanguageLive: MutableLiveData<String> = MutableLiveData(null)
-    var mlFromLanguage by PreferenceDelegateLiveView(
-        EPUB_ML_FROM_LANGUAGE,
-        TranslateLanguage.ENGLISH,
-        String::class,
-        mlFromLanguageLive
-    )
-
-    val mlToLanguageLive: MutableLiveData<String> = MutableLiveData(null)
-    var mlToLanguage by PreferenceDelegateLiveView(
-        EPUB_ML_TO_LANGUAGE,
-        TranslateLanguage.ENGLISH,
-        String::class,
-        mlToLanguageLive
-    )
-
-    val mlTranslationAgentLive: MutableLiveData<String> = MutableLiveData(TranslatorAgents.OFFLINE.name)
-    var mlTranslationAgent by PreferenceDelegateLiveView(
-        "ml_translation_agent",
-        TranslatorAgents.OFFLINE.name,
-        String::class,
-        mlTranslationAgentLive
-    )
+    // machine translation languages and agent: see ReaderPreferences
     val currentAgent get() = try { TranslatorAgents.valueOf(mlTranslationAgent) } catch (e: Exception) { TranslatorAgents.OFFLINE }
     /*
    // Moved up to ensure correct initialization order. Having it lower caused a race condition  // where the default 'false' value was loaded before the actual saved preference.
