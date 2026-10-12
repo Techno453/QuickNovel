@@ -69,9 +69,11 @@ translated into English with an LLM:
 - **Translated search**: search queries are translated into each provider's language, and titles
   and synopses can be shown in English (Google Translate).
 
-It needs your own API key for any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter,
-a local server, …); chapter text is only sent to that endpoint. Set the key, base URL, model and the
-consistency options under **Settings → AI Translation**. See
+It needs your own API key. Under **Settings → AI Translation** pick a model preset (default
+GPT-6 Luna, about $0.20–0.30 per 100 chapters; GPT-6 Sol for the best quality; Gemini, DeepSeek,
+Qwen and OpenRouter options) or any OpenAI-compatible endpoint (a local server, …), plus an
+optional fallback model for passages a provider's content filter blocks. Chapter text is only
+sent to those endpoints. See
 [docs/translation-models.md](docs/translation-models.md) for model choice and cost, and
 [docs/translation-bench.md](docs/translation-bench.md) for the translation quality benchmark.
 

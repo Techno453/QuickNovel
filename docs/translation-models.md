@@ -24,6 +24,12 @@ thinking turned off or at its lowest setting. Input tokens depend on the tokeniz
 So a Chinese chapter costs about 5,400 input tokens on OpenAI, 6,400 on Claude and
 3,800 on DeepSeek. Output dominates cost for every model.
 
+The app's estimate (`CostEstimator`, shown in the model picker and the Translate dialog) uses
+the same model: input = chars × tokens-per-char of the model's tokenizer + 1,000 + 120 per
+Story Bible term (at most 2,000); output = 0.9 × chars × the o200k ratio (about 4,000 tokens
+for 4,500 Chinese characters); × 1.15 with strict consistency mode on. It runs 25–50% above
+what the benchmark measured, so treat it as an upper bound.
+
 User target: **at most $3–5 per 100 chapters** (≤ $0.03–0.05 per chapter).
 
 ## Cost per chapter (Chinese source), cheapest first
@@ -95,8 +101,18 @@ Korean web novels.
 | Qwen | data_inspection_failed on input or output | non-retryable, fall back |
 | Kimi | content_filter 400; temperature must equal its fixed value | do not send temperature |
 | GLM | error 1301 or finish_reason "sensitive"; temperature 0–1 only | treat as a block |
-| OpenAI, Claude | soften explicit sex and violence; Claude 4.7+ rejects temperature < 1 and top_p ≠ 0.99 through the OpenAI-compatible layer | omit temperature; detect summarised output |
+| OpenAI, Claude | soften explicit sex and violence; Claude 4.7+ rejects temperature < 1 and top_p ≠ 0.99 through the OpenAI-compatible layer; Claude Haiku 5.5 refuses some chapters outright (see below) | omit temperature; detect summarised output |
 | All | omissions grow with chunk size; glossary entries sometimes ignored; paragraphs skipped | small chunks, adherence check, paragraph-count check, strict retry |
+
+The app implements the "fall back to another model" column: with a **Fallback model** set
+(Settings → AI Translation, off by default), a passage is re-translated once with the fallback
+when the provider's content filter blocks it (DeepSeek "Content Exists Risk", Qwen
+`data_inspection_failed`, Kimi `content_filter`, Z.ai 1301 / `finish_reason: "sensitive"`,
+Gemini prohibited content or any finish reason other than stop/length, OpenAI
+`content_filter`), or when the output looks like a refusal (fewer than half the source
+paragraphs and "I can't", "I cannot", "unable to", "copyright" or "I won't" in the first 300
+characters). Chapters that used it are counted in the completion summary and flagged in the
+database (`used_fallback`, with the model(s) actually used).
 
 ## OpenAI-compatible base URLs
 
@@ -106,27 +122,66 @@ Korean web novels.
 | Anthropic | https://api.anthropic.com/v1/ | compatibility layer is "not production-ready"; no prompt caching; thinking on by default |
 | Google | https://generativelanguage.googleapis.com/v1beta/openai/ | reasoning_effort maps to thinking level; cannot be off on Gemini 3 |
 | DeepSeek | https://api.deepseek.com | thinking on by default; send reasoning_effort "none" or thinking type "disabled" |
-| Alibaba Qwen | https://dashscope-us.aliyuncs.com/compatible-mode/v1 (US) or region-specific | keys are region-locked; enable_thinking via extra body |
+| Alibaba Qwen | https://dashscope-intl.aliyuncs.com/compatible-mode/v1 (international, used by the app preset); dashscope-us or region-specific hosts otherwise | keys are region-locked; enable_thinking via extra body |
 | Moonshot Kimi | https://api.moonshot.ai/v1 | fixed temperature; thinking type "disabled" on k2.6 |
 | Z.ai GLM | https://api.z.ai/api/paas/v4 | temperature 0–1 |
 | xAI | https://api.x.ai/v1 | reasoning models reject penalty and stop parameters |
 | Mistral | https://api.mistral.ai/v1 | random_seed instead of seed; keep safe_prompt false |
 | OpenRouter | https://openrouter.ai/api/v1 | model IDs are org/model; unified "reasoning" parameter; unsupported params silently ignored |
 
-## Recommendations, pending the benchmark
+## Benchmark results (2026-10-11)
 
-- **Cheapest acceptable, Chinese:** DeepSeek Flash with thinking off (strongest zh evidence
-  among cheap models, about $0.30–0.60 per 100 chapters) or Qwen 3.8 Flash. Both can refuse
-  politically sensitive text, so keep a fallback model configured.
-- **Cheapest acceptable, Japanese and Korean:** Gemini 3.1 Flash-Lite (about $0.71) if the
-  content is tame; otherwise gpt-6-luna, Claude Haiku 5.5 or gpt-5-mini ($0.25–0.93). None of
-  these has a published CJK literary benchmark yet.
-- **Balanced:** gpt-5-mini, DeepSeek V4 Pro off-peak, or Qwen 3.7 Plus ($0.8–1.1 per 100).
-- **Best quality at the edge of the target:** gpt-6-sol with reasoning off, or Claude Sonnet 5.5
-  ($5.1–5.3 per 100). Gemini 3.1 Pro for Japanese only if moderation is not a problem.
-- **Local and free:** Qwen3-32B roughly matches Google Translate on Chinese and 14B is usable,
-  but it needs a PC with 16–24 GB of VRAM serving an OpenAI-compatible endpoint (Ollama or
-  LM Studio). Not realistic on the phone itself.
+In-repo benchmark (`translation-bench.md`): 16 models, one ~3,000-character chapter each of
+Chinese (斗破苍穹), Japanese (無職転生) and Korean (빙의가 체질), the app's real engine with a
+Story Bible, reasoning off or lowest. Cost is measured, scaled to 100 chapters of 4,500
+characters (bible pre-pass included).
+
+| Model (reasoning) | Judge | Adherence % | Para fidelity | Refusals | Latency s | $/100 ch |
+|---|---|---|---|---|---|---|
+| gpt-6-sol (none) | 8.44 | 100 | 1.00 | 0 | 20.6 | 3.73 |
+| gpt-6-luna (none) | 8.11 | 100 | 1.00 | 0 | 16.8 | 0.19 |
+| gpt-4o | 8.11 | 97 | 0.99 | 0 | 11.5 | 3.82 |
+| gemini-3.1-flash-lite (thinking off) | 8.00 | 100 | 0.98 | 0 | 7.9 | 0.57 |
+| gpt-6.1-sol (low) | 8.00 | 100 | 1.00 | 0 | 35.4 | 3.86 |
+| gpt-5.6-terra (none) | 8.00 | 100 | 1.00 | 0 | 20.0 | 4.47 |
+| gpt-5.4-mini (none) | 7.89 | 100 | 1.00 | 0 | 11.6 | 1.69 |
+| qwen3.8-flash (off) | 7.78 | 100 | 1.00 | 0 | 38.8 | 0.19 |
+| kimi-k2.6 (off) | 7.67 | 97 | 0.96 | 0 | 46.2 | 1.25 |
+| deepseek-v4.1-flash (off) | 7.56 | 100 | 1.00 | 0 | 12.6 | 0.26 |
+| mistral-small-2603 | 7.11 | 91 | 0.86 | 0 | 18.9 | 0.18 |
+| gpt-4o-mini | 7.11 | 97 | 0.97 | 0 | 13.6 | 0.23 |
+| glm-5.3-flash (low) | 7.11 | 97 | 1.00 | 0 | 31.8 | 0.32 |
+| claude-sonnet-5.5 (low) | 7.00 | 97 | 1.00 | 0 | 23.5 | 5.81 |
+| gpt-5-mini (minimal) | 6.33 | 100 | 0.99 | 0 | 10.4 | 0.64 |
+| claude-haiku-5.5 (off) | 4.56 | 91 | 0.67 | 2 | 13.4 | 0.22 |
+
+Non-OpenAI models ran through OpenRouter's default route.
+
+- **Claude Haiku 5.5 refused** the Chinese and Korean samples, citing copyright, and abridged
+  what it did return (paragraph fidelity 0.67). It is not offered as a preset.
+- **Judge bias:** the judge was gpt-6-luna, a small OpenAI model scoring its own family and
+  larger models. Treat judge differences under ~0.5 as ties and lean on the objective columns
+  (adherence, leaks, paragraph fidelity, refusals) and on reading the outputs.
+- Every model except Haiku, Mistral Small and Kimi kept ≥ 0.98 paragraph fidelity; glossary
+  adherence was 97–100% for all but Mistral Small and Haiku (91%). With the Story Bible in the
+  prompt, terminology is no longer what separates models; fluency and price are.
+
+## Recommendations
+
+| Use | Model (app preset) | ≈ $/100 ch measured | Notes |
+|---|---|---|---|
+| **Default** | gpt-6-luna, reasoning none | 0.19 | Second-best judge score, 100% adherence, cheapest OpenAI model. Default for new installs. |
+| **Quality** | gpt-6-sol, reasoning none | 3.73 | Best judge score; inside the $3–5 target. |
+| Fast / cheap alternative | gemini-3.1-flash-lite, lowest thinking | 0.57 | Fastest (7.9 s/chapter), judge 8.0. Gemini's PROHIBITED_CONTENT block cannot be disabled, so mature novels may fail; keep a fallback. |
+| Cheapest, Chinese-trained | deepseek-flash (thinking disabled) or qwen3.8-flash (enable_thinking false) | 0.19–0.26 | DeepSeek is half price off-peak but rejects politically sensitive text; Qwen is slow (39 s/chapter) and its keys are region-locked. |
+| Fallback | gemini-3.1-flash-lite (cheap) or gpt-6-sol (quality) | — | Off by default. Pick a model from a different provider than the main one, so the same filter does not block it twice. |
+| Not recommended | gpt-5.4-mini, gpt-4o, gpt-4o-mini, claude-sonnet-5.5, claude-haiku-5.5 | | 5.4-mini costs 9× Luna for a lower score; 4o costs 20× Luna for the same score; 4o-mini scores lower; Sonnet is over budget and scored 7.0; Haiku refuses. |
+
+Each preset is also available through OpenRouter (one key for all providers, with
+`reasoning: {enabled: false}`), except Claude Sonnet, which is offered direct only. Local and
+free: Qwen3-32B roughly matches Google Translate on Chinese and 14B is usable, but it needs a PC
+with 16–24 GB of VRAM serving an OpenAI-compatible endpoint (Ollama or LM Studio); use the
+**Custom** model option.
 
 ## Unverified items
 
