@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Scrolls on short screens (e.g. a foldable's cover screen) now that the dialog has more rows. -->
+<!-- Translate chapters: range, estimate, when (now / overnight), glossary. Scrolls on short screens
+     (a foldable's cover screen). Styles in styles_translate.xml. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
@@ -8,26 +10,22 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingStart="24dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="From: "
-            android:textColor="?attr/textColor" />
+        android:orientation="horizontal">
 
         <com.google.android.material.textfield.TextInputLayout
+            style="@style/TranslateTextField"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+            android:hint="@string/tr_dialog_from">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/range_from"
@@ -36,19 +34,13 @@
                 android:inputType="number" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:text="To: "
-            android:textColor="?attr/textColor" />
-
         <com.google.android.material.textfield.TextInputLayout
+            style="@style/TranslateTextField"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+            android:hint="@string/tr_dialog_to">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/range_to"
@@ -60,44 +52,26 @@
 
     <TextView
         android:id="@+id/range_available"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textSize="13sp"
-        android:textColor="?attr/grayTextColor" />
+        style="@style/TranslateNote" />
 
     <TextView
         android:id="@+id/already_translated"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textSize="13sp"
-        android:textColor="?attr/grayTextColor"
+        style="@style/TranslateNote"
         android:visibility="gone" />
 
     <TextView
         android:id="@+id/chapters_to_translate"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textSize="14sp"
-        android:textColor="?attr/textColor" />
+        style="@style/TranslateBody"
+        android:layout_marginTop="12dp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/estimated_cost"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textSize="13sp"
-        android:textColor="?attr/grayTextColor" />
+        style="@style/TranslateNote" />
 
     <TextView
         android:id="@+id/month_spend"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textSize="13sp"
-        android:textColor="?attr/grayTextColor"
+        style="@style/TranslateNote"
         android:visibility="gone" />
 
     <CheckBox
@@ -105,15 +79,18 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:textSize="13sp"
         android:textColor="?attr/textColor"
+        android:textSize="14sp"
         android:visibility="gone" />
+
+    <TextView
+        style="@style/TranslateSectionLabel"
+        android:text="@string/tr_dialog_when" />
 
     <RadioGroup
         android:id="@+id/translate_mode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
         android:orientation="vertical">
 
         <RadioButton
@@ -134,10 +111,7 @@
 
     <TextView
         android:id="@+id/mode_note"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="13sp"
-        android:textColor="?attr/grayTextColor"
+        style="@style/TranslateNote"
         android:visibility="gone" />
 
     <LinearLayout
@@ -150,10 +124,7 @@
 
         <TextView
             android:id="@+id/batch_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:textColor="?attr/textColor" />
+            style="@style/TranslateBody" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -162,7 +133,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/batch_cancel"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
+                style="@style/TranslateTextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/batch_cancel"
@@ -170,7 +141,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/batch_translate_rest"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
+                style="@style/TranslateTextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/batch_translate_rest"
@@ -179,31 +150,28 @@
     </LinearLayout>
 
     <TextView
+        style="@style/TranslateSectionLabel"
+        android:text="@string/tr_dialog_glossary" />
+
+    <TextView
         android:id="@+id/bible_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:textSize="13sp"
-        android:textColor="?attr/textColor" />
+        style="@style/TranslateBody" />
 
     <TextView
         android:id="@+id/bible_analyze_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        style="@style/TranslateNote"
         android:text="@string/bible_analyze_hint"
-        android:textSize="13sp"
-        android:textColor="?attr/grayTextColor"
         android:visibility="gone" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/bible_analyze_button"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/TranslateOutlinedButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:text="@string/bible_analyze_button"
-        android:visibility="gone" />
+        android:visibility="gone"
+        app:icon="@drawable/ic_analyze_24" />
 
 </LinearLayout>
 

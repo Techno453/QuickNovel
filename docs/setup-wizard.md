@@ -1,7 +1,7 @@
 # First-run setup wizard
 
 A short Compose wizard (`ui/setup/`) that collects what AI translation needs. It opens once on
-first launch and any time from **Settings → AI Translation → Set up translation…**.
+first launch and any time from **Settings → AI translation → Set up translation…**.
 
 ## Pages
 
@@ -37,10 +37,12 @@ first launch and any time from **Settings → AI Translation → Set up translat
    setting) and the measured cost from the benchmark (0.19 / 3.73 / 0.57 USD, from the
    Recommendations table in [translation-models.md](translation-models.md)).
 5. **Done**: summary (languages, provider, masked key, connection result, model and cost),
-   toggles for the two features that run on their own — read-ahead (`read_ahead_chapters`,
-   default 2; off = 0) and the library new-chapter check (`library_update_frequency`, daily or
-   off; asks for the notification permission on Android 13+) — plus links to the Spending
-   screen and to the full settings.
+   toggles for what runs on its own — "Translate chapters when opened" (the on-demand switch,
+   a SecurePrefs flag, off by default, same row as in settings), Read ahead
+   (`read_ahead_chapters`, default 2; off = 0) and the library new-chapter check
+   (`library_update_frequency`, daily or off; asks for the notification permission on Android
+   13+) — plus links to the Spending screen and to the full settings. Wording is shared with
+   Settings → AI translation (`strings_translate.xml`, see [ui-cohesion.md](ui-cohesion.md)).
 
 Skip is on every page except Done; system Back goes to the previous page, and Back on the first
 page counts as Skip. Values are saved when leaving a page with Next, so Skip keeps what was

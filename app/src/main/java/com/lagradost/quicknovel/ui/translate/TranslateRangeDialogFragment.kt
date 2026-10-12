@@ -133,7 +133,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
             binding.rangeFrom.setText("1")
             binding.rangeTo.setText(minOf(50, total).toString())
         }
-        binding.rangeAvailable.text = "Available: 1–$total"
+        binding.rangeAvailable.text = getString(R.string.tr_dialog_available, total)
 
         updateEstimates = {
             val from = (binding.rangeFrom.text.toString().toIntOrNull() ?: 1) - 1
@@ -153,25 +153,28 @@ class TranslateRangeDialogFragment : DialogFragment() {
             currentCount = toTranslate
 
             val notes = buildList {
-                if (alreadyDone > 0) add("Already translated: $alreadyDone chapters (will be skipped)")
-                if (waitingInBatch > 0) add("Waiting in an overnight batch: $waitingInBatch chapters (will be skipped)")
+                if (alreadyDone > 0) add(getString(R.string.tr_dialog_already_translated, alreadyDone))
+                if (waitingInBatch > 0) add(getString(R.string.tr_dialog_in_batch, waitingInBatch))
             }
             binding.alreadyTranslated.text = notes.joinToString("\n")
             binding.alreadyTranslated.visibility = if (notes.isNotEmpty()) View.VISIBLE else View.GONE
 
-            binding.chaptersToTranslate.text = "Chapters to translate: $toTranslate"
+            binding.chaptersToTranslate.text = getString(R.string.tr_dialog_to_translate, toTranslate)
 
             val analysis = if (autoAnalysisChapters > 0 && toTranslate > 0) {
                 CostEstimator.estimateAnalysis(autoAnalysisChapters, SecurePrefs.analysisEngineConfig(ctx).model, sourceLang)
             } else null
+            val language = TranslationLanguages.displayName(sourceLang)
             if (asBatch()) {
                 val batchUsd = BatchCost.estimateForChapters(config, toTranslate, sourceLang, bibleTerms)
                 currentEstimate = batchUsd?.let { it + (analysis?.usd ?: 0.0) }
                 binding.estimatedCost.text = buildString {
-                    append("Est. cost: ")
-                    append(batchUsd?.let { "${CostEstimator.formatCost(it)} at batch price (50% off)" } ?: "unknown price")
-                    append(" — ${config.label}, ${TranslationLanguages.displayName(sourceLang)} → English")
-                    append("\nPassages that fail the checks are re-done live at the normal price.")
+                    append(
+                        if (batchUsd != null) getString(R.string.tr_dialog_cost_batch, CostEstimator.formatCost(batchUsd))
+                        else getString(R.string.tr_dialog_cost, getString(R.string.tr_dialog_unknown_price))
+                    )
+                    append("\n").append(getString(R.string.tr_dialog_model_line, config.label, language))
+                    append("\n").append(getString(R.string.tr_dialog_batch_redo))
                     if (analysis != null) {
                         append(getString(R.string.analyze_includes_auto, autoAnalysisChapters, CostEstimator.formatEstimate(analysis)))
                     }
@@ -180,10 +183,14 @@ class TranslateRangeDialogFragment : DialogFragment() {
                 val estimate = CostEstimator.estimateForConfig(config, toTranslate, sourceLang, strictMode, bibleTerms)
                 currentEstimate = estimate.usd?.let { it + (analysis?.usd ?: 0.0) }
                 binding.estimatedCost.text = buildString {
-                    append("Est. cost: ${CostEstimator.formatEstimate(estimate)} — ${config.label}, ")
-                    append("${TranslationLanguages.displayName(sourceLang)} → English")
-                    if (strictMode) append(", strict mode")
-                    if (fallbackLabel != null) append("\nFallback for blocked or refused passages: $fallbackLabel")
+                    append(getString(R.string.tr_dialog_cost, CostEstimator.formatEstimate(estimate)))
+                    append("\n").append(
+                        getString(
+                            if (strictMode) R.string.tr_dialog_model_line_strict else R.string.tr_dialog_model_line,
+                            config.label, language,
+                        )
+                    )
+                    if (fallbackLabel != null) append("\n").append(getString(R.string.tr_dialog_fallback_line, fallbackLabel))
                     if (analysis != null) {
                         append(getString(R.string.analyze_includes_auto, autoAnalysisChapters, CostEstimator.formatEstimate(analysis)))
                     }
@@ -211,10 +218,10 @@ class TranslateRangeDialogFragment : DialogFragment() {
         updateEstimates()
 
         val dialog = AlertDialog.Builder(ctx)
-            .setTitle("Translate Chapters")
+            .setTitle(R.string.tr_dialog_title)
             .setView(binding.root)
-            .setPositiveButton("Start", null)
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton(R.string.tr_dialog_start, null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
 
         dialog.setOnShowListener {
@@ -223,7 +230,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
                 val to = binding.rangeTo.text.toString().toIntOrNull()
 
                 if (from == null || to == null || from < 1 || to < from || to > total) {
-                    Toast.makeText(ctx, "Invalid chapter range (1–$total)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, getString(R.string.tr_dialog_invalid_range, total), Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
 
@@ -242,7 +249,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
                     val check = if (currentCount > 0) SpendLedger.checkStart(ctx, currentEstimate) else SpendCaps.StartCheck.Allowed
                     if (check !is SpendCaps.StartCheck.Allowed) {
                         AlertDialog.Builder(ctx)
-                            .setTitle("Spend cap")
+                            .setTitle(R.string.tr_dialog_cap_title)
                             .setMessage(check.message)
                             .setPositiveButton(android.R.string.ok, null)
                             .show()
@@ -285,11 +292,11 @@ class TranslateRangeDialogFragment : DialogFragment() {
         binding.batchCancel.setOnClickListener {
             AlertDialog.Builder(ctx)
                 .setTitle(R.string.batch_cancel)
-                .setMessage("Cancel the overnight batch? Passages already finished are still stored (and billed).")
+                .setMessage(R.string.tr_batch_cancel_confirm)
                 .setPositiveButton(R.string.batch_cancel) { _, _ ->
                     lifecycleScope.launch {
                         val error = BatchManager.cancel(ctx, job.id)
-                        Toast.makeText(ctx, error ?: "Cancelling the batch…", Toast.LENGTH_LONG).show()
+                        Toast.makeText(ctx, error ?: getString(R.string.tr_batch_cancelling), Toast.LENGTH_LONG).show()
                         binding.batchCancel.visibility = View.GONE
                         BatchManager.latestForNovel(ctx, novelId)?.let {
                             binding.batchStatus.text = batchSummary(it, BatchStatus.fromName(it.status), counts)
@@ -310,16 +317,17 @@ class TranslateRangeDialogFragment : DialogFragment() {
     }
 
     private fun batchSummary(job: BatchJob, status: BatchStatus, counts: Map<BatchChapterStatus, Int>): String = buildString {
-        append("Overnight batch (chapters ${job.fromChapter + 1}–${job.toChapter + 1}): ${status.label}")
+        append(getString(R.string.tr_batch_summary, job.fromChapter + 1, job.toChapter + 1, status.label))
         when {
             status == BatchStatus.IN_PROGRESS || status == BatchStatus.FINALIZING ->
-                append(" ${job.completedCount + job.failedCount}/${job.requestCount} requests")
+                append(" ").append(getString(R.string.tr_batch_requests, job.completedCount + job.failedCount, job.requestCount))
             status.isFinished && status != BatchStatus.FAILED -> {
-                append(" · ${counts[BatchChapterStatus.STORED] ?: 0} chapters stored")
-                (counts[BatchChapterStatus.NEEDS_LIVE] ?: 0).takeIf { it > 0 }?.let { append(", $it left for normal translation") }
+                append(" · ").append(getString(R.string.tr_batch_stored, counts[BatchChapterStatus.STORED] ?: 0))
+                (counts[BatchChapterStatus.NEEDS_LIVE] ?: 0).takeIf { it > 0 }?.let { append(", ").append(getString(R.string.tr_batch_left, it)) }
             }
         }
-        val cost = job.actualUsd?.let { "cost ${SpendPricing.format(it)}" } ?: "est. ${SpendPricing.format(job.estimatedUsd)}"
+        val cost = job.actualUsd?.let { getString(R.string.tr_batch_cost, SpendPricing.format(it)) }
+            ?: getString(R.string.tr_batch_estimate, SpendPricing.format(job.estimatedUsd))
         append(" · $cost")
         if (status == BatchStatus.FAILED && !job.error.isNullOrBlank()) append("\n${job.error}")
     }

@@ -6,18 +6,18 @@ invalidation and overnight Batch API pre-translation. Model
 choice and costs are in [translation-models.md](translation-models.md); the benchmark is in
 [translation-bench.md](translation-bench.md).
 
-## Settings (Settings → AI Translation)
+## Settings (Settings → AI translation)
 
 | Setting | SecurePrefs key | Default | Notes |
 |---|---|---|---|
 | Analyze novel before first translation | `auto_analyze_before_translate` | on | Runs the pre-pass once per novel before its first translation. |
 | Chapters analyzed automatically | `auto_analyze_chapter_count` | 3 (1–20) | The manual Analyze novel keeps its own default (`analyze_chapter_count`, 5). |
 | Analysis model | `analysis_preset` | absent = same as the translation model | Any preset, e.g. GPT-6 Sol. If that provider has no API key, the translation model is used. Applies to manual and automatic analysis. |
-| Auto-translate ahead | `read_ahead_chapters` | 2 (choices 0, 1, 2, 3, 5, 10; 0 = off) | Keeps the next N chapters after the one being read translated. |
+| Read ahead | `read_ahead_chapters` | 2 (choices 0, 1, 2, 3, 5, 10; 0 = off) | Keeps the next N chapters after the one being read translated. |
 | Monthly spend cap | `monthly_spend_cap_usd` | 0 = off (float, USD) | See [Spend ledger](#spend-ledger-dashboard-and-caps). |
-| Per-job cap | `per_job_cap_usd` | 0 = off (float, USD) | One range job or overnight batch. |
-| Long jobs only while charging | `jobs_only_while_charging` | off | See [Charging and battery](#charging-and-battery-conditions-for-long-jobs). |
-| Pause long jobs on low battery | `jobs_pause_on_low_battery` | on | |
+| Per-job spend cap | `per_job_cap_usd` | 0 = off (float, USD) | One range job or overnight batch. |
+| Background translation only while charging | `jobs_only_while_charging` | off | See [Charging and battery](#charging-and-battery-conditions-for-long-jobs). |
+| Pause background translation on low battery | `jobs_pause_on_low_battery` | on | |
 | Low battery threshold (%) | `jobs_low_battery_percent` | 15 (5–50) | |
 
 Code: `SecurePrefs` (keys and getters), `TranslationSettings` (Compose rows).
@@ -118,7 +118,7 @@ removed. The new prompt itself has not been benchmarked yet.
   `TranslatorDatabase` v5 (`MIGRATION_4_5`). Novels that already had a premise when upgrading
   count as analyzed. The state is not part of the Story Bible JSON export.
 
-## Read-ahead ("Auto-translate ahead")
+## Read ahead
 
 When the reader moves to chapter *i* (`ReadActivityViewModel.changeIndex` → `AbstractBook.onChapterOpened`
 → `ReadAheadScheduler`), and the novel is being read in translation, chapters *i+1 … i+N* that
@@ -174,7 +174,7 @@ batch id. Plain JVM code (tests, the benchmark) has no sink, so nothing is recor
   lines are not billed and carry none.
 - Deleting a novel keeps its spend rows (money already spent).
 
-**Dashboard** (Settings → AI Translation → Spending, `ui/translate/SpendScreen.kt`, a full-screen
+**Dashboard** (Settings → AI translation → Spending, `ui/translate/SpendScreen.kt`, a full-screen
 Compose dialog): today / this month / all time (local calendar), per novel (top 10 + "everything
 else"), per model, the last 50 entries, and Clear history (with confirmation; this also resets
 the month for the cap). Opening it also polls overnight batches. The translate dialog shows

@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AI translation: the shared vocabulary (docs/ui-cohesion.md). Settings, the setup wizard, the
+     Translate dialog, Spending and the glossary all take their wording from here.
+     Words: Translate, Original, Glossary, Analyze novel, Read ahead, Overnight batch, Spending,
+     Spend cap, Source language, Translation model, API key, translation job. Sentence case. -->
+<resources>
+    <!-- Settings → AI translation: group and section headers -->
+    <string name="tr_settings_group">AI translation</string>
+    <string name="tr_section_provider">Provider and key</string>
+    <string name="tr_section_reading">Reading and background jobs</string>
+    <string name="tr_section_glossary">Glossary and analysis</string>
+    <string name="tr_section_spending">Spending and limits</string>
+    <string name="tr_section_titles">Titles, synopses and search</string>
+    <string name="tr_section_style">Default translation style</string>
+    <string name="tr_section_advanced">Advanced</string>
+
+    <!-- Provider and key -->
+    <string name="tr_model">Translation model</string>
+    <string name="tr_model_summary">%1$s (%2$s) · %3$s, Chinese</string>
+    <string name="tr_model_custom_summary">Custom: %1$s at %2$s · %3$s</string>
+    <string name="tr_model_dialog_note">Cost per 100 chapters of about 4,500 Chinese characters.</string>
+    <string name="tr_model_dialog_note_strict">Cost per 100 chapters of about 4,500 Chinese characters, strict consistency mode on.</string>
+    <string name="tr_model_dialog_keys">Each provider needs its own API key.</string>
+    <string name="tr_model_other">Other</string>
+    <string name="tr_model_custom">Custom…</string>
+    <string name="tr_model_custom_desc">Any OpenAI-compatible endpoint (local server, other providers)</string>
+    <string name="tr_model_base_url">Base URL</string>
+    <string name="tr_model_id">Model id</string>
+    <string name="tr_model_id_example">e.g. glm-5.3-flash</string>
+    <string name="tr_model_extra_body">Extra request body (JSON, optional)</string>
+    <string name="tr_model_extra_body_help">Merged into every request; a null value removes a field, e.g. \"temperature\": null</string>
+    <string name="tr_model_extra_body_invalid">Must be a JSON object</string>
+    <string name="tr_model_prompt">Prompt</string>
+    <string name="tr_api_key">API key</string>
+    <string name="tr_api_key_summary">%1$s: %2$s</string>
+    <string name="tr_key_saved_short">saved (…%1$s)</string>
+    <string name="tr_key_not_set">not set</string>
+    <string name="tr_key_saved_toast">%1$s API key saved</string>
+    <string name="tr_key_cleared_toast">%1$s API key cleared</string>
+    <string name="tr_key_enter_first">Enter an API key first</string>
+    <string name="tr_test_toast">%1$s\n%2$s</string>
+
+    <!-- Reading and background jobs -->
+    <string name="tr_show_buttons">Show Translate buttons</string>
+    <string name="tr_show_buttons_desc">Translate and Glossary on the pages of Chinese, Japanese and Korean novels</string>
+    <string name="tr_on_demand">Translate chapters when opened</string>
+    <string name="tr_on_demand_desc">The reader translates a chapter without a translation when you open it. Off: it shows the original</string>
+    <string name="tr_read_ahead">Read ahead</string>
+    <string name="tr_read_ahead_off">Off</string>
+    <plurals name="tr_read_ahead_chapters">
+        <item quantity="one">%d chapter</item>
+        <item quantity="other">%d chapters</item>
+    </plurals>
+    <string name="tr_read_ahead_desc">Translates the next %1$s after the one you are reading in the background, when you read in translation</string>
+    <string name="tr_read_ahead_desc_off">Off. When on, the next chapters after the one you are reading are translated in the background</string>
+    <string name="tr_jobs_charging">Background translation only while charging</string>
+    <string name="tr_jobs_charging_desc">Translation jobs and read ahead wait for a charger. The chapter you are reading is always translated</string>
+    <string name="tr_jobs_low_battery">Pause background translation on low battery</string>
+    <string name="tr_jobs_low_battery_desc">Translation jobs and read ahead pause below the threshold and resume when charging</string>
+    <string name="tr_jobs_threshold" formatted="false">Low battery threshold (%)</string>
+    <string name="tr_jobs_threshold_desc">Battery level at which background translation pauses</string>
+
+    <!-- Glossary and analysis -->
+    <string name="tr_auto_analyze">Analyze novel before first translation</string>
+    <string name="tr_auto_analyze_desc">Build the glossary from the first chapters before a novel is translated for the first time</string>
+    <string name="tr_auto_analyze_count">Chapters analyzed automatically</string>
+    <string name="tr_auto_analyze_count_desc">How many of the first chapters the automatic analysis reads</string>
+    <string name="tr_analyze_count">Chapters for Analyze novel</string>
+    <string name="tr_analyze_count_desc">Starting value when you run Analyze novel yourself</string>
+    <string name="tr_analysis_model">Analysis model</string>
+    <string name="tr_same_as_translation_model">Same as the translation model</string>
+    <string name="tr_analysis_model_summary">%1$s (%2$s) · %3$s per %4$d-chapter analysis, Chinese</string>
+    <string name="tr_analysis_model_needs_key">%1$s · needs a %2$s API key; the translation model is used until then</string>
+    <string name="tr_analysis_model_dialog_note">Model for Analyze novel, which builds the glossary (names, genders, places, terms) and the premise from the first chapters. It runs once per novel, so a stronger model costs little. Cost shown for %1$d Chinese chapters.</string>
+    <string name="tr_auto_add">Add discovered names automatically</string>
+    <string name="tr_auto_add_desc">Confident new names found while translating go into the glossary right away instead of waiting for review</string>
+
+    <!-- Spending and limits -->
+    <string name="tr_spending">Spending</string>
+    <string name="tr_spending_desc">Totals per day, month, novel and model</string>
+    <string name="tr_spending_month">This month: %1$s</string>
+    <string name="tr_spending_month_cap">This month: %1$s of %2$s</string>
+    <string name="tr_monthly_cap">Monthly spend cap</string>
+    <string name="tr_monthly_cap_desc">Jobs that would pass it are refused; running jobs stop when it is reached</string>
+    <string name="tr_job_cap">Per-job spend cap</string>
+    <string name="tr_job_cap_desc">Largest cost of one translation job or overnight batch</string>
+    <string name="tr_cap_summary">%1$s · %2$s</string>
+    <string name="tr_cap_off">Off</string>
+    <string name="tr_cap_hint">USD, e.g. 5 (empty = off)</string>
+    <string name="tr_cap_invalid">Enter an amount in USD, e.g. 5 or 2.50</string>
+    <string name="tr_cap_set_toast">%1$s: %2$s</string>
+    <string name="tr_cap_off_toast">%1$s off</string>
+
+    <!-- Titles, synopses and search -->
+    <string name="tr_metadata_ai">Translate titles and synopses with AI</string>
+    <string name="tr_metadata_ai_desc">Titles in Browse, search and the library, and the synopsis when a novel is opened, with the translation model (about $0.0002 per novel, cached). Without an API key the free Google option below is used</string>
+    <string name="tr_metadata_google">Translate titles with Google (free)</string>
+    <string name="tr_metadata_google_desc">Titles, chapter names and synopses through free Google Translate when AI is off or has no API key</string>
+    <string name="tr_search_queries">Translate search queries</string>
+    <string name="tr_search_queries_desc">Search Chinese, Japanese and Korean sources in their own language</string>
+    <string name="tr_search_ai">Use AI for search queries</string>
+    <string name="tr_search_ai_desc">Ask the translation model first (better at original novel titles); needs an API key</string>
+
+    <!-- Default translation style -->
+    <string name="tr_style_names">%1$s names</string>
+    <string name="tr_style_honorifics">%1$s honorifics</string>
+    <string name="tr_style_short_pinyin">Pinyin</string>
+    <string name="tr_style_short_meaning">Translated meaning</string>
+    <string name="tr_style_short_mixed">Mixed</string>
+    <string name="tr_style_short_family_given">Family name first</string>
+    <string name="tr_style_short_given_family">Given name first</string>
+    <string name="tr_style_short_keep">Keep</string>
+    <string name="tr_style_short_drop">Drop</string>
+    <string name="tr_style_short_adapt">Adapt to English</string>
+
+    <!-- Advanced -->
+    <string name="tr_fallback_model">Fallback model</string>
+    <string name="tr_fallback_off">Off. Re-translates passages that the translation model\'s provider blocks or refuses. Suggested: %1$s</string>
+    <string name="tr_fallback_same">%1$s · same as the translation model, not used</string>
+    <string name="tr_fallback_needs_key">%1$s · needs a %2$s API key</string>
+    <string name="tr_fallback_used">%1$s · used for blocked or refused passages</string>
+    <string name="tr_fallback_dialog_note">Used once for a passage that the translation model\'s provider blocks (content filter) or that comes back as a refusal or summary. Suggested: %1$s.</string>
+    <string name="tr_fallback_key">Fallback API key</string>
+    <string name="tr_or">%1$s or %2$s</string>
+    <string name="tr_strict">Strict consistency mode</string>
+    <string name="tr_strict_desc">Retry a passage once on glossary misses, leftover source text or dropped paragraphs</string>
+    <string name="tr_carry_context">Carry story context between chapters</string>
+    <string name="tr_carry_context_desc">Send the premise and the previous chapter\'s summary with each chapter</string>
+
+    <!-- Translate dialog (translation job, overnight batch) -->
+    <string name="tr_dialog_title">Translate chapters</string>
+    <string name="tr_dialog_from">From chapter</string>
+    <string name="tr_dialog_to">To chapter</string>
+    <string name="tr_dialog_available">Chapters 1–%1$d available</string>
+    <string name="tr_dialog_already_translated">Already translated: %1$d (skipped)</string>
+    <string name="tr_dialog_in_batch">Waiting in an overnight batch: %1$d (skipped)</string>
+    <string name="tr_dialog_to_translate">Chapters to translate: %1$d</string>
+    <string name="tr_dialog_cost">Estimated cost: %1$s</string>
+    <string name="tr_dialog_cost_batch">Estimated cost: %1$s at batch price (50%% off)</string>
+    <string name="tr_dialog_unknown_price">unknown price</string>
+    <string name="tr_dialog_model_line">%1$s, %2$s → English</string>
+    <string name="tr_dialog_model_line_strict">%1$s, %2$s → English, strict consistency mode</string>
+    <string name="tr_dialog_batch_redo">Passages that fail the checks are re-done live at the normal price.</string>
+    <string name="tr_dialog_fallback_line">Fallback for blocked or refused passages: %1$s</string>
+    <string name="tr_dialog_when">When</string>
+    <string name="tr_dialog_glossary">Glossary</string>
+    <string name="tr_dialog_start">Translate</string>
+    <string name="tr_dialog_invalid_range">Enter chapters between 1 and %1$d</string>
+    <string name="tr_dialog_cap_title">Spend cap</string>
+    <string name="tr_batch_cancel_confirm">Cancel the overnight batch? Passages already finished are still stored and billed.</string>
+    <string name="tr_batch_cancelling">Cancelling the overnight batch…</string>
+    <string name="tr_batch_summary">Overnight batch, chapters %1$d–%2$d: %3$s</string>
+    <string name="tr_batch_requests">%1$d/%2$d requests</string>
+    <string name="tr_batch_stored">%1$d chapters stored</string>
+    <string name="tr_batch_left">%1$d left for a normal translation job</string>
+    <string name="tr_batch_cost">cost %1$s</string>
+    <string name="tr_batch_estimate">estimated %1$s</string>
+
+    <!-- Spending screen -->
+    <string name="tr_spend_close">Close</string>
+    <string name="tr_spend_today">Today</string>
+    <string name="tr_spend_month">This month</string>
+    <string name="tr_spend_all_time">All time</string>
+    <string name="tr_spend_of_cap">of %1$s cap</string>
+    <string name="tr_spend_no_cap">no cap</string>
+    <string name="tr_spend_job_cap_note">Per-job spend cap: %1$s.</string>
+    <plurals name="tr_spend_unpriced_note">
+        <item quantity="one">%d call used a model with no known price and counts as $0.</item>
+        <item quantity="other">%d calls used a model with no known price and count as $0.</item>
+    </plurals>
+    <string name="tr_spend_how" formatted="false">Costs come from each reply\'s token usage and the model\'s list price (overnight batches at 50%).</string>
+    <string name="tr_spend_by_novel">By novel</string>
+    <string name="tr_spend_by_model">By model</string>
+    <string name="tr_spend_latest">Latest calls</string>
+    <string name="tr_spend_empty">Nothing recorded yet.</string>
+    <plurals name="tr_spend_calls">
+        <item quantity="one">%d call</item>
+        <item quantity="other">%d calls</item>
+    </plurals>
+    <string name="tr_spend_unpriced">unpriced</string>
+    <string name="tr_spend_chapter">ch. %1$d</string>
+    <string name="tr_spend_tokens">%1$s in / %2$s out</string>
+    <string name="tr_spend_clear">Clear history</string>
+    <string name="tr_spend_clear_title">Clear spend history?</string>
+    <string name="tr_spend_clear_message">Deletes every recorded call. The monthly spend cap then starts again from $0 for this month. This cannot be undone.</string>
+    <string name="tr_spend_clear_confirm">Clear</string>
+    <string name="tr_spend_read_failed">Could not read the spend history</string>
+
+    <!-- Glossary screen -->
+    <string name="tr_glossary_title">Glossary</string>
+    <string name="tr_glossary_more">More glossary actions</string>
+    <plurals name="tr_glossary_review_count">
+        <item quantity="one">Review %d new term</item>
+        <item quantity="other">Review %d new terms</item>
+    </plurals>
+
+    <!-- Notifications -->
+    <string name="tr_channel_name">AI translation</string>
+    <string name="tr_starting">Starting…</string>
+    <string name="tr_job_failed">Translation failed: %1$s</string>
+    <string name="tr_job_already_running">Another translation is already running</string>
+    <string name="tr_batch_queued_title">Overnight batch queued: %1$s</string>
+    <string name="tr_batch_queued_text">Chapters %1$d–%2$d, %3$d requests, about %4$s. Results arrive within 24 hours.</string>
+    <string name="tr_batch_ready_title">Overnight batch ready: %1$s</string>
+    <string name="tr_batch_failed_title">Overnight batch failed: %1$s</string>
+    <string name="tr_batch_status_title">Overnight batch %1$s: %2$s</string>
+    <string name="tr_batch_not_started_title">Overnight batch not started: %1$s</string>
+    <string name="tr_batch_rejected">OpenAI rejected the batch.</string>
+    <plurals name="tr_batch_translated">
+        <item quantity="one">%d chapter translated</item>
+        <item quantity="other">%d chapters translated</item>
+    </plurals>
+    <string name="tr_batch_cost_sentence">Cost %1$s</string>
+    <string name="tr_batch_failed">Overnight batch failed: %1$s</string>
+    <string name="tr_batch_nothing">Nothing to translate: the chapters are translated or already in an overnight batch</string>
+</resources>

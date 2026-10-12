@@ -3,6 +3,7 @@ package com.lagradost.quicknovel.ui.settings
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,36 +30,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.translator.ConnectionTester
 import com.lagradost.quicknovel.translator.CostEstimator
 import com.lagradost.quicknovel.translator.LlmConfig
 import com.lagradost.quicknovel.translator.LlmProviders
+import com.lagradost.quicknovel.translator.MetadataTranslations
 import com.lagradost.quicknovel.translator.ModelPreset
 import com.lagradost.quicknovel.translator.ModelPresets
+import com.lagradost.quicknovel.translator.PowerPolicy
 import com.lagradost.quicknovel.translator.PresetTier
 import com.lagradost.quicknovel.translator.PromptProfiles
-import com.lagradost.quicknovel.translator.ConnectionStatus
-import com.lagradost.quicknovel.translator.ConnectionTester
 import com.lagradost.quicknovel.translator.SecurePrefs
-import com.lagradost.quicknovel.translator.TranslationEngine
-import com.lagradost.quicknovel.translator.TranslationLanguages
-import com.lagradost.quicknovel.translator.TranslationStyle
-import com.lagradost.quicknovel.translator.PowerPolicy
 import com.lagradost.quicknovel.translator.SpendLedger
 import com.lagradost.quicknovel.translator.SpendPricing
-import com.lagradost.quicknovel.ui.translate.SpendDialog
+import com.lagradost.quicknovel.translator.TranslationLanguages
+import com.lagradost.quicknovel.translator.TranslationStyle
+import com.lagradost.quicknovel.ui.common.ConnectionMessages
 import com.lagradost.quicknovel.ui.setup.SetupActivity
+import com.lagradost.quicknovel.ui.translate.SpendDialog
 import com.lagradost.quicknovel.ui.translate.TranslationForegroundService
-import androidx.compose.runtime.LaunchedEffect
 import com.lagradost.quicknovel.util.GoogleTranslate
 import com.mihon.common.preference.PreferenceData
 import com.mihon.presentation.settings.Preference
-import com.mihon.presentation.settings.widget.PreferenceGroupHeader
 import com.mihon.presentation.settings.widget.TextPreferenceWidget
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CoroutineScope
@@ -93,9 +94,13 @@ class AccessorPreferenceData<T>(
     override fun stateIn(scope: CoroutineScope): StateFlow<T> = state.asStateFlow()
 }
 
+/**
+ * Settings → AI translation, in sections (docs/ui-cohesion.md): Provider and key · Reading and
+ * background jobs · Glossary and analysis · Spending and limits · Titles, synopses and search ·
+ * Default translation style · Advanced. Wording comes from strings_translate.xml, shared with the
+ * setup wizard; each concept has one icon.
+ */
 object TranslationSettings {
-    private const val GROUP_TITLE = "AI Translation"
-
     private fun secureSwitch(
         context: Context,
         key: String,
@@ -110,18 +115,6 @@ object TranslationSettings {
         TranslationLanguages.KOREAN,
     )
 
-    /** Short labels for list summaries; the dialogs show the longer descriptions. */
-    private val SHORT_STYLE_LABELS = mapOf(
-        TranslationStyle.NAME_PINYIN to "Pinyin",
-        TranslationStyle.NAME_MEANING to "Translated meaning",
-        TranslationStyle.NAME_MIXED to "Mixed",
-        TranslationStyle.NAME_FAMILY_GIVEN to "Family name first",
-        TranslationStyle.NAME_GIVEN_FAMILY to "Given name first",
-        TranslationStyle.HONORIFICS_KEEP to "Keep",
-        TranslationStyle.HONORIFICS_DROP to "Drop",
-        TranslationStyle.HONORIFICS_ADAPT to "Adapt to English",
-    )
-
     @Composable
     private fun styleLabel(style: String): String = when (style) {
         TranslationStyle.NAME_PINYIN -> stringResource(R.string.style_name_pinyin)
@@ -132,6 +125,20 @@ object TranslationSettings {
         TranslationStyle.HONORIFICS_KEEP -> stringResource(R.string.style_hon_keep)
         TranslationStyle.HONORIFICS_DROP -> stringResource(R.string.style_hon_drop)
         TranslationStyle.HONORIFICS_ADAPT -> stringResource(R.string.style_hon_adapt)
+        else -> style
+    }
+
+    /** Short labels for list summaries; the dialogs show the longer descriptions. */
+    @Composable
+    private fun shortStyleLabel(style: String): String = when (style) {
+        TranslationStyle.NAME_PINYIN -> stringResource(R.string.tr_style_short_pinyin)
+        TranslationStyle.NAME_MEANING -> stringResource(R.string.tr_style_short_meaning)
+        TranslationStyle.NAME_MIXED -> stringResource(R.string.tr_style_short_mixed)
+        TranslationStyle.NAME_FAMILY_GIVEN -> stringResource(R.string.tr_style_short_family_given)
+        TranslationStyle.NAME_GIVEN_FAMILY -> stringResource(R.string.tr_style_short_given_family)
+        TranslationStyle.HONORIFICS_KEEP -> stringResource(R.string.tr_style_short_keep)
+        TranslationStyle.HONORIFICS_DROP -> stringResource(R.string.tr_style_short_drop)
+        TranslationStyle.HONORIFICS_ADAPT -> stringResource(R.string.tr_style_short_adapt)
         else -> style
     }
 
@@ -161,19 +168,18 @@ object TranslationSettings {
         }
         val nameEntries = TranslationStyle.nameStyleOptions(lang).associateWith { styleLabel(it) }
         val honorificEntries = TranslationStyle.HONORIFIC_OPTIONS.associateWith { styleLabel(it) }
-        val shortLabel: @Composable (String, Map<String, String>) -> String? =
-            { value, _ -> SHORT_STYLE_LABELS[value] ?: value }
+        val shortLabel: @Composable (String, Map<String, String>) -> String? = { value, _ -> shortStyleLabel(value) }
         return listOf(
             Preference.PreferenceItem.ListPreference(
                 icon = icon,
-                title = "$language names",
+                title = stringResource(R.string.tr_style_names, language),
                 preference = nameStyle,
                 entries = nameEntries,
                 subtitleProvider = shortLabel,
             ),
             Preference.PreferenceItem.ListPreference(
                 icon = icon,
-                title = "$language honorifics",
+                title = stringResource(R.string.tr_style_honorifics, language),
                 preference = honorificStyle,
                 entries = honorificEntries,
                 subtitleProvider = shortLabel,
@@ -181,11 +187,25 @@ object TranslationSettings {
         )
     }
 
-    /** The "AI Translation" settings group. Add new SecurePrefs-backed items to the list below. */
+    /** A section header inside the group: primary colour, aligned with the row titles. */
+    @Composable
+    private fun section(@androidx.annotation.StringRes title: Int): Preference.PreferenceItem.CustomPreference {
+        val text = stringResource(title)
+        return Preference.PreferenceItem.CustomPreference(title = text, content = { SectionHeader(text) })
+    }
+
+    @Composable
+    private fun icon(@DrawableRes id: Int): Painter = painterResource(id)
+
+    /** The "AI translation" settings group. */
     @Composable
     fun preferenceGroup(): Preference.PreferenceGroup {
         val context = LocalContext.current.applicationContext
-        val translateIcon = painterResource(R.drawable.ic_baseline_translate_24)
+        val translateIcon = icon(R.drawable.ic_baseline_translate_24)
+        val glossaryIcon = icon(R.drawable.ic_glossary_24)
+        val analyzeIcon = icon(R.drawable.ic_analyze_24)
+        val batteryIcon = icon(R.drawable.ic_battery_charging_24)
+        val searchIcon = icon(R.drawable.ic_search_translate_24)
 
         val enabled = remember {
             secureSwitch(
@@ -218,7 +238,6 @@ object TranslationSettings {
                 SecurePrefs::isTranslateOnDemandEnabled, SecurePrefs::setTranslateOnDemandEnabled
             )
         }
-
         val autoAddTerms = remember {
             secureSwitch(
                 context, "translator_auto_add_terms", true,
@@ -264,144 +283,10 @@ object TranslationSettings {
                 { SecurePrefs.setReadAheadChapters(context, it) },
             )
         }
+        val readAheadOff = stringResource(R.string.tr_read_ahead_off)
         val readAheadEntries = SecurePrefs.READ_AHEAD_OPTIONS.associateWith { n ->
-            when (n) {
-                0 -> "Off"
-                1 -> "1 chapter"
-                else -> "$n chapters"
-            }
+            if (n == 0) readAheadOff else pluralStringResource(R.plurals.tr_read_ahead_chapters, n, n)
         }
-        val styleItems = STYLE_LANGUAGES.flatMap { lang -> styleDefaults(context, lang, translateIcon) }
-        // Bumped whenever the model, fallback or a key changes so dependent rows re-read SecurePrefs.
-        val configVersion = remember { mutableStateOf(0) }
-
-        val items: List<Preference.PreferenceItem<out Any?, out Any?>> = listOf(
-            Preference.PreferenceItem.CustomPreference(
-                title = "Set up translation",
-                content = { SetupWizardPreference(configVersion) },
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = "Translation model",
-                content = { ModelPreference(context, configVersion) },
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = "API key",
-                content = { ApiKeyPreference(context, configVersion) },
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = "Fallback model",
-                content = { FallbackPreference(context, configVersion) },
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = "Fallback API key",
-                content = { FallbackKeyPreference(context, configVersion) },
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Enable translation UI",
-                subtitle = "Show the Translate button for Chinese, Japanese and Korean sources",
-                preference = enabled,
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Auto-translate titles & synopses",
-                subtitle = "Use Google Translate (free) for titles, chapter names and synopses",
-                preference = titles,
-                onValueChanged = {
-                    GoogleTranslate.clearCache()
-                    true
-                },
-            ),
-            metadataAiPreference(context, translateIcon),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Translate search queries",
-                subtitle = "Search Chinese, Japanese and Korean sources in their own language",
-                preference = searchQueries,
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Use AI for search queries",
-                subtitle = "Ask the LLM first (better at original novel titles); needs an API key",
-                preference = aiSearch,
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Translate chapters on demand",
-                subtitle = "Translate untranslated chapters with the LLM when opened in the reader",
-                preference = onDemand,
-            ),
-            Preference.PreferenceItem.ListPreference(
-                icon = translateIcon,
-                title = "Auto-translate ahead",
-                preference = readAhead,
-                entries = readAheadEntries,
-                subtitleProvider = { value, entries ->
-                    if (value == 0) "Off. Keeps the next chapters after the one you are reading translated in the background"
-                    else "Keep the next ${entries[value]} after the one you are reading translated (when reading in translation)"
-                },
-                onValueChanged = { value ->
-                    if (value == 0) TranslationForegroundService.stopReadAhead(context)
-                    true
-                },
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = "Consistency",
-                content = { PreferenceGroupHeader(title = "Consistency") },
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Auto-add discovered names",
-                subtitle = "Add confidently detected names to the Story Bible right away instead of waiting for review",
-                preference = autoAddTerms,
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Strict consistency mode",
-                subtitle = "Retry a passage once on glossary misses, leftover source text or dropped paragraphs",
-                preference = strictMode,
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Carry story context between chapters",
-                subtitle = "Send the premise and previous chapter summary with each chapter",
-                preference = carryContext,
-            ),
-            Preference.PreferenceItem.SliderPreference(
-                icon = translateIcon,
-                title = "Chapters to analyze",
-                subtitle = "Default for Analyze novel, which builds the character sheet",
-                preference = analyzeChapters,
-                valueRange = 1..SecurePrefs.MAX_ANALYZE_CHAPTERS,
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                icon = translateIcon,
-                title = "Analyze novel before first translation",
-                subtitle = "Build the character sheet from the first chapters automatically before a novel is translated for the first time",
-                preference = autoAnalyze,
-            ),
-            Preference.PreferenceItem.SliderPreference(
-                icon = translateIcon,
-                title = "Chapters analyzed automatically",
-                subtitle = "How many of the first chapters the automatic analysis reads",
-                preference = autoAnalyzeChapters,
-                valueRange = 1..SecurePrefs.MAX_ANALYZE_CHAPTERS,
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = "Analysis model",
-                content = { AnalysisModelPreference(context, configVersion) },
-            ),
-        ) + spendAndJobItems(context, translateIcon) + styleItems
-
-        return Preference.PreferenceGroup(
-            title = GROUP_TITLE,
-            preferenceItems = items.toPersistentList(),
-        )
-    }
-
-    /** "Spending & long jobs": spend dashboard, caps, charging / battery conditions. */
-    @Composable
-    private fun spendAndJobItems(context: Context, icon: Painter): List<Preference.PreferenceItem<out Any?, out Any?>> {
         val onlyWhileCharging = remember {
             secureSwitch(
                 context, SecurePrefs.KEY_JOBS_ONLY_WHILE_CHARGING, false,
@@ -421,54 +306,194 @@ object TranslationSettings {
                 { SecurePrefs.setJobsLowBatteryPercent(context, it) },
             )
         }
-        return listOf(
+        val styleIcon = icon(R.drawable.ic_name_style_24)
+        val styleItems = STYLE_LANGUAGES.flatMap { lang -> styleDefaults(context, lang, styleIcon) }
+        // Bumped whenever the model, fallback or a key changes so dependent rows re-read SecurePrefs.
+        val configVersion = remember { mutableStateOf(0) }
+
+        val monthlyCapTitle = stringResource(R.string.tr_monthly_cap)
+        val monthlyCapDesc = stringResource(R.string.tr_monthly_cap_desc)
+        val jobCapTitle = stringResource(R.string.tr_job_cap)
+        val jobCapDesc = stringResource(R.string.tr_job_cap_desc)
+
+        val items: List<Preference.PreferenceItem<out Any?, out Any?>> = listOf(
+            // ---- Provider and key ----
+            section(R.string.tr_section_provider),
             Preference.PreferenceItem.CustomPreference(
-                title = "Spending & long jobs",
-                content = { PreferenceGroupHeader(title = "Spending & long jobs") },
+                title = stringResource(R.string.setup_open_from_settings),
+                content = { SetupWizardPreference(configVersion) },
             ),
             Preference.PreferenceItem.CustomPreference(
-                title = "Spending",
+                title = stringResource(R.string.tr_model),
+                content = { ModelPreference(context, configVersion) },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = stringResource(R.string.tr_api_key),
+                content = { ApiKeyPreference(context, configVersion) },
+            ),
+
+            // ---- Reading and background jobs ----
+            section(R.string.tr_section_reading),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = translateIcon,
+                title = stringResource(R.string.tr_show_buttons),
+                subtitle = stringResource(R.string.tr_show_buttons_desc),
+                preference = enabled,
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = translateIcon,
+                title = stringResource(R.string.tr_on_demand),
+                subtitle = stringResource(R.string.tr_on_demand_desc),
+                preference = onDemand,
+            ),
+            Preference.PreferenceItem.ListPreference(
+                icon = icon(R.drawable.ic_read_ahead_24),
+                title = stringResource(R.string.tr_read_ahead),
+                preference = readAhead,
+                entries = readAheadEntries,
+                subtitleProvider = { value, entries ->
+                    if (value == 0) stringResource(R.string.tr_read_ahead_desc_off)
+                    else stringResource(R.string.tr_read_ahead_desc, entries[value] ?: value.toString())
+                },
+                onValueChanged = { value ->
+                    if (value == 0) TranslationForegroundService.stopReadAhead(context)
+                    true
+                },
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = batteryIcon,
+                title = stringResource(R.string.tr_jobs_charging),
+                subtitle = stringResource(R.string.tr_jobs_charging_desc),
+                preference = onlyWhileCharging,
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = batteryIcon,
+                title = stringResource(R.string.tr_jobs_low_battery),
+                subtitle = stringResource(R.string.tr_jobs_low_battery_desc),
+                preference = pauseOnLow,
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                icon = batteryIcon,
+                title = stringResource(R.string.tr_jobs_threshold),
+                subtitle = stringResource(R.string.tr_jobs_threshold_desc),
+                preference = lowPercent,
+                valueRange = PowerPolicy.MIN_LOW_BATTERY_PERCENT..PowerPolicy.MAX_LOW_BATTERY_PERCENT,
+            ),
+
+            // ---- Glossary and analysis ----
+            section(R.string.tr_section_glossary),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = analyzeIcon,
+                title = stringResource(R.string.tr_auto_analyze),
+                subtitle = stringResource(R.string.tr_auto_analyze_desc),
+                preference = autoAnalyze,
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                icon = analyzeIcon,
+                title = stringResource(R.string.tr_auto_analyze_count),
+                subtitle = stringResource(R.string.tr_auto_analyze_count_desc),
+                preference = autoAnalyzeChapters,
+                valueRange = 1..SecurePrefs.MAX_ANALYZE_CHAPTERS,
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                icon = analyzeIcon,
+                title = stringResource(R.string.tr_analyze_count),
+                subtitle = stringResource(R.string.tr_analyze_count_desc),
+                preference = analyzeChapters,
+                valueRange = 1..SecurePrefs.MAX_ANALYZE_CHAPTERS,
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = stringResource(R.string.tr_analysis_model),
+                content = { AnalysisModelPreference(context, configVersion) },
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = glossaryIcon,
+                title = stringResource(R.string.tr_auto_add),
+                subtitle = stringResource(R.string.tr_auto_add_desc),
+                preference = autoAddTerms,
+            ),
+
+            // ---- Spending and limits ----
+            section(R.string.tr_section_spending),
+            Preference.PreferenceItem.CustomPreference(
+                title = stringResource(R.string.tr_spending),
                 content = { SpendingPreference(context) },
             ),
             Preference.PreferenceItem.CustomPreference(
-                title = "Monthly spend cap",
+                title = monthlyCapTitle,
                 content = {
                     CapPreference(
-                        context, "Monthly spend cap",
-                        "Jobs that would pass it are refused; running jobs stop when it is reached",
+                        context, monthlyCapTitle, monthlyCapDesc,
                         SecurePrefs::getMonthlySpendCap, SecurePrefs::setMonthlySpendCap,
                     )
                 },
             ),
             Preference.PreferenceItem.CustomPreference(
-                title = "Per-job cap",
+                title = jobCapTitle,
                 content = {
                     CapPreference(
-                        context, "Per-job cap",
-                        "Largest cost of one range job or overnight batch",
+                        context, jobCapTitle, jobCapDesc,
                         SecurePrefs::getPerJobCap, SecurePrefs::setPerJobCap,
                     )
                 },
             ),
+
+            // ---- Titles, synopses and search ----
+            section(R.string.tr_section_titles),
+            metadataAiPreference(context, icon(R.drawable.ic_titles_24)),
             Preference.PreferenceItem.SwitchPreference(
-                icon = icon,
-                title = "Long jobs only while charging",
-                subtitle = "Range translations and auto-translate ahead wait for a charger. The chapter you are reading is always translated",
-                preference = onlyWhileCharging,
+                icon = icon(R.drawable.ic_titles_24),
+                title = stringResource(R.string.tr_metadata_google),
+                subtitle = stringResource(R.string.tr_metadata_google_desc),
+                preference = titles,
+                onValueChanged = {
+                    GoogleTranslate.clearCache()
+                    true
+                },
             ),
             Preference.PreferenceItem.SwitchPreference(
-                icon = icon,
-                title = "Pause long jobs on low battery",
-                subtitle = "Range translations and auto-translate ahead pause below the threshold and resume when charging",
-                preference = pauseOnLow,
+                icon = searchIcon,
+                title = stringResource(R.string.tr_search_queries),
+                subtitle = stringResource(R.string.tr_search_queries_desc),
+                preference = searchQueries,
             ),
-            Preference.PreferenceItem.SliderPreference(
-                icon = icon,
-                title = "Low battery threshold (%)",
-                subtitle = "Battery level at which long jobs pause",
-                preference = lowPercent,
-                valueRange = PowerPolicy.MIN_LOW_BATTERY_PERCENT..PowerPolicy.MAX_LOW_BATTERY_PERCENT,
+            Preference.PreferenceItem.SwitchPreference(
+                icon = searchIcon,
+                title = stringResource(R.string.tr_search_ai),
+                subtitle = stringResource(R.string.tr_search_ai_desc),
+                preference = aiSearch,
             ),
+
+            // ---- Default translation style ----
+            section(R.string.tr_section_style),
+        ) + styleItems + listOf(
+            // ---- Advanced ----
+            section(R.string.tr_section_advanced),
+            Preference.PreferenceItem.CustomPreference(
+                title = stringResource(R.string.tr_fallback_model),
+                content = { FallbackPreference(context, configVersion) },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = stringResource(R.string.tr_fallback_key),
+                content = { FallbackKeyPreference(context, configVersion) },
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = icon(R.drawable.ic_strict_24),
+                title = stringResource(R.string.tr_strict),
+                subtitle = stringResource(R.string.tr_strict_desc),
+                preference = strictMode,
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = icon(R.drawable.ic_story_context_24),
+                title = stringResource(R.string.tr_carry_context),
+                subtitle = stringResource(R.string.tr_carry_context_desc),
+                preference = carryContext,
+            ),
+        )
+
+        return Preference.PreferenceGroup(
+            title = stringResource(R.string.tr_settings_group),
+            preferenceItems = items.toPersistentList(),
         )
     }
 
@@ -480,11 +505,12 @@ object TranslationSettings {
         LaunchedEffect(show) { if (!show) month = SpendLedger.monthTotal(context) }
         val cap = SecurePrefs.getMonthlySpendCap(context)
         TextPreferenceWidget(
-            title = "Spending",
+            title = stringResource(R.string.tr_spending),
             subtitle = month?.let { m ->
-                "This month: ${SpendPricing.format(m)}" + if (cap > 0) " of ${SpendPricing.format(cap)}" else ""
-            } ?: "Totals per day, month, novel and model",
-            icon = painterResource(R.drawable.ic_baseline_translate_24),
+                if (cap > 0) stringResource(R.string.tr_spending_month_cap, SpendPricing.format(m), SpendPricing.format(cap))
+                else stringResource(R.string.tr_spending_month, SpendPricing.format(m))
+            } ?: stringResource(R.string.tr_spending_desc),
+            icon = painterResource(R.drawable.ic_spend_24),
             onPreferenceClick = { show = true },
         )
         if (show) SpendDialog(onDismiss = { show = false })
@@ -502,17 +528,25 @@ object TranslationSettings {
         var value by remember { mutableStateOf(read(context)) }
         TextInputPreference(
             title = title,
-            subtitle = (if (value > 0) SpendPricing.format(value) else "Off") + " · $description",
+            subtitle = stringResource(
+                R.string.tr_cap_summary,
+                if (value > 0) SpendPricing.format(value) else stringResource(R.string.tr_cap_off),
+                description,
+            ),
+            icon = painterResource(R.drawable.ic_spend_24),
             initialValue = if (value > 0) String.format(java.util.Locale.US, "%.2f", value) else "",
-            placeholder = "USD, e.g. 5 (empty = off)",
+            placeholder = stringResource(R.string.tr_cap_hint),
             onSave = { text ->
                 val parsed = text.trim().removePrefix("$").replace(',', '.').ifBlank { "0" }.toDoubleOrNull()
                 if (parsed == null || parsed < 0) {
-                    showToast("Enter an amount in USD, e.g. 5 or 2.50")
+                    showToast(context.getString(R.string.tr_cap_invalid))
                 } else {
                     write(context, parsed)
                     value = parsed
-                    showToast(if (parsed > 0) "$title: ${SpendPricing.format(parsed)}" else "$title off")
+                    showToast(
+                        if (parsed > 0) context.getString(R.string.tr_cap_set_toast, title, SpendPricing.format(parsed))
+                        else context.getString(R.string.tr_cap_off_toast, title)
+                    )
                 }
             },
         )
@@ -522,7 +556,15 @@ object TranslationSettings {
     private fun per100(preset: ModelPreset, strictMode: Boolean): String =
         CostEstimator.formatPer100(CostEstimator.estimateForPreset(preset, 100, TranslationLanguages.CHINESE, strictMode))
 
-    private fun maskedKey(key: String?): String = key?.let { "set (…${it.takeLast(4)})" } ?: "not set"
+    @Composable
+    private fun maskedKey(key: String?): String =
+        key?.let { stringResource(R.string.tr_key_saved_short, it.takeLast(4)) } ?: stringResource(R.string.tr_key_not_set)
+
+    @Composable
+    private fun suggestedFallbacks(): String {
+        val labels = ModelPresets.SUGGESTED_FALLBACKS.map { it.label }
+        return if (labels.size == 2) stringResource(R.string.tr_or, labels[0], labels[1]) else labels.joinToString(", ")
+    }
 
     /** Opens the step-by-step setup wizard; rows re-read their settings when it closes. */
     @Composable
@@ -534,7 +576,7 @@ object TranslationSettings {
         TextPreferenceWidget(
             title = stringResource(R.string.setup_open_from_settings),
             subtitle = stringResource(R.string.setup_open_from_settings_desc),
-            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            icon = painterResource(R.drawable.ic_setup_24),
             onPreferenceClick = { launcher.launch(SetupActivity.intent(activityContext, firstRun = false)) },
         )
     }
@@ -560,11 +602,12 @@ object TranslationSettings {
         val scope = rememberCoroutineScope()
         val provider = remember(version.value) { SecurePrefs.getActiveProvider(context) }
         var savedKey by remember(version.value) { mutableStateOf(SecurePrefs.getApiKey(context, provider.id)) }
-        var verifying by remember { mutableStateOf(false) }
+        var testing by remember { mutableStateOf(false) }
 
         TextInputPreference(
-            title = "API key",
-            subtitle = "${provider.label}: ${maskedKey(savedKey)}",
+            title = stringResource(R.string.tr_api_key),
+            subtitle = stringResource(R.string.tr_api_key_summary, provider.label, maskedKey(savedKey)),
+            icon = painterResource(R.drawable.ic_api_key_24),
             initialValue = savedKey ?: "",
             placeholder = provider.keyPlaceholder,
             masked = true,
@@ -573,33 +616,30 @@ object TranslationSettings {
                 SecurePrefs.setApiKey(context, provider.id, key)
                 savedKey = key.ifBlank { null }
                 version.value++
-                showToast(if (key.isNotBlank()) "${provider.label} API key saved" else "${provider.label} API key cleared")
+                showToast(
+                    context.getString(
+                        if (key.isNotBlank()) R.string.tr_key_saved_toast else R.string.tr_key_cleared_toast,
+                        provider.label,
+                    )
+                )
             },
-            extraButtonLabel = if (verifying) "Verifying…" else "Verify",
-            extraButtonEnabled = !verifying,
+            // Same test and wording as the setup wizard's "Test the connection" page.
+            extraButtonLabel = stringResource(if (testing) R.string.setup_test_running else R.string.setup_test_run),
+            extraButtonEnabled = !testing,
             onExtraButton = { value ->
                 val key = value.trim()
                 if (key.isBlank()) {
-                    showToast("Enter an API key first")
+                    showToast(context.getString(R.string.tr_key_enter_first))
                 } else {
-                    verifying = true
+                    testing = true
                     scope.launch {
                         // Free check (one GET), never a paid completion; see ConnectionTester.
                         val result = try {
                             ConnectionTester.test(provider, key)
                         } finally {
-                            verifying = false
+                            testing = false
                         }
-                        val detail = result.detail.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
-                        showToast(
-                            when (result.status) {
-                                ConnectionStatus.OK -> "API key is valid!"
-                                ConnectionStatus.INVALID_KEY -> "The provider rejected this key$detail"
-                                ConnectionStatus.BLOCKED -> "Something is blocking the provider$detail"
-                                ConnectionStatus.NETWORK_ERROR -> "No connection to the provider$detail"
-                                ConnectionStatus.PROVIDER_ERROR -> "The provider returned an error$detail"
-                            }
-                        )
+                        showToast(ConnectionMessages.messageWithDetail(context, result, provider.label))
                     }
                 }
             },
@@ -642,6 +682,11 @@ object TranslationSettings {
         )
     }
 
+    /** The settings dialogs' shared buttons: Cancel, then the confirm action (default "OK"). */
+    @Composable
+    private fun DialogButtons(onDismiss: () -> Unit) =
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+
     /**
      * Model presets ([SecurePrefs.modelPresets], grouped by tier, with the cost per 100 chapters) plus
      * a custom model (free-text base URL, model id and extra request-body JSON).
@@ -650,21 +695,22 @@ object TranslationSettings {
     private fun ModelPreference(context: Context, version: MutableState<Int>) {
         var showDialog by remember { mutableStateOf(false) }
         val strictMode = SecurePrefs.isStrictModeEnabled(context)
-        val summary = remember(version.value, strictMode) {
-            val preset = SecurePrefs.getPreset(context)
-            if (preset != null) {
-                "${preset.label} (${preset.provider.label}) · ${per100(preset, strictMode)} (zh)"
-            } else {
-                val model = SecurePrefs.getCustomModel(context)
-                val estimate = CostEstimator.estimateCostForChapters(100, model, TranslationLanguages.CHINESE, strictMode)
-                "Custom: $model at ${SecurePrefs.getCustomBaseUrl(context)} · ${CostEstimator.formatPer100(estimate)}"
-            }
+        val preset = remember(version.value) { SecurePrefs.getPreset(context) }
+        val summary = if (preset != null) {
+            stringResource(R.string.tr_model_summary, preset.label, preset.provider.label, per100(preset, strictMode))
+        } else {
+            val model = remember(version.value) { SecurePrefs.getCustomModel(context) }
+            val estimate = CostEstimator.estimateCostForChapters(100, model, TranslationLanguages.CHINESE, strictMode)
+            stringResource(
+                R.string.tr_model_custom_summary, model, SecurePrefs.getCustomBaseUrl(context),
+                CostEstimator.formatPer100(estimate),
+            )
         }
 
         TextPreferenceWidget(
-            title = "Translation model",
+            title = stringResource(R.string.tr_model),
             subtitle = summary,
-            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            icon = painterResource(R.drawable.ic_model_24),
             onPreferenceClick = { showDialog = true },
         )
         if (!showDialog) return
@@ -682,13 +728,12 @@ object TranslationSettings {
 
         AlertDialog(
             onDismissRequest = dismiss,
-            title = { Text("Translation model") },
+            title = { Text(stringResource(R.string.tr_model)) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        "Cost per 100 chapters of 4,500 Chinese characters" +
-                            (if (strictMode) ", strict mode on." else ".") +
-                            " Each provider needs its own API key.",
+                        stringResource(if (strictMode) R.string.tr_model_dialog_note_strict else R.string.tr_model_dialog_note) +
+                            " " + stringResource(R.string.tr_model_dialog_keys),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     PresetTier.entries.forEach { tier ->
@@ -704,18 +749,18 @@ object TranslationSettings {
                             ) { selected = p.id }
                         }
                     }
-                    GroupLabel("Other")
+                    GroupLabel(stringResource(R.string.tr_model_other))
                     ChoiceRow(
                         selected = selected == custom,
-                        label = "Custom…",
-                        detail = "Any OpenAI-compatible endpoint (local server, other providers)",
+                        label = stringResource(R.string.tr_model_custom),
+                        detail = stringResource(R.string.tr_model_custom_desc),
                         notes = null,
                     ) { selected = custom }
                     if (selected == custom) {
                         OutlinedTextField(
                             value = customUrl,
                             onValueChange = { customUrl = it },
-                            label = { Text("Base URL") },
+                            label = { Text(stringResource(R.string.tr_model_base_url)) },
                             placeholder = { Text(LlmConfig.DEFAULT_BASE_URL) },
                             singleLine = true,
                             modifier = Modifier
@@ -725,8 +770,8 @@ object TranslationSettings {
                         OutlinedTextField(
                             value = customModel,
                             onValueChange = { customModel = it },
-                            label = { Text("Model id") },
-                            placeholder = { Text("e.g. glm-5.3-flash") },
+                            label = { Text(stringResource(R.string.tr_model_id)) },
+                            placeholder = { Text(stringResource(R.string.tr_model_id_example)) },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -735,20 +780,21 @@ object TranslationSettings {
                         OutlinedTextField(
                             value = customExtra,
                             onValueChange = { customExtra = it },
-                            label = { Text("Extra request body (JSON, optional)") },
+                            label = { Text(stringResource(R.string.tr_model_extra_body)) },
                             placeholder = { Text("{\"reasoning_effort\":\"none\"}") },
                             isError = !extraValid,
                             supportingText = {
                                 Text(
-                                    if (extraValid) "Merged into every request; a null value removes a field, e.g. \"temperature\": null"
-                                    else "Must be a JSON object"
+                                    stringResource(
+                                        if (extraValid) R.string.tr_model_extra_body_help else R.string.tr_model_extra_body_invalid
+                                    )
                                 )
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
                         )
-                        GroupLabel("Prompt")
+                        GroupLabel(stringResource(R.string.tr_model_prompt))
                         PromptProfiles.ALL.forEach { profile ->
                             ChoiceRow(
                                 selected = customProfile == profile.id,
@@ -774,9 +820,7 @@ object TranslationSettings {
                         dismiss()
                     }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = {
-                TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) }
-            },
+            dismissButton = { DialogButtons(dismiss) },
         )
     }
 
@@ -785,29 +829,25 @@ object TranslationSettings {
     private fun FallbackPreference(context: Context, version: MutableState<Int>) {
         var showDialog by remember { mutableStateOf(false) }
         val strictMode = SecurePrefs.isStrictModeEnabled(context)
-        val summary = remember(version.value) {
-            val preset = ModelPresets.byId(SecurePrefs.getFallbackPresetId(context))
-            if (preset == null) {
-                "Off. Re-translates passages blocked by a content filter or refused. Suggested: " +
-                    ModelPresets.SUGGESTED_FALLBACKS.joinToString(" or ") { it.label }
-            } else {
-                val primary = SecurePrefs.engineConfig(context)
-                buildString {
-                    append("${preset.label} (${preset.provider.label})")
-                    when {
-                        preset.toEngineConfig().sameModelAs(primary) -> append(" · same as the translation model, not used")
-                        SecurePrefs.getApiKey(context, preset.provider.id) == null ->
-                            append(" · needs a ${preset.provider.label} API key")
-                        else -> append(" · used for blocked or refused passages")
-                    }
-                }
+        val preset = remember(version.value) { ModelPresets.byId(SecurePrefs.getFallbackPresetId(context)) }
+        val suggested = suggestedFallbacks()
+        val summary = if (preset == null) {
+            stringResource(R.string.tr_fallback_off, suggested)
+        } else {
+            val name = "${preset.label} (${preset.provider.label})"
+            when {
+                preset.toEngineConfig().sameModelAs(SecurePrefs.engineConfig(context)) ->
+                    stringResource(R.string.tr_fallback_same, name)
+                SecurePrefs.getApiKey(context, preset.provider.id) == null ->
+                    stringResource(R.string.tr_fallback_needs_key, name, preset.provider.label)
+                else -> stringResource(R.string.tr_fallback_used, name)
             }
         }
 
         TextPreferenceWidget(
-            title = "Fallback model",
+            title = stringResource(R.string.tr_fallback_model),
             subtitle = summary,
-            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            icon = painterResource(R.drawable.ic_fallback_24),
             onPreferenceClick = { showDialog = true },
         )
         if (!showDialog) return
@@ -816,16 +856,13 @@ object TranslationSettings {
         val dismiss = { showDialog = false }
         AlertDialog(
             onDismissRequest = dismiss,
-            title = { Text("Fallback model") },
+            title = { Text(stringResource(R.string.tr_fallback_model)) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text(
-                        "Used once for a passage that the translation model's provider blocks (content filter) " +
-                            "or that comes back as a refusal or summary. Suggested: " +
-                            ModelPresets.SUGGESTED_FALLBACKS.joinToString(" or ") { it.label } + ".",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    ChoiceRow(selected = selected == null, label = "Off", detail = null, notes = null) { selected = null }
+                    Text(stringResource(R.string.tr_fallback_dialog_note, suggested), style = MaterialTheme.typography.bodySmall)
+                    ChoiceRow(selected = selected == null, label = stringResource(R.string.tr_cap_off), detail = null, notes = null) {
+                        selected = null
+                    }
                     SecurePrefs.modelPresets.forEach { p ->
                         ChoiceRow(
                             selected = selected == p.id,
@@ -843,9 +880,7 @@ object TranslationSettings {
                     dismiss()
                 }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = {
-                TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) }
-            },
+            dismissButton = { DialogButtons(dismiss) },
         )
     }
 
@@ -856,24 +891,22 @@ object TranslationSettings {
         val chapters = SecurePrefs.DEFAULT_AUTO_ANALYZE_CHAPTERS
         fun estimate(model: String) =
             CostEstimator.formatEstimate(CostEstimator.estimateAnalysis(chapters, model, TranslationLanguages.CHINESE))
-        val summary = remember(version.value) {
-            val preset = ModelPresets.byId(SecurePrefs.getAnalysisPresetId(context))
-            if (preset == null) {
-                "Same as the translation model"
-            } else {
-                buildString {
-                    append("${preset.label} (${preset.provider.label}) · ${estimate(preset.model)} per $chapters-chapter analysis (zh)")
-                    if (SecurePrefs.getApiKey(context, preset.provider.id) == null) {
-                        append(" · needs a ${preset.provider.label} API key; the translation model is used until then")
-                    }
-                }
-            }
+        val preset = remember(version.value) { ModelPresets.byId(SecurePrefs.getAnalysisPresetId(context)) }
+        val summary = if (preset == null) {
+            stringResource(R.string.tr_same_as_translation_model)
+        } else {
+            val line = stringResource(
+                R.string.tr_analysis_model_summary, preset.label, preset.provider.label, estimate(preset.model), chapters
+            )
+            if (SecurePrefs.getApiKey(context, preset.provider.id) == null) {
+                stringResource(R.string.tr_analysis_model_needs_key, line, preset.provider.label)
+            } else line
         }
 
         TextPreferenceWidget(
-            title = "Analysis model",
+            title = stringResource(R.string.tr_analysis_model),
             subtitle = summary,
-            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            icon = painterResource(R.drawable.ic_model_24),
             onPreferenceClick = { showDialog = true },
         )
         if (!showDialog) return
@@ -882,18 +915,16 @@ object TranslationSettings {
         val dismiss = { showDialog = false }
         AlertDialog(
             onDismissRequest = dismiss,
-            title = { Text("Analysis model") },
+            title = { Text(stringResource(R.string.tr_analysis_model)) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text(
-                        "Model for Analyze novel, which builds the character sheet (names, genders, places, terms) " +
-                            "from the first chapters. It runs once per novel, so a stronger model costs little. " +
-                            "Cost shown for $chapters Chinese chapters.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    ChoiceRow(selected = selected == null, label = "Same as translation model", detail = null, notes = null) {
-                        selected = null
-                    }
+                    Text(stringResource(R.string.tr_analysis_model_dialog_note, chapters), style = MaterialTheme.typography.bodySmall)
+                    ChoiceRow(
+                        selected = selected == null,
+                        label = stringResource(R.string.tr_same_as_translation_model),
+                        detail = null,
+                        notes = null,
+                    ) { selected = null }
                     SecurePrefs.modelPresets.forEach { p ->
                         ChoiceRow(
                             selected = selected == p.id,
@@ -911,9 +942,7 @@ object TranslationSettings {
                     dismiss()
                 }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = {
-                TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) }
-            },
+            dismissButton = { DialogButtons(dismiss) },
         )
     }
 
@@ -926,15 +955,21 @@ object TranslationSettings {
         } ?: return
         val savedKey = remember(version.value) { SecurePrefs.getApiKey(context, provider.id) }
         TextInputPreference(
-            title = "Fallback API key",
-            subtitle = "${provider.label}: ${maskedKey(savedKey)}",
+            title = stringResource(R.string.tr_fallback_key),
+            subtitle = stringResource(R.string.tr_api_key_summary, provider.label, maskedKey(savedKey)),
+            icon = painterResource(R.drawable.ic_api_key_24),
             initialValue = savedKey ?: "",
             placeholder = provider.keyPlaceholder,
             masked = true,
             onSave = { value ->
                 SecurePrefs.setApiKey(context, provider.id, value.trim())
                 version.value++
-                showToast(if (value.isNotBlank()) "${provider.label} API key saved" else "${provider.label} API key cleared")
+                showToast(
+                    context.getString(
+                        if (value.isNotBlank()) R.string.tr_key_saved_toast else R.string.tr_key_cleared_toast,
+                        provider.label,
+                    )
+                )
             },
         )
     }
@@ -944,20 +979,20 @@ object TranslationSettings {
     private fun TextInputPreference(
         title: String,
         subtitle: String?,
+        icon: Painter,
         initialValue: String,
         placeholder: String,
         onSave: (String) -> Unit,
         masked: Boolean = false,
         extraButtonLabel: String? = null,
         extraButtonEnabled: Boolean = true,
-        closeOnExtraButton: Boolean = false,
         onExtraButton: (String) -> Unit = {},
     ) {
         var showDialog by remember { mutableStateOf(false) }
         TextPreferenceWidget(
             title = title,
             subtitle = subtitle,
-            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            icon = icon,
             onPreferenceClick = { showDialog = true },
         )
         if (!showDialog) return
@@ -981,42 +1016,50 @@ object TranslationSettings {
                 TextButton(onClick = {
                     onSave(text)
                     dismiss()
-                }) { Text("Save") }
+                }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
                 Row {
                     if (extraButtonLabel != null) {
-                        TextButton(enabled = extraButtonEnabled, onClick = {
-                            onExtraButton(text)
-                            if (closeOnExtraButton) dismiss()
-                        }) { Text(extraButtonLabel) }
+                        TextButton(enabled = extraButtonEnabled, onClick = { onExtraButton(text) }) { Text(extraButtonLabel) }
                     }
-                    TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) }
+                    DialogButtons(dismiss)
                 }
             },
         )
     }
 }
 
+/** Section header inside the AI translation group, aligned with the row titles (16 + 24 + 8 + 16 dp). */
+@Composable
+internal fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 64.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+    )
+}
+
 /**
  * "Translate titles and synopses with AI" (default on; docs/browse.md). Self-contained so it is
- * listed in the AI Translation group with a single line.
+ * listed in the AI translation group with a single line.
  */
 @Composable
 internal fun metadataAiPreference(context: Context, icon: Painter): Preference.PreferenceItem.SwitchPreference {
     val preference = remember {
         AccessorPreferenceData(
-            com.lagradost.quicknovel.translator.MetadataTranslations.KEY_AI_METADATA, true,
-            { com.lagradost.quicknovel.translator.MetadataTranslations.isAiEnabled(context) },
-            { com.lagradost.quicknovel.translator.MetadataTranslations.setAiEnabled(context, it) },
+            MetadataTranslations.KEY_AI_METADATA, true,
+            { MetadataTranslations.isAiEnabled(context) },
+            { MetadataTranslations.setAiEnabled(context, it) },
         )
     }
     return Preference.PreferenceItem.SwitchPreference(
         icon = icon,
-        title = "Translate titles and synopses with AI",
-        subtitle = "Use the translation model for titles in Browse, search and the library, and for " +
-            "synopses when a novel is opened (about \$0.0002 per novel, cached). Without an API key " +
-            "the free Google option above is used",
+        title = stringResource(R.string.tr_metadata_ai),
+        subtitle = stringResource(R.string.tr_metadata_ai_desc),
         preference = preference,
     )
 }

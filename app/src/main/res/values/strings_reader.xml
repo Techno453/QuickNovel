@@ -5,7 +5,7 @@
     <!-- Glossary lookup (long-press / selection in the reader) -->
     <string name="reader_glossary_action">Glossary</string>
     <string name="reader_glossary_not_found_title">Not in the glossary</string>
-    <string name="reader_glossary_not_found">\"%s\" is not in this novel\'s Story Bible.</string>
+    <string name="reader_glossary_not_found">\"%s\" is not in this novel\'s glossary.</string>
     <string name="reader_glossary_add">Add to glossary</string>
     <string name="reader_glossary_edit">Edit</string>
     <string name="reader_glossary_lock">Lock</string>
