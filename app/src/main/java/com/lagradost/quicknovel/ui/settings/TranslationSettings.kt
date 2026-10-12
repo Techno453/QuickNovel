@@ -1,6 +1,8 @@
 package com.lagradost.quicknovel.ui.settings
 
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,6 +49,7 @@ import com.lagradost.quicknovel.translator.PowerPolicy
 import com.lagradost.quicknovel.translator.SpendLedger
 import com.lagradost.quicknovel.translator.SpendPricing
 import com.lagradost.quicknovel.ui.translate.SpendDialog
+import com.lagradost.quicknovel.ui.setup.SetupActivity
 import com.lagradost.quicknovel.ui.translate.TranslationForegroundService
 import androidx.compose.runtime.LaunchedEffect
 import com.lagradost.quicknovel.util.GoogleTranslate
@@ -271,6 +274,10 @@ object TranslationSettings {
         val configVersion = remember { mutableStateOf(0) }
 
         val items: List<Preference.PreferenceItem<out Any?, out Any?>> = listOf(
+            Preference.PreferenceItem.CustomPreference(
+                title = "Set up translation",
+                content = { SetupWizardPreference(configVersion) },
+            ),
             Preference.PreferenceItem.CustomPreference(
                 title = "Translation model",
                 content = { ModelPreference(context, configVersion) },
@@ -514,9 +521,39 @@ object TranslationSettings {
 
     private fun maskedKey(key: String?): String = key?.let { "set (…${it.takeLast(4)})" } ?: "not set"
 
+    /** Opens the step-by-step setup wizard; rows re-read their settings when it closes. */
+    @Composable
+    private fun SetupWizardPreference(version: MutableState<Int>) {
+        val activityContext = LocalContext.current
+        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            version.value++
+        }
+        TextPreferenceWidget(
+            title = stringResource(R.string.setup_open_from_settings),
+            subtitle = stringResource(R.string.setup_open_from_settings_desc),
+            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            onPreferenceClick = { launcher.launch(SetupActivity.intent(activityContext, firstRun = false)) },
+        )
+    }
+
     /** API key for the selected model's provider (keys are stored per provider). */
     @Composable
     private fun ApiKeyPreference(context: Context, version: MutableState<Int>) {
+        Column {
+            ApiKeyRow(context, version)
+            if (SecurePrefs.isUsingPlainFallback(context)) {
+                Text(
+                    stringResource(R.string.setup_key_plain_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 64.dp, end = 16.dp, bottom = 8.dp),
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun ApiKeyRow(context: Context, version: MutableState<Int>) {
         val scope = rememberCoroutineScope()
         val provider = remember(version.value) { SecurePrefs.getActiveProvider(context) }
         var savedKey by remember(version.value) { mutableStateOf(SecurePrefs.getApiKey(context, provider.id)) }
