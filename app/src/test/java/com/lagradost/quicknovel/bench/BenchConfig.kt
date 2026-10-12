@@ -79,7 +79,10 @@ data class BenchConfig(
     val bibleModel: String = "gpt-6-luna",
     /** Before each provider phase, drop at most this many of its most expensive models if the estimate would exceed the cap. */
     val maxDropsPerPhase: Int = 2,
+    /** The v1 single judge; it is also the panel's first member and the "luna-only" comparison column. */
     val judge: JudgeSpec = JudgeSpec(),
+    /** LLM judge panel (see Judge.kt / docs/translation-bench.md). */
+    val judges: JudgePanelSpec = JudgePanelSpec(),
     val samples: List<SampleSpec> = emptyList(),
     val models: List<ModelSpec> = emptyList(),
 ) {

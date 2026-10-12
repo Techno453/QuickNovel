@@ -13,6 +13,23 @@
   "bibleCallsPer100Chapters": 2,
   "bibleModel": "gpt-6-luna",
   "judge": { "enabled": true, "model": "gpt-6-luna" },
+  "judges": {
+    "_comment": "Judge panel (in addition to judge.model). Blind rubric; a judge never scores its own model. Reasoning off/lowest. See docs/translation-bench.md.",
+    "enabled": true,
+    "temperature": 0,
+    "maxCompletionTokens": 300,
+    "panel": [
+      { "id": "gpt-5.4-mini", "inputPerM": 0.75, "outputPerM": 4.50, "reasoningEffort": "none" },
+      { "id": "google/gemini-3.1-flash-lite", "inputPerM": 0.25, "outputPerM": 1.50, "priceNote": "OpenRouter default route, estimate",
+        "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY",
+        "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
+        "extraBody": { "reasoning": { "enabled": false } } },
+      { "id": "deepseek/deepseek-v4.1-flash", "inputPerM": 0.30, "outputPerM": 1.20, "priceNote": "OpenRouter default route, estimate",
+        "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY",
+        "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
+        "extraBody": { "reasoning": { "enabled": false } } }
+    ]
+  },
   "samples": [
     {
       "id": "ja-mushoku3",
