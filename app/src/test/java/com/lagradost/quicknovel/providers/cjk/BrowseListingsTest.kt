@@ -5,7 +5,6 @@ import com.lagradost.quicknovel.providers.ProviderFixtures
 import com.lagradost.quicknovel.providers.chinese.BiqugeProvider
 import com.lagradost.quicknovel.providers.chinese.IxdzsProvider
 import com.lagradost.quicknovel.providers.chinese.PiaotiaProvider
-import com.lagradost.quicknovel.providers.japanese.AlphapolisProvider
 import com.lagradost.quicknovel.providers.japanese.HamelnProvider
 import com.lagradost.quicknovel.providers.japanese.KakuyomuProvider
 import com.lagradost.quicknovel.providers.japanese.PixivNovelParser
@@ -31,12 +30,11 @@ class BrowseListingsTest {
     private val naver = NaverWebNovelProvider()
     private val ixdzs = IxdzsProvider()
     private val piaotia = PiaotiaProvider()
-    private val alphapolis = AlphapolisProvider()
     private val pixiv = PixivNovelProvider()
     private val shuba = BiqugeProvider()
     private val hameln = HamelnProvider()
 
-    private val all: List<MainAPI> = listOf(kakuyomu, novelpia, naver, ixdzs, piaotia, alphapolis, pixiv, shuba, hameln)
+    private val all: List<MainAPI> = listOf(kakuyomu, novelpia, naver, ixdzs, piaotia, pixiv, shuba, hameln)
 
     @Test
     fun listingsAreEnglishAndStartWithARanking() {
@@ -142,15 +140,6 @@ class BrowseListingsTest {
             piaotia.listingUrl("full", "3", 2)
         )
         assertEquals("https://www.piaotia.com/booksort3/0/5.html", piaotia.listingUrl("sort", "3", 5))
-    }
-
-    @Test
-    fun alphapolisListingUrls() {
-        assertEquals("https://www.alphapolis.co.jp/novel/index?sort=24hpt", alphapolis.listingUrl(null, "", 1))
-        assertEquals(
-            "https://www.alphapolis.co.jp/novel/index?sort=completed&category_ids=110400&page=2",
-            alphapolis.listingUrl("completed", "110400", 2)
-        )
     }
 
     @Test
