@@ -198,7 +198,7 @@ class TranslationForegroundService : Service() {
                 Log.e(TAG, "Could not start translation service", e)
                 TranslationState.release()
                 TranslationState.postProgress(
-                    TranslationProgress(0, 0, "", error = "Could not start translation: ${e.message}")
+                    TranslationProgress(0, 0, "", error = ctx.getString(R.string.tr_job_failed, e.message ?: e.javaClass.simpleName))
                 )
                 false
             }
@@ -329,7 +329,7 @@ class TranslationForegroundService : Service() {
             ACTION_START -> {
                 // Must call startForeground before any early return on API 26+.
                 // On API 29+ specify the service type to match the manifest declaration.
-                goForeground(buildNotification("Starting…", 0, 0))
+                goForeground(buildNotification(getString(R.string.tr_starting), 0, 0))
 
                 if (translationJob?.isActive == true) {
                     // Never replace a running job (its chapter list is in TranslationState).
@@ -353,7 +353,7 @@ class TranslationForegroundService : Service() {
 
                 val apiKey = SecurePrefs.getApiKey(applicationContext)
                 if (apiKey.isNullOrBlank()) {
-                    finishWithError("No API key set. Go to Settings → Translation.")
+                    finishWithError(getString(R.string.translator_no_api_key))
                     return START_NOT_STICKY
                 }
 
@@ -782,11 +782,11 @@ class TranslationForegroundService : Service() {
                     }
                     is BatchManager.SubmitResult.Failed -> {
                         BatchNotifications.failedToSubmit(ctx, novelName, result.message)
-                        TranslationState.postProgress(TranslationProgress(0, 0, "", error = "Overnight batch failed: ${result.message}"))
+                        TranslationState.postProgress(TranslationProgress(0, 0, "", error = getString(R.string.tr_batch_failed, result.message)))
                     }
                     BatchManager.SubmitResult.NothingToDo -> {
                         TranslationState.postProgress(
-                            TranslationProgress(0, 0, "", error = "Nothing to translate: the chapters are translated or already in a batch")
+                            TranslationProgress(0, 0, "", error = getString(R.string.tr_batch_nothing))
                         )
                     }
                 }
@@ -990,7 +990,7 @@ class TranslationForegroundService : Service() {
         plainText: Boolean = false,
     ) =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.netflix_download)
+            .setSmallIcon(R.drawable.ic_baseline_translate_24)
             .setContentTitle(title)
             .setContentText(
                 if (total > 0 && !plainText) {
@@ -1012,7 +1012,7 @@ class TranslationForegroundService : Service() {
     /** Read-ahead progress: the chapter being translated, how many more are queued, and a Stop action. */
     private fun buildReadAheadNotification(text: String, queued: Int, fraction: Float) =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.netflix_download)
+            .setSmallIcon(R.drawable.ic_baseline_translate_24)
             .setContentTitle(getString(R.string.read_ahead_title))
             .setContentText(if (queued > 0) getString(R.string.read_ahead_text, text, queued) else text)
             .setProgress(PROGRESS_MAX, (fraction.coerceIn(0f, 1f) * PROGRESS_MAX).toInt(), fraction <= 0f)
@@ -1039,7 +1039,7 @@ class TranslationForegroundService : Service() {
             nm.notify(
                 SUMMARY_NOTIFICATION_ID,
                 NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.netflix_download)
+                    .setSmallIcon(R.drawable.ic_baseline_translate_24)
                     .setContentTitle(getString(R.string.translation_finished_title))
                     .setContentText(text)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
@@ -1057,7 +1057,7 @@ class TranslationForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Translation Progress",
+                getString(R.string.tr_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             )
             nm.createNotificationChannel(channel)

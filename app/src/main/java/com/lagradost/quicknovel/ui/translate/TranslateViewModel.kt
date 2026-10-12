@@ -115,7 +115,7 @@ class TranslateViewModel(application: Application) : AndroidViewModel(applicatio
         currentNovelId = novelId
 
         // Immediate feedback so the UI reacts before the service starts.
-        progress.postValue(TranslationProgress(0, toIndex - fromIndex + 1, "Starting…"))
+        progress.postValue(TranslationProgress(0, toIndex - fromIndex + 1, getApplication<Application>().getString(R.string.tr_starting)))
 
         val started = TranslationForegroundService.startTranslation(
             ctx = getApplication(),
@@ -134,7 +134,7 @@ class TranslateViewModel(application: Application) : AndroidViewModel(applicatio
             isRunning = false
             // The service posts its own error if it failed to start; this covers "already running".
             if (TranslationState.isRunning) {
-                progress.postValue(TranslationProgress(0, 0, "", error = "Another translation is already running"))
+                progress.postValue(TranslationProgress(0, 0, "", error = getApplication<Application>().getString(R.string.tr_job_already_running)))
             }
         }
     }

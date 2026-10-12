@@ -98,7 +98,7 @@ object BatchNotifications {
     private fun channel(ctx: Context): NotificationManager {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Translation Progress", NotificationManager.IMPORTANCE_LOW))
+            nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, ctx.getString(R.string.tr_channel_name), NotificationManager.IMPORTANCE_LOW))
         }
         return nm
     }
@@ -116,7 +116,7 @@ object BatchNotifications {
             channel(ctx).notify(
                 id,
                 NotificationCompat.Builder(ctx, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.netflix_download)
+                    .setSmallIcon(R.drawable.ic_baseline_translate_24)
                     .setContentTitle(title)
                     .setContentText(text)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -131,9 +131,11 @@ object BatchNotifications {
 
     fun submitted(ctx: Context, job: BatchJob) = post(
         ctx, BASE_ID + (job.id % 1000).toInt(),
-        "Overnight translation queued: ${job.novelName}",
-        "Chapters ${job.fromChapter + 1}–${job.toChapter + 1}, ${job.requestCount} requests, about " +
-            "${SpendPricing.format(job.estimatedUsd)} at batch price. Ready within 24 hours.",
+        ctx.getString(R.string.tr_batch_queued_title, job.novelName),
+        ctx.getString(
+            R.string.tr_batch_queued_text, job.fromChapter + 1, job.toChapter + 1, job.requestCount,
+            SpendPricing.format(job.estimatedUsd),
+        ),
     )
 
     suspend fun finished(ctx: Context, job: BatchJob) {
@@ -142,17 +144,17 @@ object BatchNotifications {
         val needsLive = counts[BatchChapterStatus.NEEDS_LIVE] ?: 0
         val status = BatchStatus.fromName(job.status)
         val title = when (status) {
-            BatchStatus.DONE -> "Overnight translation ready: ${job.novelName}"
-            BatchStatus.FAILED -> "Overnight translation failed: ${job.novelName}"
-            else -> "Overnight translation ${status.label.lowercase()}: ${job.novelName}"
+            BatchStatus.DONE -> ctx.getString(R.string.tr_batch_ready_title, job.novelName)
+            BatchStatus.FAILED -> ctx.getString(R.string.tr_batch_failed_title, job.novelName)
+            else -> ctx.getString(R.string.tr_batch_status_title, status.label.lowercase(), job.novelName)
         }
         val text = buildString {
             if (status == BatchStatus.FAILED) {
-                append(job.error ?: "OpenAI rejected the batch.")
+                append(job.error ?: ctx.getString(R.string.tr_batch_rejected))
             } else {
-                append("$stored chapter(s) translated")
-                if (needsLive > 0) append(", $needsLive left for normal translation")
-                job.actualUsd?.let { append(". Cost ${SpendPricing.format(it)}") }
+                append(ctx.resources.getQuantityString(R.plurals.tr_batch_translated, stored, stored))
+                if (needsLive > 0) append(", ").append(ctx.getString(R.string.tr_batch_left, needsLive))
+                job.actualUsd?.let { append(". ").append(ctx.getString(R.string.tr_batch_cost_sentence, SpendPricing.format(it))) }
                 append('.')
             }
         }
@@ -160,7 +162,7 @@ object BatchNotifications {
     }
 
     fun failedToSubmit(ctx: Context, novelName: String, message: String) =
-        post(ctx, BASE_ID + 999, "Overnight translation not started: $novelName", message)
+        post(ctx, BASE_ID + 999, ctx.getString(R.string.tr_batch_not_started_title, novelName), message)
 }
 
 /** Unfinished batch count, for screens that want to poll on open. */
