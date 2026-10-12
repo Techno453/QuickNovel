@@ -30,12 +30,18 @@ import java.net.URLEncoder
  *   TOC:     GET /html/{shard}/{id}/index.html  div.centent li a  (oldest first, relative hrefs)
  *   Chapter: GET /html/{shard}/{id}/{cid}.html  text is loose in <body> between div.toplink
  *            and div.bottomlink, lines separated by <br>.
+ *
+ * [usesCloudFlareKiller] is on (2026-10-12) so that a real challenge, if Cloudflare ever starts
+ * one, is cleared in a WebView. Normal pages carry only the passive `/cdn-cgi/` script, which
+ * [com.lagradost.quicknovel.network.CloudflareKiller.isCloudflareChallenge] does not count as a
+ * challenge, so ordinary requests go straight through (checked on an emulator).
  */
-class PiaotiaProvider : MainAPI() {
+open class PiaotiaProvider : MainAPI() {
     override val name = "Piaotia (飘天文学)"
     override val mainUrl = "https://www.piaotia.com"
     override val lang = "zh"
     override val hasMainPage = true
+    override val usesCloudFlareKiller = true
     override val rateLimitTime = 1000L
 
     /**

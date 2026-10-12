@@ -48,9 +48,24 @@ class CloudflareKillerTest {
     }
 
     @Test
+    fun hamelnManagedChallengeIsDetected() {
+        // syosetu.org (Hameln) answered every JVM request on 2026-10-12 with this page: HTTP 403,
+        // cf-mitigated: challenge, cType 'managed' (a real browser passes it without a click).
+        val hameln = ProviderFixtures.bytes("cloudflare/challenge_hameln.html").toString(Charsets.UTF_8)
+        assertTrue(hameln.contains("<title>Just a moment...</title>") && hameln.contains("cType: 'managed'"))
+        assertTrue(isCloudflareChallenge(403, headers(challengeHeaders), sample(hameln)))
+        // Markup alone, without the header (e.g. a proxy that drops it).
+        assertTrue(isCloudflareChallenge(403, headers(cloudflareHeaders), sample(hameln)))
+        assertTrue(isCloudflareChallenge(200, headers(emptyMap()), sample(hameln)))
+    }
+
+    @Test
     fun normalPageWithCdnCgiScriptIsNotAChallenge() {
         assertFalse(isCloudflareChallenge(200, headers(cloudflareHeaders), sample(piaotiaChapter)))
         assertFalse(isCloudflareChallenge(200, headers(emptyMap()), sample(piaotiaChapter)))
+        // A Hameln page as served once the challenge is cleared.
+        val hamelnNovel = ProviderFixtures.bytes("hameln/novel.html").toString(Charsets.UTF_8)
+        assertFalse(isCloudflareChallenge(200, headers(cloudflareHeaders), sample(hamelnNovel)))
         // Email obfuscation links and the decode script are /cdn-cgi/ too.
         val emailProtected = """<html><head><title>Book</title></head><body>
             <a href="/cdn-cgi/l/email-protection#1a2b">[email&#160;protected]</a>

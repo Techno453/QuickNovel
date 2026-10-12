@@ -1,0 +1,402 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="ja">
+<head>
+<link rel="preconnect" href="https://img.syosetu.org">
+<link rel="stylesheet" type="text/css" href="https://img.syosetu.org/css/sp_v3.css?202609105">
+<link rel="stylesheet" href="https://img.syosetu.org/css/select2.min.css?202212171">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<meta http-equiv="Content-Script-Type" content="text/javascript">
+<meta name="theme-color" content="#b3a98c">
+<link rel="shortcut icon" href="https://img.syosetu.org/favicon.ico" >
+<link rel="apple-touch-icon" type="image/png" href="https://img.syosetu.org/image/apple-touch-icon-180x180.png">
+<link rel="icon" type="image/png" href="https://img.syosetu.org/image/icon-192x192.png">
+<meta name="keywords" content="二次創作,小説,SS,ハーメルン,投稿,検索">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=0" />
+<title>作品一覧 検索 - ハーメルン</title>
+<link rel="canonical" href="https://syosetu.org/search/?mode=search">
+<meta name="robots" content="noindex">
+<meta name="description" content="アーウエオか庚辛・SS乙丙えお。庚くケコ：乙丙丁戊、キクケコ、乙丙丁戊、キーケ、甲乙、丁戊か、クケコア、丙丁、カキク、コアイウエオカー、ケーアイ、丁戊、庚辛、コアイウエーカ、辛壬癸">
+</head>
+<body>
+<!-- コンテナ開始 -->
+<div id="container">
+<!-- ページ開始 -->
+<div id="page">
+<!-- ヘッダ開始 -->
+<div id="header">
+<ul class="nl clearFix">
+<li class="tabnavi"><a href="#tab_other"><img src="https://img.syosetu.org/css/img/icon_v2/other_menu.png" width="32" height="32" alt="メニュー"fetchpriority="high"><br>メニュー</a></li>
+<li><a href="https://syosetu.org/?mode=login"><img src="https://img.syosetu.org/css/img/icon_v2/mypage.png" width="32" height="32" alt="マイページ"><br>マイページ</a></li>
+<li><a href="https://syosetu.org/search/?mode=search"><img src="https://img.syosetu.org/css/img/icon_v2/search.png" width="32" height="32" alt="検索"><br>小説検索</a></li>
+<li><a href="https://syosetu.org/?mode=rank"><img src="https://img.syosetu.org/css/img/icon_v2/ranking.png" width="32" height="32" alt="ランキング"><br>ランキング</a></li>
+</ul>
+</div>   
+    <div id="tab_other">
+<h3 style="padding:3px 0;background-color: #4d4d4d;border-bottom: 1px solid #666;"> </h3>
+<ul class="list clearFix">
+<li><a href="https://syosetu.org/?mode=rireki">閲覧履歴</a></li>
+<li><a href="https://syosetu.org/">ハーメルンTOP</a></li>
+<li><a href="https://syosetu.org/?mode=seek_list">作品捜索掲示板</a></li>
+<li><a href="https://syosetu.org/?mode=recommended_list">推薦一覧</a></li>
+<li><a href="https://syosetu.org/?mode=kappo_new">新着活動報告</a></li>
+<li><a href="https://syosetu.org/?mode=img_gallery">投稿画像</a></li>
+<li><a href="https://syosetu.org/font_maker/?mode=font_search">自作フォント</a></li>
+<li><a href="https://syosetu.org/?mode=rule">利用規約</a></li>
+<li><a href="https://syosetu.org/?mode=readme_list">取扱説明書</a></li>
+<li><a href="https://syosetu.org/?mode=faq_list">FAQ</a></li>
+<li><a href="https://syosetu.org/?mode=tuho_message">情報提供</a></li>
+<li><a href="https://syosetu.org/?mode=teian_message">機能提案</a></li>
+<li><a href="https://syosetu.org/?mode=adskip">広告スキップ</a></li>
+<li><a href="#" onclick="changeView()">パソコン版</a></li>
+<li><a href="#footer">▼ページ最下部へ</a></li>
+</ul></div>
+<!-- ヘッダ終了 -->
+	<input type="hidden" name="csrf_token" value="" id="csrf_token">
+	<h3 id="pagetitle2"> </h3>
+<div id="nav2">
+    <ul class="nl clearFix">
+    <li><a href="https://h.syosetu.org/search/?mode=search_r18cs&type=45">R-18</a></li>
+    <li><a href="https://syosetu.org/?mode=recommended_list">推薦</a></li>
+    <li><a href="https://syosetu.org/?mode=seek_list">捜索掲示板</a></li>
+    <li class="tabnavi_sub"><a href="#tab04" class="menu_open" style="white-space:nowrap;overflow-x:hidden;">▼検索メニュー</a></li>
+    </ul>
+</div>
+<div id="tabcontent">
+<div id="tab04">
+<ul class="list clearFix">
+    <li><a href="https://syosetu.org/search/?mode=search_ngword">検索関係の設定</a></li>
+    <li><a href="https://syosetu.org/search/?mode=search_u">ユーザー検索</a></li>
+    <li><a href="https://syosetu.org/search/?mode=search_gensaku_list&filter=1">原作リスト</a></li>
+    <li><a href="https://syosetu.org/search/?mode=search_tag_list&filter=1">タグリスト</a></li>
+    <li><a href="https://syosetu.org/search/?mode=search_tira&type=45">チラシの裏</a></li>
+</ul></div>
+</div>
+<div id="main">
+<form action="https://syosetu.org/search/" method="GET" name="search" id="search_field">
+<dl class="search2" style="display: flow-root;">
+<dt><select name="gensaku" class="js-basic-single"></select>
+</dt><dd><select name="type" class="js-basic-hide-search">
+<option value="0" >新着順
+<option value="45" selected>最終更新日時(新しい順)
+<option value="1" >最終更新日時(古い順)
+<option value="28" >総合評価
+<option value="2" >通算UA数(多い順)
+<option value="3" >通算UA数(少ない順)
+<option value="4" >平均評価(高い順)
+<option value="5" >平均評価(低い順)
+<option value="42" >加重平均(高い順)
+<option value="43" >加重平均(低い順)
+<option value="6" >1話あたりの文字数(多い順)
+<option value="7" >1話あたりの文字数(少ない順)
+<option value="8" >初回投稿日(新しい順)
+<option value="9" >初回投稿日(古い順) 
+<option value="10" >お気に入り数(多い順)
+<option value="11" >お気に入り数(少ない順)
+<option value="38" >しおり数(多い順)
+<option value="39" >しおり数(少ない順)
+<option value="40" >ここすき数(多い順)
+<option value="41" >ここすき数(少ない順)
+<option value="12" >今週UA数(多い順)
+<option value="13" >今週UA数(少ない順)
+<option value="14" >先週UA数(多い順)
+<option value="15" >先週UA数(少ない順)
+<option value="16" >投票者数(多い順)
+<option value="17" >投票者数(少ない順)
+<option value="18" >総評価数(多い順)
+<option value="19" >総評価数(少ない順)
+<option value="20" >総文字数(多い順)
+<option value="21" >総文字数(少ない順)
+<option value="22" >感想数(多い順)
+<option value="23" >感想数(少ない順)   
+<option value="24" >話数(多い順)
+<option value="25" >話数(少ない順)
+<option value="26" >中央値(高い順)
+<option value="27" >中央値(低い順) 
+<option value="44" >評価10の投票数
+<option value="29" >日間総合評価
+<option value="30" >週間総合評価
+<option value="31" >月間総合評価
+<option value="32" >四半期総合評価
+<option value="33" >年間総合評価
+<option value="34" >Wilson Score Interval
+<option value="35" >相対評価
+<option value="36" >ピックアップ(総合評価/UA)
+<option value="37" >ランダム
+</select>
+</dd>
+</dl>
+<dl class="search3" style="display: flex">
+<dd>
+<select name="search_type" class="js-basic-hide-search" id="search_type_button" style="width:80px">
+<option value="" disabled>検索範囲
+<option value="0" selected>小説 
+<option value="1" >各話本文 
+<option value="2" >小説・各話本文
+</select></dd>
+    <dt id="textbox" style="flex-grow:1"><input type="search" name="word" value="" placeholder="調べたいワードを入力..." /></dt>
+    <dd id="search_button"><button><img src="https://img.syosetu.org/css/img/icon_v2/search.png" width="24" height="24" alt="🔎"></button></dd>
+</dl>
+<div class="detailcontent">
+<ul class="entry" style="display:flex">
+<li class="id5 filtercontent_trigger" style="flex-grow: 1;">▼絞り込み</li>
+<li class="id5 excludecontent_trigger" style="flex-grow: 1;">▼除外設定</li>
+</ul>
+<div class="hidden filtercontent">
+<ul class="entry">
+<li class="id6">
+<table width="100%">
+<tr><td width="30%">
+■1話文字数</td><td>
+<input type="number" name="mozi2" value="" step="100" placeholder="下限">～<input type="number" name="mozi1" value="" step="100" placeholder="上限">
+</td></tr>
+<tr><td>
+■総文字数</td><td>
+<input type="number" name="mozi2_all" value="" step="100" placeholder="下限">～<input type="number" name="mozi1_all" value="" step="100" placeholder="上限">
+</td></tr>
+<tr><td>
+■平均評価</td><td>
+<input type="number" name="rate2" value="" step="0.01" placeholder="下限">～<input type="number" name="rate1" value="" step="0.01" placeholder="上限">
+</td></tr>
+<tr><td>
+■総合評価</td><td>
+<input type="number" name="soupt2" value="" step="1" placeholder="下限">～<input type="number" name="soupt1" value="" step="1" placeholder="上限">
+</td></tr>
+<tr><td>
+■お気に入り数</td><td>
+<input type="number" name="f2" class="stext" value="" step="1" placeholder="下限">～<input type="number" name="f1" class="stext" value="" step="1" placeholder="上限">
+</td></tr>
+<tr><td>
+■感想数</td><td>
+<input type="number" name="re2" class="stext" value="" step="1" placeholder="下限">～<input type="number" name="re1" class="stext" value="" step="1" placeholder="上限">
+</td></tr>
+<tr><td>
+■話数</td><td>
+<input type="number" name="v2" class="stext" value="" step="1" placeholder="下限">～<input type="number" name="v1" class="stext" value="" step="1" placeholder="上限">
+</td></tr>
+<tr><td>
+■投票者数</td><td>
+<input type="number" name="r2" class="stext" value="" step="1" placeholder="下限">～<input type="number" name="r1" class="stext" value="" step="1" placeholder="上限">
+</td></tr>
+<tr><td>
+■会話率</td><td>
+<input type="number" name="t2" class="stext" value="" step="1" placeholder="下限">～<input type="number" name="t1" class="stext" value="" step="1" placeholder="上限">
+</td></tr>
+<tr><td>
+■最終更新日</td><td><input type="text" class="stext js-datetimepicker" name="d2" value="" placeholder="YYYY/MM/DD" maxlength="10" autocomplete="off">～<input type="text" class="stext js-datetimepicker" name="d1" value="" placeholder="YYYY/MM/DD" maxlength="10" autocomplete="off">
+</td></tr>
+</table>
+</li>
+</ul>
+<hr/>
+<table width=100%><tr><td width="50%">
+<ul class="entry">
+<label><li class="id1"><input type=checkbox name=op_s1 value=1 >お気に入り済</li></label>
+<label><li class="id1"><input type=checkbox name=rensai_s1 value=1 >短編</li></label>
+<label><li class="id1"><input type=checkbox name=rensai_s4 value=1 >完結</li></label>                                                    
+</ul>
+</td><td>
+<ul class="entry">
+<label><li class="id1"><input type=checkbox name=op_s2 value=1 >評価済</li></label>
+<label><li class="id1"><input type=checkbox name=rensai_s2 value=1 >連載</li></label>
+<li class="id1">　</li>
+</ul>
+</td></tr></table><hr />
+<ul class="entry">
+<li class="id6">
+<a href="https://syosetu.org/?mode=faq_view&fid=31">検索方法参考</a>
+</li>
+</ul>
+</div>
+<div class="hidden excludecontent">
+<table width=100%><tr><td width="50%">
+<ul class="entry">
+<label><li class="id1"><input type="checkbox" name="tag2" value="1" >R-15</li></label>
+<label><li class="id1"><input type="checkbox" name="tag12" value="1" >クロスオーバー</li></label>
+<label><li class="id1"><input type="checkbox" name="tag6" value="1" >神様転生</li></label>
+<label><li class="id1"><input type="checkbox" name="tag10" value="1" >憑依</li></label>
+<label><li class="id1"><input type="checkbox" name="tag3" value="1" >ボーイズラブ</li></label>
+<label><li class="id1"><input type="checkbox" name="tag8" value="1" >アンチ・ヘイト</li></label>
+<label><li class="id1"><input type="checkbox" name="tag13" value="1" >掲示板形式</li></label>
+<label><li class="id1"><input type="checkbox" name="op1" value="1" >お気に入り済</li></label>
+<label><li class="id1"><input type="checkbox" name="op3" value="1" >ブロック作・作者</li></label>
+<label><li class="id1"><input type="checkbox" name="rensai1" value="1" >短編</li></label>
+<label><li class="id1"><input type="checkbox" name="rensai3" value="1" >未完</li></label>
+</ul>
+<hr/>
+</td><td>
+<ul class="entry">
+<label><li class="id1"><input type="checkbox" name="tag7" value="1" >残酷な描写</li></label>
+<label><li class="id1"><input type="checkbox" name="tag5" value="1" >オリ主</li></label>
+<label><li class="id1"><input type="checkbox" name="tag9" value="1" >転生</li></label>
+<label><li class="id1"><input type="checkbox" name="tag11" value="1" >性転換</li></label>
+<label><li class="id1"><input type="checkbox" name="tag4" value="1" >ガールズラブ</li></label>
+<label><li class="id1"><input type="checkbox" name="tag14" value="1" >台本形式</li></label>
+<label><li class="id1"><input type="checkbox" name="tag15" value="1" >AI本文利用</li></label>
+<label><li class="id1"><input type="checkbox" name="op2" value="1" >評価済</li></label>
+<label><li class="id1"><input type="checkbox" name="op5" value="1" >ブロックワード</li></label>
+<label><li class="id1"><input type="checkbox" name="rensai2" value="1" >連載</li></label>
+<label><li class="id1"><input type="checkbox" name="rensai4" value="1" >完結</li></label>
+</ul>
+<hr/>
+</td></tr></table>
+<ul class="entry">
+<li class="id6">
+<table width="100%">
+<tr><td width="20%">
+<input type="button" value="全選択" class="linkbutton" id="function_all_check"/>
+</td><td width="20%">
+<input type="button" value="解除" class="linkbutton" id="function_all_out" />
+</td><td>
+<input type="button" value="常に除外検索を行う" onClick="location.href='https://syosetu.org/search/?mode=search_ngword'" class="linkbutton">
+</td></tr></table>
+</li>
+<li class="id6">
+<a href="https://syosetu.org/?mode=faq_view&fid=31">検索方法参考</a>
+</li>
+</ul>
+</div>
+</div>
+<input type="hidden" name="filter" value="">
+<input type="hidden" name="mode" value="search">
+<input type="hidden" name="page" value="1">
+<input type="hidden" name="uid" value="">
+</form>
+<hr />
+<br>
+<br><div class="novelnavi"><ul>
+<li class="novelnbnb"><a href="#" aria-label="top page">　</a></li><li class="novelnb2" aria-label="back page"><a href="#">　</a></li>
+<li class="novelmokuzi2"><strong><input id="pager1" pattern="d*" type="number" value="1" style="height:100%;background-color:#e0e0e0;outline:0;border:none;text-align:center;display:block;height:22px;width:100%;font-weight:bold;margin:0px;padding:0;color:#c00;outline:none;-webkit-appearance: none;-moz-appearance: none;appearance: none;touch-action:manipulation;" aria-label="pager"></strong></li>
+<li class="novelnb2"><a href="https://syosetu.org/search/?mode=search&word=&type=45&page=2">NEXT >></a></li><li class="novelnbnb"><a href="https://syosetu.org/search/?mode=search&word=&type=45&page=14550">>></a></li>
+</ul></div>
+<hr></hr><ul class="entry"><li class="id5"><strong>作品一覧  (145493件)<span class="button"><a href="https://syosetu.org/search/?mode=search&word=&type=45&filter=unread">未読</a> <a href="https://syosetu.org/search/?mode=search&word=&type=45&gensaku=%E5%8E%9F%E4%BD%9C%EF%BC%9A%E4%BA%8C%E6%AC%A1%E5%89%B5%E4%BD%9C">二次</a> <a href="https://syosetu.org/search/?mode=search&word=&type=45&gensaku=%E5%8E%9F%E4%BD%9C%EF%BC%9A%E3%82%AA%E3%83%AA%E3%82%B8%E3%83%8A%E3%83%AB">オリ</a></span></strong></li><li class="id6"><div class="button"><a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E9%80%83%E3%81%92%E4%B8%8A%E6%89%8B%E3%81%AE%E8%8B%A5%E5%90%9B">逃げ上手の若君</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E7%95%B0%E8%83%BD">異能</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E6%97%A5%E5%B8%B8">日常</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E6%88%A6%E8%A8%98">戦記</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%82%B3%E3%83%A1%E3%83%87%E3%82%A3">コメディ</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E9%9D%92%E6%98%A5">青春</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%83%8F%E3%82%A4%E3%83%95%E3%82%A1%E3%83%B3%E3%82%BF%E3%82%B8%E3%83%BC">ハイファンタジー</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%82%AE%E3%83%A3%E3%82%B0">ギャグ</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E6%88%90%E9%95%B7">成長</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%83%89%E3%83%A9%E3%82%B4%E3%83%B3%E3%83%9C%E3%83%BC%E3%83%AB">ドラゴンボール</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%82%AA%E3%83%AA%E4%B8%BB">オリ主</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E6%80%A7%E8%BB%A2%E6%8F%9B">性転換</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%82%AF%E3%83%AD%E3%82%B9%E3%82%AA%E3%83%BC%E3%83%90%E3%83%BC">クロスオーバー</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E8%BB%A2%E7%94%9F">転生</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E6%86%91%E4%BE%9D">憑依</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%82%AC%E3%83%BC%E3%83%AB%E3%82%BA%E3%83%A9%E3%83%96">ガールズラブ</a> <a href="https://syosetu.org/search/?mode=search&type=45&word=%20%E3%83%9C%E3%83%BC%E3%82%A4%E3%82%BA%E3%83%A9%E3%83%96">ボーイズラブ</a> </div></li></ul><div class="search_box" id="nid_429435">
+<div class="trigger">
+<h3><a href="https://syosetu.org/novel/429435/" class="search_novel_title">酒を片手に笠を被り青春を謳歌せよ</a></h3>
+<p>作者：<a href="https://syosetu.org/user/527551/">作者A</a></p>
+<p>原作：<a href="https://syosetu.org/search/?mode=search&word=%E5%8E%9F%E4%BD%9C%EF%BC%9A%E3%83%96%E3%83%AB%E3%83%BC%E3%82%A2%E3%83%BC%E3%82%AB%E3%82%A4%E3%83%96&type=45">ブルーアーカイブ</a></p>
+<p class="search_tags nolink">タグ：<span class="alert_color"><a href="https://syosetu.org/search/?mode=search&word=%E3%82%AA%E3%83%AA%E4%B8%BB&type=45" class="alert_color">オリ主</a> <a href="https://syosetu.org/search/?mode=search&word=%E8%BB%A2%E7%94%9F&type=45" class="alert_color">転生</a> </span> <a href="https://syosetu.org/search/?mode=search&word=%E9%A7%84%E6%96%87&type=45">駄文</a> <a href="https://syosetu.org/search/?mode=search&word=%E6%80%AA%E6%96%87%E6%9B%B8&type=45">怪文書</a> <a href="https://syosetu.org/search/?mode=search&word=%E4%B8%8D%E5%AE%9A%E6%9C%9F%E6%9B%B4%E6%96%B0&type=45">不定期更新</a> </p>
+<p>連載：4話　平均：1,215字　<span data-rating-bunpu="" class="popup_rating_bunpu">評価：<img loading="lazy" src="https://img.syosetu.org/image/grade4/ico_grade3_0.gif" width="41" height="8" alt="-.--" title="-.--" class="bar_base2"> 0.00</span></p>
+</div>
+<div class="toggle_container hidden">
+<p>　「ウエオーキ辛壬！あ、丙えお！？辛壬こあいうえおか、辛けこあいうえオ！」 ▼「アイウーオ、庚辛壬こ甲いうえお?庚くけこあいう！」 ▼くけこあ、1丁お己庚くけこ。 ▼丁おかきくけこあ乙丙え戊か庚くけこあ乙丙丁。かき、壬こ甲いうえオカキクけ癸甲い！？ ▼「辛壬癸甲乙丙えおかき辛けこあい」 ▼己庚く壬こあい丙えおか庚辛け癸あ乙丙え戊己！ ▼「あい丙え戊かきく壬こ」…</p>
+<p style="text-align:center"><a href="https://syosetu.org/novel/429435/" class="read-button">あい丙丁お己き</a></p>
+<p>甲乙：4,858壬</p>
+<p>甲乙UA：802　癸甲UA：298　壬癸UA：504</p>
+<p>甲乙丙：0　き辛け癸あ：9　<a href="https://syosetu.org/?mode=review&nid=429435">甲乙：0</a></p>
+<p>甲乙丙丁：2026癸10丙12己(辛) 13:50　<a href="https://syosetu.org/?mode=ss_detail&nid=429435">甲乙丙丁</a><br><a href="#" class="ajax-toggle is-off"
+    data-url="/"
+    data-state="off"
+	data-action="delete"
+	data-remove="#nid_429435"
+    data-param-mode="blocknovel_end"
+    data-param-nid="429435"
+	data-confirm="検索結果から除外してもよろしいですか？
+■除外を常時適用する手順
+1.検索メニュー
+2.検索関係の設定
+3.除外設定で「ブロック作品・ユーザ」を対象に設定">甲乙</a></p>
+</div></div>
+<div class="search_box" id="nid_401686">
+<div class="trigger">
+<h3><a href="https://syosetu.org/novel/401686/" class="search_novel_title">旅の仲間は家族となりて</a></h3>
+<p>作者：<a href="https://syosetu.org/user/264062/">氷ユリ</a></p>
+<p>原作：<a href="https://syosetu.org/search/?mode=search&word=%E5%8E%9F%E4%BD%9C%EF%BC%9A%E3%83%89%E3%83%A9%E3%82%B4%E3%83%B3%E3%82%AF%E3%82%A8%E3%82%B9%E3%83%88&type=45">ドラゴンクエスト</a></p>
+<p class="search_tags nolink">タグ：<span class="alert_color"><a href="https://syosetu.org/search/?mode=search&word=%E3%82%AA%E3%83%AA%E4%B8%BB&type=45" class="alert_color">オリ主</a> </span> <a href="https://syosetu.org/search/?mode=search&word=%E3%83%89%E3%83%A9%E3%82%B4%E3%83%B3%E3%82%AF%E3%82%A8%E3%82%B9%E3%83%88%EF%BC%8C%E3%83%89%E3%83%A9%E3%82%AF%E3%82%A8%E3%82%A6%E3%82%A9%E3%83%BC%E3%82%AF&type=45">ドラゴンクエスト，ドラクエウォーク</a> </p>
+<p>連載：118話　平均：3,362字　<span data-rating-bunpu=",,,,,,,,,,1" class="popup_rating_bunpu">評価：<img loading="lazy" src="https://img.syosetu.org/image/grade4/ico_grade3_0.gif" width="41" height="8" alt="-.--" title="-.--" class="bar_base2"> 0.00</span></p>
+</div>
+<div class="toggle_container hidden">
+<p>　 ▼丁戊カキーケーあ、丙えお己きくけ！RPG丁戊己庚辛ケーアイウエ『カキクケコアイウエオーキ』けコアイウエオカき辛けこあいうえお。キクケコあいうえおかきくけこ甲乙うえお。 ▼壬癸アイウ丁お己きクケコアいう丁戊かきくけ。 ▼ウエーカー辛けコアイ丙え戊己きくけこあいう丁お己庚く壬癸あイウエお己き辛けこあいうえ。 ▼辛壬こ甲乙う丁戊かキクケ癸甲乙丙えおかきくけこ。…</p>
+<p style="text-align:center"><a href="https://syosetu.org/novel/401686/" class="read-button">あい丙丁お己き</a></p>
+<p>甲乙：396,762甲</p>
+<p>甲乙UA：6,786　乙丙UA：16　癸甲UA：146</p>
+<p>甲乙丙：1　き辛け癸あ：14　<a href="https://syosetu.org/?mode=review&nid=401686">甲乙：0</a></p>
+<p>甲乙丙丁：2026癸10丙12己(辛) 13:49　<a href="https://syosetu.org/?mode=ss_detail&nid=401686">甲乙丙丁</a><br><a href="#" class="ajax-toggle is-off"
+    data-url="/"
+    data-state="off"
+	data-action="delete"
+	data-remove="#nid_401686"
+    data-param-mode="blocknovel_end"
+    data-param-nid="401686"
+	data-confirm="検索結果から除外してもよろしいですか？
+■除外を常時適用する手順
+1.検索メニュー
+2.検索関係の設定
+3.除外設定で「ブロック作品・ユーザ」を対象に設定">甲乙</a></p>
+</div></div>
+<div class="search_box" id="nid_429849">
+<div class="trigger">
+<h3><a href="https://syosetu.org/novel/429849/" class="search_novel_title">FINAL FANTASY VIII もう一人のレウァール</a></h3>
+<p>作者：<a href="https://syosetu.org/user/526199/">Kurumimogomogo</a></p>
+<p>原作：<a href="https://syosetu.org/search/?mode=search&word=%E5%8E%9F%E4%BD%9C%EF%BC%9AFF%E2%85%A7&type=45">FFⅧ</a></p>
+<p class="search_tags nolink">タグ：<span class="alert_color"><a href="https://syosetu.org/search/?mode=search&word=%E3%82%AA%E3%83%AA%E4%B8%BB&type=45" class="alert_color">オリ主</a> <a href="https://syosetu.org/search/?mode=search&word=AI%E6%9C%AC%E6%96%87%E5%88%A9%E7%94%A8&type=45" class="alert_color">AI本文利用</a> </span> </p>
+<p>連載：18話　平均：8,461字　<span data-rating-bunpu="" class="popup_rating_bunpu">評価：<img loading="lazy" src="https://img.syosetu.org/image/grade4/ico_grade3_0.gif" width="41" height="8" alt="-.--" title="-.--" class="bar_base2"> 0.00</span></p>
+</div>
+<div class="toggle_container hidden">
+<p>　イウエオカキ辛壬癸あ乙丙エオカキー。 ▼イーエオカ庚辛け癸甲いうえ、カキク壬癸甲イウエ・カキクーコあ乙丙えおかき辛壬、 ▼ウエオ・キーケコアい、丁戊か庚くけ癸甲い丙えおかき辛壬こあい。 ▼己キクケコ甲いう丁戊か、辛ケコア乙うえ戊己庚辛け癸甲い丙えオカキ。 ▼GFウエオかキクケコアイウえおかき辛壬こ甲いうえ戊己き辛壬こ甲い、 ▼己庚辛壬癸あ乙丙え戊己きく壬癸甲…</p>
+<p style="text-align:center"><a href="https://syosetu.org/novel/429849/" class="read-button">あい丙丁お己き</a></p>
+<p>甲乙：152,303甲</p>
+<p>甲乙UA：76　壬癸UA：76　庚辛UA：-</p>
+<p>甲乙丙：0　き辛け癸あ：0　<a href="https://syosetu.org/?mode=review&nid=429849">甲乙：0</a></p>
+<p>甲乙丙丁：2026癸10丙12己(辛) 13:47　<a href="https://syosetu.org/?mode=ss_detail&nid=429849">甲乙丙丁</a><br><a href="#" class="ajax-toggle is-off"
+    data-url="/"
+    data-state="off"
+	data-action="delete"
+	data-remove="#nid_429849"
+    data-param-mode="blocknovel_end"
+    data-param-nid="429849"
+	data-confirm="検索結果から除外してもよろしいですか？
+■除外を常時適用する手順
+1.検索メニュー
+2.検索関係の設定
+3.除外設定で「ブロック作品・ユーザ」を対象に設定">甲乙</a></p>
+</div></div>
+
+<hr /><br><div class="novelnavi"><ul>
+<li class="novelnbnb"><a href="#" aria-label="top page">　</a></li><li class="novelnb2" aria-label="back page"><a href="#">　</a></li>
+<li class="novelmokuzi2"><strong><input id="pager2" pattern="d*" type="number" value="1" style="height:100%;background-color:#e0e0e0;outline:0;border:none;text-align:center;display:block;height:22px;width:100%;font-weight:bold;margin:0px;padding:0;color:#c00;outline:none;-webkit-appearance: none;-moz-appearance: none;appearance: none;touch-action:manipulation;" aria-label="pager"></strong></li>
+<li class="novelnb2"><a href="https://syosetu.org/search/?mode=search&word=&type=45&page=2">NEXT >></a></li><li class="novelnbnb"><a href="https://syosetu.org/search/?mode=search&word=&type=45&page=14550">>></a></li>
+</ul></div>
+<div id="footer">
+<div id="header">
+<ul class="nl clearFix">
+<li><a href="#"><img src="https://img.syosetu.org/css/img/icon_v2/totop.png" width="32" height="32" alt="画面上部"><br>▲上部へ</a></li>
+<li><a href="https://syosetu.org/?mode=login"><img src="https://img.syosetu.org/css/img/icon_v2/mypage.png" width="32" height="32" alt="マイページ"><br>マイページ</a></li>
+<li><a href="https://syosetu.org/search/?mode=search"><img src="https://img.syosetu.org/css/img/icon_v2/search.png" width="32" height="32" alt="検索"><br>小説検索</a></li>
+<li><a href="https://syosetu.org/?mode=rank"><img src="https://img.syosetu.org/css/img/icon_v2/ranking.png" width="32" height="32" alt="ランキング"><br>ランキング</a></li>
+</ul>
+</div>
+<br>
+<a href="https://syosetu.org/">トップページ</a> 　|　 
+<a href="https://syosetu.org/?mode=rule">利用規約</a> 　|　 
+<a href="https://syosetu.org/?mode=rulelist">違反者一覧</a><br>
+<a href="https://syosetu.org/?mode=readme_list">取扱説明書</a> 　|　 
+<a href="https://syosetu.org/?mode=faq_list">FAQ</a> 　|　 
+<a href="https://syosetu.org/?mode=privacy">Pポリシー</a><br>
+<a href="https://syosetu.org/?mode=info">運営情報</a> 　|　 
+<a href="https://syosetu.org/?mode=tuho_message">情報提供</a> 　|　 
+<a href="https://syosetu.org/?mode=teian_message">機能提案</a>
+<br><br> 
+<a href="https://syosetu.org/font_maker/?mode=font_search">自作フォント</a> 　|　 
+<a href="https://syosetu.org/?mode=rireki">閲覧履歴</a> 　|　 
+<a href="https://syosetu.org/?mode=seek_list">作品捜索掲示板</a>
+<br><br> 
+<a href="https://twitter.com/hameln_tukuru">運営twitter</a>
+<br><br> 
+<a href="https://syosetu.org/?mode=logout">ログアウト</a> 　|　   
+<a href="#" onclick="changeView()">パソコン版</a> 　|　   
+<a href="https://syosetu.org/?mode=adskip">広告スキップ</a>
+<br>
+<br>夜間モード：
+    <input type="checkbox" id="nightmode_check" class="toggle_cbx hidden"/>
+    <label for="nightmode_check" class="toggle_lbl"></label>
+<br>
+<br>
+<address>
+サイト内の小説の無断転載は固くお断りしております。
+</address>
+</div>
+<!-- フッタ終了 -->
+</div>
+<!-- コンテナ終了 -->
+</body>
+</html>

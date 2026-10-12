@@ -2,9 +2,11 @@ package com.lagradost.quicknovel.providers.cjk
 
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.providers.ProviderFixtures
+import com.lagradost.quicknovel.providers.chinese.BiqugeProvider
 import com.lagradost.quicknovel.providers.chinese.IxdzsProvider
 import com.lagradost.quicknovel.providers.chinese.PiaotiaProvider
 import com.lagradost.quicknovel.providers.japanese.AlphapolisProvider
+import com.lagradost.quicknovel.providers.japanese.HamelnProvider
 import com.lagradost.quicknovel.providers.japanese.KakuyomuProvider
 import com.lagradost.quicknovel.providers.japanese.PixivNovelParser
 import com.lagradost.quicknovel.providers.japanese.PixivNovelProvider
@@ -31,8 +33,10 @@ class BrowseListingsTest {
     private val piaotia = PiaotiaProvider()
     private val alphapolis = AlphapolisProvider()
     private val pixiv = PixivNovelProvider()
+    private val shuba = BiqugeProvider()
+    private val hameln = HamelnProvider()
 
-    private val all: List<MainAPI> = listOf(kakuyomu, novelpia, naver, ixdzs, piaotia, alphapolis, pixiv)
+    private val all: List<MainAPI> = listOf(kakuyomu, novelpia, naver, ixdzs, piaotia, alphapolis, pixiv, shuba, hameln)
 
     @Test
     fun listingsAreEnglishAndStartWithARanking() {
