@@ -27,7 +27,12 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.animation.doOnEnd
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
+import androidx.window.layout.WindowLayoutInfo
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -36,8 +41,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.children
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.slider.Slider
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
@@ -87,6 +94,8 @@ import kotlin.properties.Delegates
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
 import com.lagradost.quicknovel.util.SubtitleHelper
+import com.lagradost.quicknovel.util.AdaptiveLayout
+import com.lagradost.quicknovel.util.AdaptiveLayout.adaptToWindow
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
 import kotlin.collections.map
 import com.lagradost.quicknovel.util.translation.models.TranslatorAgents
@@ -532,10 +541,65 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
     }
 
+    private var lastDensityDpi = 0
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         // we save this just in case the user fucks it up somehow
         postDesired(binding.realText)
         super.onConfigurationChanged(newConfig)
+        // Foldables can change density between the cover and the inner screen; we handle that
+        // ourselves (manifest configChanges) so rebind the text so sp sizes use the new density.
+        if (lastDensityDpi != 0 && newConfig.densityDpi != lastDensityDpi) {
+            updateTextAdapterConfig()
+        }
+        lastDensityDpi = newConfig.densityDpi
+        // the new window width arrives with the next layout, see the realText layout listener
+        updatePadding()
+    }
+
+    /** Height of the lower half below a horizontal hinge in tabletop posture, 0 otherwise. */
+    private var tabletopLowerHeight = 0
+
+    /**
+     * Tabletop posture (foldable half opened with a horizontal hinge): keep the text in the
+     * upper half and leave the lower half to the controls and the settings sheet. No-op on
+     * devices without a folding feature.
+     */
+    private fun applyWindowLayout(info: WindowLayoutInfo) {
+        val fold = info.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull {
+            it.state == FoldingFeature.State.HALF_OPENED &&
+                    it.orientation == FoldingFeature.Orientation.HORIZONTAL
+        }
+        val root = binding.root
+        var lowerHeight = 0
+        if (fold != null && root.height > 0) {
+            val location = IntArray(2)
+            root.getLocationInWindow(location)
+            val foldTop = fold.bounds.top - location[1]
+            val foldBottom = fold.bounds.bottom - location[1]
+            if (foldTop > 0 && foldTop < root.height) {
+                lowerHeight = (root.height - foldBottom).coerceAtLeast(0)
+                binding.readNormalLayout.updateLayoutParams<FrameLayout.LayoutParams> {
+                    bottomMargin = root.height - foldTop
+                }
+            }
+        }
+        if (lowerHeight == 0) {
+            binding.readNormalLayout.updateLayoutParams<FrameLayout.LayoutParams> {
+                bottomMargin = 0
+            }
+        }
+        if (lowerHeight != tabletopLowerHeight) {
+            tabletopLowerHeight = lowerHeight
+            postDesired(binding.realText)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        // Safety net for the rare case the activity is still recreated (process death, a config
+        // change we do not handle): make sure the exact position is on disk, init() resumes from it.
+        viewModel.persistPosition()
+        super.onSaveInstanceState(outState)
     }
 
     private fun updateOtherTextConfig(config: TextConfig) {
@@ -546,8 +610,31 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     }
 
     private fun updatePadding() {
-        val h = viewModel.paddingHorizontal.toPx
-        val v = viewModel.paddingVertical.toPx
+        val density = resources.displayMetrics.density
+        val userPad = (viewModel.paddingHorizontal * density).toInt()
+        val v = (viewModel.paddingVertical * density).toInt()
+        // Cap the line length on wide windows (foldable inner screen, tablets, landscape) by
+        // centring a column of at most maxTextWidth dp; never narrower than the user's margin.
+        val width = binding.realText.width.takeIf { it > 0 }
+            ?: (resources.configuration.screenWidthDp * density).toInt()
+        val h = AdaptiveLayout.centeredPadding(
+            widthPx = width,
+            userPaddingPx = userPad,
+            maxMeasurePx = (viewModel.maxTextWidth * density).toInt()
+        )
+        // keep the bottom actions and the clock/battery overlay aligned with the text column
+        val extra = h - userPad
+        val overlayPad = (10 * density).toInt() + extra
+        binding.readOverlay.apply {
+            if (paddingLeft != overlayPad || paddingRight != overlayPad) {
+                setPadding(overlayPad, paddingTop, overlayPad, paddingBottom)
+            }
+        }
+        for (bar in listOf(binding.readerBottomView, binding.readerBottomViewTts)) {
+            if (bar.paddingLeft != extra || bar.paddingRight != extra) {
+                bar.setPadding(extra, bar.paddingTop, extra, bar.paddingBottom)
+            }
+        }
         binding.realText.apply {
             if (paddingLeft == h && paddingRight == h && paddingBottom == v && paddingTop == v) return
             setPadding(
@@ -749,6 +836,28 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         observe(viewModel.paddingVerticalLive) {
             updatePadding()
+        }
+
+        observe(viewModel.maxTextWidthLive) {
+            updatePadding()
+        }
+
+        lastDensityDpi = resources.configuration.densityDpi
+        // Re-centre the text column whenever the window width changes (fold/unfold, split screen,
+        // rotation). scrollToDesired in updatePadding keeps the reading position.
+        binding.realText.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) {
+                v.post { updatePadding() }
+            }
+        }
+
+        // foldable postures, see applyWindowLayout
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                WindowInfoTracker.getOrCreate(this@ReadActivity2)
+                    .windowLayoutInfo(this@ReadActivity2)
+                    .collect { info -> binding.root.post { applyWindowLayout(info) } }
+            }
         }
 
 
@@ -1164,6 +1273,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             val binding = ReadBottomSettingsBinding.inflate(layoutInflater, null, false)
             bottomSheetDialog.setContentView(binding.root)
+            // max width + expanded on wide/short windows (foldable inner screen, landscape)
+            bottomSheetDialog.adaptToWindow()
+            if (tabletopLowerHeight > 0) {
+                // tabletop: the sheet lives below the hinge
+                bottomSheetDialog.behavior.maxHeight = tabletopLowerHeight
+                bottomSheetDialog.behavior.skipCollapsed = true
+                bottomSheetDialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+            }
 
             //Create and Order tabs
             val tabsToViews = listOf(
@@ -1308,6 +1425,41 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 setValueRounded(viewModel.paddingHorizontal.toFloat())
                 addOnChangeListener { slider, value, fromUser ->
                     viewModel.paddingHorizontal = value.roundToInt()
+                }
+            }
+
+            binding.readSettingsTextMaxWidth.apply {
+                fun label(value: Int) {
+                    binding.readSettingsTextMaxWidthText.text = getString(
+                        R.string.text_max_width_value,
+                        getString(R.string.text_max_width),
+                        if (value <= 0) getString(R.string.no_limit)
+                        else getString(R.string.text_max_width_dp, value)
+                    )
+                }
+                // right end of the slider = no limit (stored as 0)
+                setValueRounded(
+                    viewModel.maxTextWidth.takeIf { it > 0 }?.toFloat() ?: valueTo
+                )
+                label(viewModel.maxTextWidth)
+                setLabelFormatter { value ->
+                    if (value >= valueTo) getString(R.string.no_limit) else "${value.roundToInt()}"
+                }
+                addOnChangeListener { slider, value, fromUser ->
+                    val newWidth = if (value >= slider.valueTo) 0 else value.roundToInt()
+                    viewModel.maxTextWidth = newWidth
+                    label(newWidth)
+                }
+            }
+
+            binding.readSettingsTextMaxWidthText.setOnClickListener {
+                it.popupMenu(
+                    items = listOf(1 to R.string.reset_value),
+                    selectedItemId = null
+                ) {
+                    if (itemId == 1) {
+                        binding.readSettingsTextMaxWidth.setValueRounded(DEF_MAX_TEXT_WIDTH.toFloat())
+                    }
                 }
             }
 

@@ -17,6 +17,25 @@
                 android:layout_height="match_parent"
                 android:layout_width="match_parent">
 
+            <!-- Shown instead of nav_view on windows >= 600dp wide (foldable inner screen,
+                 tablets, landscape), toggled live in MainActivity.updateNavMode -->
+            <com.google.android.material.navigationrail.NavigationRailView
+                    android:id="@+id/nav_rail"
+                    android:layout_width="@dimen/nav_rail_width"
+                    android:layout_height="0dp"
+                    android:visibility="gone"
+                    app:labelVisibilityMode="unlabeled"
+                    app:menuGravity="center"
+                    android:background="?attr/primaryGrayBackground"
+
+                    app:itemIconTint="@color/item_select_color"
+                    app:itemTextColor="@color/item_select_color"
+
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:menu="@menu/bottom_nav_menu" />
+
             <com.google.android.material.bottomnavigation.BottomNavigationView
                     android:id="@+id/nav_view"
                     android:layout_height="70dp"
@@ -32,16 +51,23 @@
                     app:layout_constraintRight_toRightOf="parent"
                     app:menu="@menu/bottom_nav_menu" />
 
-            <fragment
-                    android:id="@+id/nav_host_fragment"
-                    android:name="androidx.navigation.fragment.NavHostFragment"
-                    android:layout_width="match_parent"
+            <FrameLayout
+                    android:id="@+id/nav_host_container"
+                    android:layout_width="0dp"
                     android:layout_height="0dp"
-                    app:defaultNavHost="true"
                     app:layout_constraintBottom_toTopOf="@+id/nav_view"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:navGraph="@navigation/mobile_navigation"
-                    app:layout_constraintEnd_toEndOf="parent" />
+                    app:layout_constraintStart_toEndOf="@+id/nav_rail"
+                    app:layout_constraintEnd_toEndOf="parent">
+
+                <fragment
+                        android:id="@+id/nav_host_fragment"
+                        android:name="androidx.navigation.fragment.NavHostFragment"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:defaultNavHost="true"
+                        app:navGraph="@navigation/mobile_navigation" />
+            </FrameLayout>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </FrameLayout>

@@ -29,6 +29,8 @@ import com.lagradost.quicknovel.translator.db.GlossaryTerm
 import com.lagradost.quicknovel.ui.translate.AnalysisProgress
 import com.lagradost.quicknovel.ui.translate.AnalysisState
 import com.lagradost.quicknovel.ui.translate.TranslationForegroundService
+import com.lagradost.quicknovel.util.AdaptiveLayout.capWidth
+import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
 import kotlinx.coroutines.launch
 
 class GlossaryFragment : Fragment() {
@@ -77,6 +79,11 @@ class GlossaryFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Not covered by the bottom bar (hidden off-tab), so keep clear of the status and
+        // navigation bars ourselves; cap the content width on wide windows.
+        fixSystemBarsPadding(binding.root, overlayCutout = false)
+        binding.glossaryContent.capWidth()
 
         val novelId = arguments?.getString("novel_id") ?: return
         viewModel.init(novelId)

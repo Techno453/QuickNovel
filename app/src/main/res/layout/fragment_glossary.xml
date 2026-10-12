@@ -6,9 +6,12 @@
     android:layout_height="match_parent"
     android:background="?attr/primaryBlackBackground">
 
+    <!-- width capped at 840dp and centred on wide windows, see GlossaryFragment -->
     <LinearLayout
+        android:id="@+id/glossary_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_gravity="center_horizontal"
         android:orientation="vertical">
 
         <!-- "Analyze novel" progress -->

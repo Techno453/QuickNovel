@@ -9,6 +9,7 @@ import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalGridApi
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,7 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -60,7 +61,10 @@ import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.compose.animatedOutline
-import com.lagradost.quicknovel.compose.isLandscape
+import com.lagradost.quicknovel.compose.AdaptiveAtLeast
+import com.lagradost.quicknovel.compose.centeredGutter
+import com.lagradost.quicknovel.compose.PosterMinCellWidth
+import com.lagradost.quicknovel.compose.RowMinCellWidth
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
@@ -125,20 +129,26 @@ fun SearchListRow(
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(if (isLandscape) 2 else 1),
-        state = lazyState,
-        modifier = modifier,
-        contentPadding = PaddingValues(10.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        items(
-            items = items, key = { item ->
-                item.randomUuid
-            }) { item ->
-            SearchResponseRow(
-                response = item, action = searchAction, modifier = Modifier.animateItem()
-            )
+    // Rows are capped at MaxContentWidth and centred on wide windows, but the list itself stays
+    // full width so it can be scrolled from the side gutters too.
+    BoxWithConstraints(modifier = modifier) {
+        val gutter = centeredGutter(10.dp)
+        LazyVerticalGrid(
+            columns = AdaptiveAtLeast(RowMinCellWidth),
+            state = lazyState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = gutter, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(
+                items = items, key = { item ->
+                    item.randomUuid
+                }) { item ->
+                SearchResponseRow(
+                    response = item, action = searchAction, modifier = Modifier.animateItem()
+                )
+            }
         }
     }
 }
@@ -151,24 +161,28 @@ fun SearchListRow(
     searchAction: (SearchResponseAction) -> Unit,
     footer: @Composable (() -> Unit)? = null,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(if (isLandscape) 2 else 1),
-        state = lazyState,
-        modifier = modifier,
-        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        items(
-            state.sorted, key = { id -> id }) { id ->
-            SearchResponseRow(
-                response = state.data[id]!!,
-                action = searchAction,
-                modifier = Modifier.animateItem()
-            )
-        }
-        if (footer != null) {
-            item(key = "footer") {
-                footer()
+    BoxWithConstraints(modifier = modifier) {
+        val gutter = centeredGutter(10.dp)
+        LazyVerticalGrid(
+            columns = AdaptiveAtLeast(RowMinCellWidth),
+            state = lazyState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = gutter, end = gutter, top = 10.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(
+                state.sorted, key = { id -> id }) { id ->
+                SearchResponseRow(
+                    response = state.data[id]!!,
+                    action = searchAction,
+                    modifier = Modifier.animateItem()
+                )
+            }
+            if (footer != null) {
+                item(key = "footer", span = { GridItemSpan(maxLineSpan) }) {
+                    footer()
+                }
             }
         }
     }
@@ -569,7 +583,7 @@ fun SearchResponseGrid(
     footer: @Composable (() -> Unit)? = null,
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(if (isLandscape) 6 else 3),
+        columns = AdaptiveAtLeast(PosterMinCellWidth, minCount = 3),
         state = listState,
         modifier = modifier,
         contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 80.dp),
@@ -606,7 +620,7 @@ fun SearchResponseGrid(
     modifier: Modifier,
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(if (isLandscape) 6 else 3),
+        columns = AdaptiveAtLeast(PosterMinCellWidth, minCount = 3),
         state = listState,
         modifier = modifier,
         contentPadding = PaddingValues(4.dp),

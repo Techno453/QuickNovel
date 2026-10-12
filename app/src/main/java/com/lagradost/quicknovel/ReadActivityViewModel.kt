@@ -117,6 +117,7 @@ import kotlin.reflect.KProperty
 const val DEF_FONT_SIZE: Int = 14
 const val DEF_HORIZONTAL_PAD: Int = 20
 const val DEF_VERTICAL_PAD: Int = 0
+const val DEF_MAX_TEXT_WIDTH: Int = com.lagradost.quicknovel.util.AdaptiveLayout.DEFAULT_READER_MEASURE_DP
 
 class PreferenceDelegate<T : Any>(
     val key: String, val default: T, private val klass: KClass<T>
@@ -538,6 +539,13 @@ class ReadActivityViewModel : ViewModel() {
     private var isInApp: Boolean = true
     private var leftAppAt: ScrollIndex? = null
     val translationManager = TranslationManager()
+
+    /** Writes the current reading position to disk right away (normally throttled to 200 ms). */
+    fun persistPosition() {
+        if (!this::book.isInitialized) return
+        val index = lastChangeIndex ?: desiredIndex ?: return
+        setScrollKeys(index)
+    }
 
     fun leftApp() {
         lastChangeIndex?.let { setScrollKeys(it) }
@@ -1936,6 +1944,12 @@ class ReadActivityViewModel : ViewModel() {
     val paddingVerticalLive: MutableLiveData<Int> = MutableLiveData(null)
     var paddingVertical by PreferenceDelegateLiveView(
         EPUB_TEXT_PADDING_TOP, DEF_VERTICAL_PAD, Int::class, paddingVerticalLive
+    )
+
+    /** Max width of the text column in dp, centred on wide windows (foldables, tablets). 0 = no limit. */
+    val maxTextWidthLive: MutableLiveData<Int> = MutableLiveData(null)
+    var maxTextWidth by PreferenceDelegateLiveView(
+        EPUB_TEXT_MAX_WIDTH, DEF_MAX_TEXT_WIDTH, Int::class, maxTextWidthLive
     )
 
     //val time12HLive: MutableLiveData<Boolean> = MutableLiveData(null)

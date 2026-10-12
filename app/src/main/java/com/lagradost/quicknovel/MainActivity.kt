@@ -16,7 +16,10 @@ import androidx.activity.viewModels
 import androidx.annotation.IdRes
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
@@ -31,6 +34,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.navigation.NavigationBarView
+import com.google.android.material.navigationrail.NavigationRailView
 import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.ResponseParser
 import com.lagradost.nicehttp.ignoreAllSSLErrors
@@ -70,6 +75,8 @@ import com.lagradost.quicknovel.util.Coroutines.main
 import com.lagradost.quicknovel.util.InAppUpdater.Companion.runAutoUpdate
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
+import com.lagradost.quicknovel.util.AdaptiveLayout.adaptToWindow
+import com.lagradost.quicknovel.util.AdaptiveLayout.useNavigationRail
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.dismissSafe
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
@@ -466,6 +473,7 @@ class MainActivity : AppCompatActivity() {
                 viewModel.clear()
             }
             builder.setCanceledOnTouchOutside(true)
+            builder.adaptToWindow()
             builder.show()
             bottomPreviewPopup = builder
             bottom
@@ -535,14 +543,52 @@ class MainActivity : AppCompatActivity() {
             R.id.navigation_settings,
         ).contains(destination.id)
 
-        binding?.apply {
-            navView.isVisible = isNavVisible
+        this.isNavVisible = isNavVisible
+        // keep both bars on the tab we are on, also after back presses
+        if (navMenuIds.contains(destination.id)) {
+            binding?.apply {
+                navView.menu.findItem(destination.id)?.isChecked = true
+                navRail.menu.findItem(destination.id)?.isChecked = true
+            }
+        }
+        updateNavMode()
+    }
+
+    private val navMenuIds = setOf(
+        R.id.navigation_download,
+        R.id.navigation_search,
+        R.id.navigation_history,
+        R.id.navigation_settings,
+    )
+
+    /** Whether the current destination shows the app navigation at all. */
+    private var isNavVisible = true
+
+    /** Last known bottom system bar inset, applied to the content when the rail replaces the bottom bar. */
+    private var bottomSystemInset = 0
+
+    /**
+     * Bottom bar on compact widths, navigation rail from 600dp on. Called on every configuration
+     * change, so fold/unfold, rotation and split screen resizing switch live without recreating.
+     */
+    private fun updateNavMode() {
+        val binding = binding ?: return
+        val useRail = resources.configuration.useNavigationRail()
+        binding.navView.isVisible = isNavVisible && !useRail
+        binding.navRail.isVisible = isNavVisible && useRail
+        // With the bottom bar the bar itself sits above the system navigation bar. With the rail,
+        // top level screens would otherwise draw their bottom content under it.
+        val bottomPad = if (isNavVisible && useRail) bottomSystemInset else 0
+        if (binding.navHostContainer.paddingBottom != bottomPad) {
+            binding.navHostContainer.updatePadding(bottom = bottomPad)
+            ViewCompat.requestApplyInsets(binding.navHostContainer)
         }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         updateLocale() // android fucks me by chaining lang when rotating the phone
+        updateNavMode()
     }
 
     var binding: ActivityMainBinding? = null
@@ -580,23 +626,54 @@ class MainActivity : AppCompatActivity() {
         }
 
         val navView: BottomNavigationView = findViewById(R.id.nav_view)
+        val navRail: NavigationRailView = findViewById(R.id.nav_rail)
 
         val rippleColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.1f))
-        navView.itemRippleColor = rippleColor
-        navView.itemActiveIndicatorColor = rippleColor
+        for (bar in listOf<NavigationBarView>(navView, navRail)) {
+            bar.itemRippleColor = rippleColor
+            bar.itemActiveIndicatorColor = rippleColor
+        }
 
         fixSystemBarsPadding(
             navView, heightResId = R.dimen.nav_view_height,
             padTop = false,
             overlayCutout = false
         )
+        fixSystemBarsPadding(
+            navRail, widthResId = R.dimen.nav_rail_width,
+            padRight = false,
+            overlayCutout = false
+        )
 
-        navView.setOnItemSelectedListener { item ->
-            onNavDestinationSelected(
-                item,
-                navController = navController
-            )
+        // The rail replaces the bottom bar on wide windows; record the bottom inset so top level
+        // screens can be kept above the system navigation bar (see updateNavMode).
+        ViewCompat.setOnApplyWindowInsetsListener(binding!!.navHostContainer) { _, insets ->
+            val bottom = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            ).bottom
+            if (bottom != bottomSystemInset) {
+                bottomSystemInset = bottom
+                binding?.navHostContainer?.post { updateNavMode() }
+            }
+            val padded = binding?.navHostContainer?.paddingBottom ?: 0
+            if (padded > 0) insets.inset(0, 0, 0, padded) else insets
         }
+
+        for (bar in listOf<NavigationBarView>(navView, navRail)) {
+            bar.setOnItemSelectedListener { item ->
+                val selected = onNavDestinationSelected(
+                    item,
+                    navController = navController
+                )
+                // mirror the selection on the other bar without triggering its listener
+                if (selected) {
+                    navView.menu.findItem(item.itemId)?.isChecked = true
+                    navRail.menu.findItem(item.itemId)?.isChecked = true
+                }
+                selected
+            }
+        }
+        updateNavMode()
 
         //val navController = findNavController(R.id.nav_host_fragment)
 

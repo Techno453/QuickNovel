@@ -1,11 +1,11 @@
 package com.lagradost.quicknovel.ui.home
 
-import android.content.res.Configuration
 import android.view.View
 import androidx.fragment.app.viewModels
 import com.lagradost.quicknovel.databinding.FragmentHomeBinding
 import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.ui.BaseFragment
+import com.lagradost.quicknovel.util.AdaptiveLayout
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
 
 class HomeFragment : BaseFragment<FragmentHomeBinding>(
@@ -14,15 +14,8 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
     private val viewModel: HomeViewModel by viewModels()
 
     override fun fixLayout(view: View) {
-        val compactView = false
-        val spanCountLandscape = if (compactView) 2 else 6
-        val spanCountPortrait = if (compactView) 1 else 3
-        val orientation = resources.configuration.orientation
-        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            binding?.homeBrowselist?.spanCount = spanCountLandscape
-        } else {
-            binding?.homeBrowselist?.spanCount = spanCountPortrait
-        }
+        // columns from the available width, not the orientation (foldables, split screen)
+        binding?.homeBrowselist?.setAdaptiveColumns(AdaptiveLayout.POSTER_MIN_CELL_DP, minCount = 3)
     }
 
     override fun onBindingCreated(binding: FragmentHomeBinding) {

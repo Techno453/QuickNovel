@@ -2,6 +2,7 @@ package com.lagradost.quicknovel
 
 import android.app.Activity
 import android.content.Context
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Build
 import android.util.Log
@@ -107,12 +108,25 @@ object CommonActivity {
         if (context == null || languageCode == null) return
         val locale = Locale(languageCode)
         val resources: Resources = context.resources
-        val config = resources.configuration
         Locale.setDefault(locale)
-        config.setLocale(locale)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
-            context.createConfigurationContext(config)
+        // This runs from onConfigurationChanged (fold/unfold, rotation, split screen resize), so
+        // only touch the resources when the locale actually got reset. Re-applying the same locale
+        // through the deprecated updateConfiguration can overwrite the freshly delivered window
+        // metrics/density. When it is needed, start from a copy of the *current* configuration
+        // so the new screen size and density are kept.
+        val current = resources.configuration
+        val currentLocale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            current.locales.get(0)
+        } else {
+            @Suppress("DEPRECATION")
+            current.locale
+        }
+        if (currentLocale == locale) return
+
+        val config = Configuration(current)
+        config.setLocale(locale)
+        @Suppress("DEPRECATION")
         resources.updateConfiguration(config, resources.displayMetrics)
     }
 

@@ -63,7 +63,8 @@ import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.MainActivity.Companion.navigate
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.compose.BaseSearchBar
-import com.lagradost.quicknovel.compose.isLandscape
+import com.lagradost.quicknovel.compose.AdaptiveAtLeast
+import com.lagradost.quicknovel.compose.PosterMinCellWidth
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseItem
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
@@ -207,7 +208,7 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(if (isLandscape) 6 else 3),
+                columns = AdaptiveAtLeast(PosterMinCellWidth, minCount = 3),
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
