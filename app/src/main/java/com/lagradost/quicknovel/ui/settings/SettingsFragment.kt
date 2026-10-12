@@ -5,7 +5,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import com.lagradost.quicknovel.compose.MaxContentWidth
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -57,7 +63,13 @@ class SettingsFragment : BaseComposeFragment(), SearchableSettings by SettingScr
         LaunchedEffectSkipFirst(color) {
             activity?.recreate()
         }
-        super.Content()
+        // Readable line length on wide windows (Fold inner screen, tablets): rows centred, capped
+        // at the same 840 dp as the other content screens.
+        Box(contentAlignment = Alignment.TopCenter, modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.widthIn(max = MaxContentWidth).fillMaxSize()) {
+                super@SettingsFragment.Content()
+            }
+        }
     }
 
 
