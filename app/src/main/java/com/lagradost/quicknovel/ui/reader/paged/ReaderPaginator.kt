@@ -193,16 +193,11 @@ object ReaderPaginator {
      * Index of the page showing chapter [chapter] at [char] (see ScrollIndex): the title page for
      * a negative char, else the last page of the chapter starting at or before [char].
      */
-    fun pageFor(pages: List<ReaderPage>, chapter: Int, char: Int): Int {
-        val first = pages.indexOfFirst { it.chapter == chapter }
-        if (first == -1) return -1
-        if (char < 0) return first
-        var best = first
-        for (i in first until pages.size) {
-            val p = pages[i]
-            if (p.chapter != chapter) break
-            if (p.startChar in 0..char) best = i
-        }
-        return best
-    }
+    fun pageFor(pages: List<ReaderPage>, chapter: Int, char: Int): Int =
+        PageBreaker.pageFor(
+            IntArray(pages.size) { pages[it].chapter },
+            IntArray(pages.size) { pages[it].startChar },
+            chapter,
+            char,
+        )
 }

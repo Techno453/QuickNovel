@@ -59,6 +59,7 @@ import com.lagradost.quicknovel.providers.RedditProvider
 import com.lagradost.quicknovel.ui.OrientationType
 import com.lagradost.quicknovel.ui.ReadingType
 import com.lagradost.quicknovel.ui.ScrollIndex
+import com.lagradost.quicknovel.ui.reader.ReadingAnchor
 import com.lagradost.quicknovel.ui.ScrollVisibilityIndex
 import com.lagradost.quicknovel.ui.UiText
 import com.lagradost.quicknovel.ui.toScroll
@@ -1252,8 +1253,16 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
         // the lock is so short it does not matter I *hope*
         return runBlocking {
             chapterMutex.withLock { chapterData[index] }?.letInner { live ->
-                // todo binary search, but strip all but TextSpan first
-                live.spans.firstOrNull { it.start >= char }?.innerIndex
+                // The paragraph holding the char (a saved position is usually inside one: the
+                // first visible line, or a page's first line), not the one after it.
+                val spans = live.spans
+                spans.getOrNull(
+                    ReadingAnchor.paragraphFor(
+                        IntArray(spans.size) { spans[it].start },
+                        IntArray(spans.size) { spans[it].end },
+                        char,
+                    )
+                )?.innerIndex
             }
         }
     }

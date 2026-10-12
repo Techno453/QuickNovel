@@ -47,6 +47,9 @@ class ReaderScrollController(
     private var lockBottom: Int? = null
     private var currentScroll: Int = 0
 
+    /** Bumped by every seek, so a pending line seek from an older one gives up. */
+    private var seekGeneration = 0
+
     private fun transformIndexToScrollVisibilityItem(adapterPosition: Int): ScrollVisibilityItem {
         return ScrollVisibilityItem(
             adapterPosition = adapterPosition,
@@ -110,9 +113,14 @@ class ReaderScrollController(
             ScrollVisibilityIndex(
                 firstInMemory = lines.first(),
                 lastInMemory = lines.last(),
-                firstFullyVisible = lines.firstOrNull {
-                    it.top >= topY
-                },
+                firstFullyVisible = lines.getOrNull(
+                    ReadingAnchor.pick(
+                        IntArray(lines.size) { lines[it].top },
+                        IntArray(lines.size) { lines[it].bottom },
+                        topY,
+                        bottomY,
+                    )
+                ),
                 firstFullyVisibleUnderLine = lines.firstOrNull {
                     it.top >= topBar
                 },
@@ -136,15 +144,34 @@ class ReaderScrollController(
 
         textLayoutManager.scrollToPositionWithOffset(adapterPosition, 1)
 
-        // don't inner-seek if zero because that is chapter break
-        if (desired.innerIndex == 0) return
+        // don't inner-seek at the chapter start (the title row shares innerIndex 0 with the first
+        // paragraph); a position inside the first paragraph still seeks to its line
+        if (desired.innerIndex == 0 && desired.char <= 0) {
+            binding.realText.post { onScroll() }
+            return
+        }
+        seekToLine(desired, ++seekGeneration, SEEK_ATTEMPTS)
+    }
 
-        binding.realText.post {
-            getAllLines().also { postLines(it) }.firstOrNull { line ->
-                line.index == desired.index && line.endChar >= desired.char
-            }?.let { line ->
-                binding.realText.scrollBy(0, line.top - getTopY())
+    /**
+     * Scrolls the line holding [desired].char to the top. On a cold start the list is not laid out
+     * yet when the first post runs (no lines), so it retries on the following frames. The position
+     * is recorded only after the seek: recording the paragraph top first made the next window
+     * update seek back to the paragraph start.
+     */
+    private fun seekToLine(desired: ScrollIndex, generation: Int, attemptsLeft: Int) {
+        binding.realText.postOnAnimation {
+            if (generation != seekGeneration) return@postOnAnimation // a newer seek won
+            val line = getAllLines().firstOrNull { line ->
+                // endChar is exclusive: a line ending at the char is the line before it
+                line.index == desired.index && line.endChar > desired.char
             }
+            if (line == null && attemptsLeft > 0) {
+                seekToLine(desired, generation, attemptsLeft - 1)
+                return@postOnAnimation
+            }
+            line?.let { binding.realText.scrollBy(0, it.top - getTopY()) }
+            postLines(getAllLines())
         }
     }
 
@@ -265,8 +292,8 @@ class ReaderScrollController(
         if (chapter.seekToDesired) {
             textAdapter.submitIncomparableList(chapter.data) {
                 viewModel._loadingStatus.postValue(Resource.Success(true))
+                // scrollToDesired records the position once the seek has run
                 scrollToDesired()
-                onScroll()
             }
         } else {
             textAdapter.submitList(chapter.data) {
@@ -274,6 +301,11 @@ class ReaderScrollController(
                 onScroll()
             }
         }
+    }
+
+    private companion object {
+        /** Frames to wait for the list to lay out the seek target (about half a second). */
+        const val SEEK_ATTEMPTS = 30
     }
 
     // ===================== overscroll to change chapter (OVERSCROLL_SCROLL) =====================

@@ -11,7 +11,8 @@ view model delegates to.
 | `ui/reader/ReaderChromeController` | System bars, cutout, toolbar and bottom bar animations, clock/battery overlay, orientation, keep-screen-on |
 | `ui/reader/ReaderLayoutController` | Text column: user margins, the max-width cap on wide windows, density changes (cover/inner screen), tabletop posture |
 | `ui/reader/ReaderScrollController` | Scroll mode: the paragraph RecyclerView (`TextAdapter`), position from the visible lines, seeking, TTS line lock, overscroll chapter change, volume paging |
-| `ui/reader/paged/PagedReaderController` | Paged mode (see below) |
+| `ui/reader/paged/PagedReaderController`, `PageTextView`, `PageSelection` | Paged mode (see below): pages, link taps, selection |
+| `ui/reader/ReadingAnchor` | Which line is saved as the position, which paragraph a saved char is in |
 | `ui/reader/ReaderTtsController` | TTS buttons, status, sleep timer, media actions; forwards the line being read to the active display |
 | `ui/reader/ReaderSettingsSheet` | The settings bottom sheet |
 | `ui/reader/ReaderGlossaryController`, `GlossaryLookup`, `GlossaryLookupSheet` | Long-press / selection glossary lookup |
@@ -26,7 +27,20 @@ activity sends each update to whichever display is active.
 
 **Position.** A position is a `ScrollIndex(index = chapter, innerIndex = paragraph,
 char = character offset in the chapter)`. It is saved under `reader_epub_position*` keys, and
-both modes read and write the same keys.
+both modes read and write the same keys. The rules are pure and unit tested
+(`ReadingAnchor`, `PageBreaker.pageFor`, `PagePositionTest`):
+
+- Scroll mode saves the first character of the first line drawn entirely inside the text area
+  (top and bottom; `ReadingAnchor.pick`). Only when no line fits (one line or image taller than
+  the screen) does it fall back to the first line still partly on screen; it never saves a line
+  that has scrolled off the top.
+- Restoring a position (start-up, TTS) maps the char to the paragraph that contains it
+  (`ReadingAnchor.paragraphFor`); it used to pick the paragraph after it, so a position in the
+  middle of a paragraph reopened at the next one. A position inside the first paragraph seeks to
+  its line instead of the chapter start, and the seek takes the line whose (exclusive) end is past
+  the char, not the line before it. On a cold start the list is not laid out when the seek first
+  runs, so the line seek retries for up to 30 frames, and the position is recorded only after it.
+- Pages: see "Position" under Paged mode.
 
 ## Paged mode
 
@@ -53,19 +67,39 @@ overscroll) are disabled and the continuous chapter window is used.
   right third or swipe for the next. The middle third toggles the bars. Volume keys turn pages
   when "scroll with volume keys" is on. Pages flow across chapter boundaries, and the window
   moves along as you read.
+- **Links.** A tap on a link calls the link span's own `onClick` (the Markwon link resolver,
+  the same handler `LinkMovementMethod` uses in scroll mode) and wins over the page-turn zones.
+  The hit test uses the character drawn under the finger, not the nearest caret position. Links
+  are drawn in the paragraph view's link colour (pages used to draw them with a transparent
+  link colour, so link text was invisible).
 - **Position.** Turning a page saves the position of the page's first character. A title page
   saves char `-1`; scroll mode treats that as the chapter start. Opening or switching to pages
-  shows the page that contains the saved character, so switching modes keeps the place.
+  shows the page whose text contains the saved character (`PageBreaker.pageFor`: the last page
+  of the chapter starting at or before it). Because scroll mode saves the first fully visible
+  line, the page shown holds the line the reader was at the top of, not the line cut off above
+  it. Scroll and page widths can differ, so that line may start inside a page line; the page
+  holding that character is still the one shown.
 - **Re-pagination.** Fold/unfold, rotation, split screen, margins, max width, font, size,
   spacing and bionic reading all rebuild the pages. The saved position (not the page number)
   picks the page afterwards, so going back and forth between sizes does not drift.
 - **TTS.** Works in paged mode. The line being read is highlighted (rounded path from
   `Layout.getSelectionPath`), and the pager turns to the page holding it. If the reader moves
   past the loaded chapters, the window follows.
-- **Glossary.** Long-press a word on a page to run the same lookup as in scroll mode. Text
-  selection is not available on pages.
-- **Not supported on pages.** Links in text are not clickable, and the scroll types
-  (infinite / buttons / overscroll) only apply to scroll mode.
+- **Selection.** Long-press selects the word under the finger (`GlossaryLookup.wordAt`: a
+  Latin word, a katakana or hangul run, or one hanzi/kanji) and starts a selection mode:
+  - the selection is drawn in the platform selection colour with the platform's left and right
+    handles (`android:textSelectHandleLeft/Right`); dragging a handle extends or shrinks it, the
+    handles swap when they cross, and at least one character stays selected
+    (`PageSelection.drag`, unit tested). While a handle is dragged the pager does not swipe.
+  - A selection stays inside one paragraph and the part of it on the current page.
+  - A floating toolbar (`ActionMode.TYPE_FLOATING`) offers **Copy** (clipboard; a toast below
+    Android 13, which shows its own confirmation) and **Glossary** for novels with a Story Bible
+    (zh/ja/ko sources and imported books opened in the app's reader). Glossary on the untouched
+    long-pressed word runs the same lookup as a scroll-mode long-press (longest matching term);
+    on an extended selection it runs the selection lookup.
+  - A tap anywhere, a page turn, re-pagination or Back ends the selection mode.
+- **Not supported on pages.** The scroll types (infinite / buttons / overscroll) only apply to
+  scroll mode. Selections do not cross paragraphs or pages.
 
 ## Glossary lookup
 
