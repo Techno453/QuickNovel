@@ -444,6 +444,29 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <TextView
+                    android:id="@+id/read_settings_text_max_width_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="15dp"
+                    android:text="@string/text_max_width"
+                    android:textSize="16sp" />
+
+                <!-- Caps the line length on wide windows (foldable inner screen, tablets).
+                     The right end of the slider means no limit. -->
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/read_settings_text_max_width"
+                    style="@style/SettingsSliderTheme"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginTop="15dp"
+                    android:layout_marginEnd="24dp"
+                    android:stepSize="40"
+                    android:value="640"
+                    android:valueFrom="320"
+                    android:valueTo="1280" />
+
+                <TextView
                     android:id="@+id/read_settings_text_padding_text_top"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

@@ -170,6 +170,10 @@
     <string name="error_loading_chapter">Error loading chapter</string>
 
     <string name="text_padding_top">Text Top Margin</string>
+    <string name="text_max_width">Max Text Width</string>
+    <string name="text_max_width_value">%1$s: %2$s</string>
+    <string name="text_max_width_dp">%d dp</string>
+    <string name="no_limit">No limit</string>
 
     <string name="home_more_info">More info</string>
     <string name="home_expanded_hide">Hide</string>
