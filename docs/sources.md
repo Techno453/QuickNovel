@@ -27,10 +27,11 @@ A source that mixes languages (Pixiv) is narrowed to one language at the request
 | 69shuba (Biquge) | zh | yes (Turnstile; WebView fallback) | yes | yes | no | Cloudflare; geo-blocked from some regions (HTTP 403 here) | `chinese/BiqugeProvider` |
 | Quanben | zh | yes | yes (genres; no rankings on the site) | yes | no | none seen | `QuanbenProvider` |
 | **Ixdzs (爱下电子书)** | zh | yes | yes | yes | no | none; own token check on chapter pages (handled) | `chinese/IxdzsProvider` |
-| **Piaotia (飘天文学)** | zh | yes | yes | yes | no | Cloudflare passive script only, no challenge | `chinese/PiaotiaProvider` |
+| **Piaotia (飘天文学)** | zh | yes | yes | yes | no | Cloudflare passive script only, no challenge; interceptor on as a safety net (2026-10-12) | `chinese/PiaotiaProvider` |
 | Kakuyomu (カクヨム) | ja | yes | yes | yes | no | none | `japanese/KakuyomuProvider` |
 | Syosetu (小説家になろう) | ja | yes | yes | yes | no | none | `SyosetuProvider` |
 | **Alphapolis (アルファポリス)** | ja | yes | yes | yes (free episodes) | no | none; reCAPTCHA if it suspects a bot | `japanese/AlphapolisProvider` |
+| **Hameln (ハーメルン)** | ja | yes | yes (rankings, latest updates) | yes | no | Cloudflare managed challenge on every request; cleared by the WebView interceptor (device only) | `japanese/HamelnProvider` |
 | **Pixiv Novels (pixiv小説)** | ja | yes | yes (by tag) | yes (all-ages works) | no | none | `japanese/PixivNovelProvider` |
 | Novelpia (노벨피아) | ko | yes | yes | yes (free episodes) | no | none | `korean/NovelpiaProvider` |
 | **Naver Webnovel (네이버 웹소설)** | ko | yes | yes | yes (best/challenge leagues) | no | none | `korean/NaverWebNovelProvider` |
@@ -52,7 +53,7 @@ status empty). Substring match, checked in this order:
 | 断更, 停更, 休載, 休止, 휴재 | Paused |
 | 连载 (连载中), 連載 (連載中), 연재 (연재중) | Ongoing |
 
-Used by 69shuba, Quanben and Syosetu. Pass the status field only, not a whole page (全本小说网 is a
+Used by 69shuba, Quanben, Syosetu and Hameln. Pass the status field only, not a whole page (全本小说网 is a
 site name).
 
 ## Per-source notes
@@ -64,10 +65,14 @@ spaces downloads and pauses in bursts). curl gets HTTP 403 from this machine, bu
 OkHttp client gets through (fixtures and live checks use it).
 - Browse (re-done 2026-10-11; the old `/paihang/...` and `/novels/class/{tag}/{order}/{page}/`
   URLs return 404): rankings `/novels/{order}_{category}_{status}_{page}.htm`, 50 per page.
-  Orders: Popular, monthly (人气榜, `monthvisit`, default), Popular, weekly (`weekvisit`),
-  Recommended (推荐榜, `allvote`), Latest updates (最近更新, `/last.html`: one page of 30 books, page 2
-  is empty, ignores category and status). Status (main category): All, Ongoing (连载, `2`),
-  Completed (全本, `1`). Tags: the site's 12 category ids (`/novels/class/{id}.htm`).
+  Listings (`mainCategories`, value `order|status`, no `orderBys`; changed 2026-10-12 so the
+  Browse rail is labelled with the default ranking instead of "All"): Popular, monthly (人气榜,
+  `monthvisit|0`, default), Popular, weekly (周榜, `weekvisit|0`), Recommended (推荐榜, `allvote|0`),
+  Ongoing: popular, monthly (连载人气榜, `monthvisit|2`), Completed: popular, monthly (全本人气榜,
+  `monthvisit|1`), Completed: recommended (全本推荐榜, `allvote|1`), Latest updates (最近更新,
+  `/last.html`: one page of 30 books, page 2 is empty, ignores genre and status). Tags: the site's
+  12 category ids (`/novels/class/{id}.htm`). The old shape (status in the main category, ranking
+  in `orderBy`) still maps to the same URLs.
 - Not offered: 新书榜 (`newhot`) answers with a Cloudflare managed challenge outside a browser;
   `lastupdate`/`allvisit`/`goodnum`/`postdate`/`dayvisit` rankings are empty. The site has no
   monthly-ticket (月票) or bookmark (收藏) ranking.
@@ -108,9 +113,50 @@ OkHttp client gets through (fixtures and live checks use it).
   category filter.
 - Table of contents `/html/{shard}/{id}/index.html`. The chapter body is loose text in `<body>`
   between the top and bottom nav, so the parser strips the page chrome and splits on `<br>`.
-- Cloudflare only injects its passive `/cdn-cgi/challenge-platform/scripts/jsd/` script. The
-  provider deliberately does **not** set `usesCloudFlareKiller`, because that interceptor treats any
-  page containing `/cdn-cgi/` in its first 10 KB as a challenge (see "Cloudflare" below).
+- Cloudflare only injects its passive `/cdn-cgi/challenge-platform/scripts/jsd/` script. Since
+  2026-10-12 the provider sets `usesCloudFlareKiller`, so a real challenge would be cleared in a
+  WebView. Checked on an emulator (Android 16): the Browse rail, the source page listing, a search
+  (`NBA`), a novel page (1851 chapters) and a chapter all loaded with no WebView solve started
+  (no `CloudflareKiller` log lines). The JVM live test runs the provider with the interceptor off,
+  because the interceptor needs Android's `CookieManager`.
+
+### Hameln (ハーメルン), ja — https://syosetu.org
+- User-generated novels, mostly fan fiction (二次創作) plus original works. The R-18 section is a
+  separate host (h.syosetu.org) that the provider never requests; cards and works tagged R-18
+  are dropped, and a work that redirects off syosetu.org raises an error.
+- **Cloudflare**: every request without a `cf_clearance` cookie gets a managed challenge (HTTP
+  403, `cf-mitigated: challenge`, `cType: 'managed'`; recorded as
+  `cloudflare/challenge_hameln.html`). Mobile Chrome on the emulator passed it without a click; a
+  desktop automation browser got the interactive "Verify you are human" checkbox instead (not
+  clicked). The provider sets `usesCloudFlareKiller`: on the emulator the hidden WebView cleared
+  the challenge on its own (Turnstile ran, `cf_clearance` set), and later requests went straight
+  through with the cached cookie. **The first solve took about 24 s** and the Browse source page
+  gives up after 25 s, so the very first load showed "did not answer in 25 s"; Retry and
+  everything after it (rails, search, novel, chapters) worked at normal speed. The JVM client can
+  never pass the challenge, so the live test probes the site and skips with a message.
+- The interceptor replays requests with the WebView's user agent, so the site serves its
+  **smartphone layout**, which is what the parser reads (the PC layout is not parsed). Fixtures
+  were recorded through the emulator's Chrome (same-origin `fetch` over DevTools).
+- Search `GET /search/?mode=search&word=<q>&type=28` (総合評価 order, 10 a page; first page only).
+- Novel `GET /novel/{id}/`: title, author, genre/原作 and tags, synopsis, episode list
+  (`li.episode-list__item`; section headings `li > strong` give "section - title"). One-shots
+  (短編 with one episode) have no list and become one chapter on the novel page. The info page
+  `GET /?mode=ss_detail&nid={id}` (one more request) gives status (話数: 連載(連載中) → Ongoing,
+  連載(完結) → Completed, 短編 → Completed), rating (調整平均, 0–10) and views (UA).
+- Chapter `GET /novel/{id}/{n}.html`: `#honbun > p`, ruby flattened like Kakuyomu. The author's
+  前書き/後書き are not included.
+- Browse: `mainCategories` = Daily (日間, default), Weekly, Monthly, Quarterly, Yearly, All-time
+  (累計), New works daily (新作日間) and Completed all-time (完結累計) rankings
+  (`/?mode=rank_{scope_}{period}`), and Latest updates (最終更新, `/search/?mode=search&type=45`,
+  10 a page). `tags` = scope: All (総合), Original works (オリジナル: `rank_ori_…`,
+  `gensaku=原作：オリジナル`), Fan fiction (二次創作: `rank_2_…`, `gensaku=原作：二次創作`). A ranking
+  is one long page (300 / 100 / 50 entries); the provider fetches it once, caches it for 10 minutes
+  and serves 50 a page.
+- Politeness: browser user agent, `Referer` (the novel page for chapters), at least 1 s between
+  any two requests (provider-wide gate) and `rateLimitTime` 1 s for downloads.
+- Verified on emulator-5562 (2026-10-12): Browse rail and source page (daily ranking; Completed +
+  Original works; Latest updates with paging), search (`BLEACH`), novel page (33 chapters with
+  section titles, status Ongoing, tags, rating, views), chapter text.
 
 ### Kakuyomu (カクヨム), ja
 Next.js Apollo state. All episodes are embedded on the work page. No login is needed.
@@ -247,7 +293,10 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   for the session, and replays the request with the WebView's user agent and client hints. A
   provider opts in with `override val usesCloudFlareKiller = true` (its `app` then goes through
   `MainActivity.appWithInterceptor`, and posters get the matching header). Nine existing
-  (non-CJK) providers use it. None of the new sources (including JJWXC and czbooks) needs `cf_clearance`, so none of them opts in.
+  (non-CJK) providers use it, plus Hameln (which needs it) and Piaotia (as a safety net). The
+  other CJK sources (including JJWXC and czbooks) never get a challenge and do not opt in. The
+  interceptor cannot run in JVM tests (it needs `CookieManager`); the live tests of opted-in CJK
+  providers run with it off (Piaotia) or skip on a challenge (Hameln).
 - **Challenge detection** (`CloudflareKiller.isCloudflareChallenge`, fixed 2026-10): a response
   counts as a challenge only with `cf-mitigated: challenge`, a redirect into `/cdn-cgi/`, challenge
   markup (`_cf_chl_opt`, `__cf_chl_`, `cf-chl-`, `/cdn-cgi/challenge-platform/h/`,
@@ -256,12 +305,15 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   Cloudflare page). Before, any response with `/cdn-cgi/` in its first 10 KB counted, including
   normal 200 pages with Cloudflare's passive `/cdn-cgi/challenge-platform/scripts/jsd/` script or
   email protection, and any Cloudflare 403/429/503 (a firewall ban or a plain 403, which a WebView
-  cannot clear). The cookie cache is unchanged. Tested on a recorded 69shuba challenge and a
-  recorded piaotia chapter (`CloudflareKillerTest`).
-- **Piaotia** still uses the plain client: it shows no challenge today (only the passive script),
-  its live test passes without the interceptor, and the interceptor cannot run in the JVM tests
-  (it needs Android's `CookieManager`), so enabling it could not be verified here. With the
-  detection fixed it is safe to enable after a check on a device.
+  cannot clear). The cookie cache is unchanged. Tested on recorded 69shuba and Hameln challenges,
+  a recorded piaotia chapter and a Hameln novel page (`CloudflareKillerTest`).
+- **Piaotia** uses the interceptor since 2026-10-12. It shows no challenge (only the passive
+  script); on the emulator no WebView solve was started for any Piaotia request.
+- **Hameln** needs the interceptor (managed challenge on every request). On the emulator the
+  hidden WebView cleared it without interaction in about 24 s (challenge page, Turnstile, reload,
+  then the resolver's 5 s cookie-stability wait); see the Hameln notes for the first-load timeout.
+  If Cloudflare ever shows WebViews the interactive checkbox, the solve times out after 60 s and
+  the provider shows the "Cloudflare browser check" error.
 - **69shuba**: the interceptor could help with the managed challenge that appears after bursts of
   chapter requests (GETs). It would not help with the Turnstile on the search POST, because the
   WebView reloads the URL as a GET; `BiqugeProvider` already runs that search in its own WebView.
@@ -275,7 +327,6 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 
 | Candidate | Result |
 |---|---|
-| Hameln (syosetu.org), ja | Cloudflare managed challenge (`cf-mitigated: challenge`) on every page from here. It would need `usesCloudFlareKiller`, and the JVM tests could not verify it. Good next candidate to try on a device. |
 | wenku8, zh | Same Cloudflare managed challenge. |
 | Novel18 / Noc (syosetu adult), ja | Reachable (HTTP 200; the age gate wants an `over18=yes` cookie), but adult-only. Skipped. |
 | Munpia (문피아), ko | Desktop and mobile are SPAs over `/api/v1/...`. Search and the episode list are plain JSON, but chapter text (`/entries/{id}/content`) is empty without a timestamp signature computed in WebAssembly (`novel_wasm_bg.wasm`). Rejected. |
@@ -297,7 +348,7 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   ./gradlew :app:testDebugUnitTest --tests '*BrowseListingsLiveTest*' --tests '*ProviderFixesLiveTest*' -Dlive=1
   ```
 - Fixture tests: `app/src/test/java/com/lagradost/quicknovel/providers/cjk/*ProviderTest.kt`,
-  fixtures under `app/src/test/resources/providers/{ixdzs,piaotia,alphapolis,pixiv,naver,jjwxc,czbooks}/`. The
+  fixtures under `app/src/test/resources/providers/{ixdzs,piaotia,alphapolis,pixiv,naver,jjwxc,czbooks,hameln}/`. The
   fixtures keep each site's real markup (class names, inline JSON, scripts, broken HTML). Titles,
   names and prose are replaced with placeholders. The Piaotia fixtures are stored GBK-encoded and the JJWXC fixtures GB18030-encoded.
 - Live tests (one search, one novel, one chapter, and the first main page per source; plus
