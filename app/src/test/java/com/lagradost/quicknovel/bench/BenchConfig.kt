@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.quicknovel.translator.ModelPresets
+import com.lagradost.quicknovel.translator.PromptProfiles
 import com.lagradost.quicknovel.translator.TranslationOptions
 import java.io.File
 import java.util.Properties
@@ -59,6 +60,12 @@ data class ModelSpec(
     val completionFactor: Double = 2.5,
     val minCompletionTokens: Int = 2048,
     val enabled: Boolean = true,
+    /**
+     * App [PromptProfile] id (extra system-prompt rules); null = the preset's profile, or the
+     * standard prompt for explicit models. Test a profile as a separate entry with its own id,
+     * e.g. `{ "preset": "gpt-6-luna", "id": "gpt-6-luna@general", "promptProfile": "general" }`.
+     */
+    val promptProfile: String? = null,
 ) {
     val provider: String get() = if (keyName == OPENAI_KEY) "openai" else keyName.removeSuffix("_API_KEY").lowercase()
 
@@ -72,10 +79,11 @@ data class ModelSpec(
      */
     fun resolved(): ModelSpec {
         val p = preset?.let { ModelPresets.byId(it) ?: error("Unknown preset '$it' in bench.config.json") }
+        promptProfile?.let { require(PromptProfiles.exists(it)) { "Model ${id.ifBlank { preset.orEmpty() }}: unknown promptProfile '$it'" } }
         if (p == null) {
             require(id.isNotBlank()) { "Model without id or preset in bench.config.json" }
             require(!inputPerM.isNaN() && !outputPerM.isNaN()) { "Model $id: inputPerM / outputPerM missing" }
-            return copy(keyName = keyName.ifBlank { OPENAI_KEY })
+            return copy(keyName = keyName.ifBlank { OPENAI_KEY }, promptProfile = promptProfile ?: PromptProfiles.DEFAULT_ID)
         }
         val presetBody = p.extraBody + (if (p.sendTemperature) emptyMap() else mapOf("temperature" to null))
         return copy(
@@ -90,8 +98,12 @@ data class ModelSpec(
             sendTemperature = sendTemperature ?: p.sendTemperature,
             headers = headers.ifEmpty { p.provider.headers },
             priceNote = priceNote.ifBlank { "preset ${p.id}" },
+            promptProfile = promptProfile ?: p.promptProfile,
         )
     }
+
+    /** Resolved prompt profile id (the standard prompt when unset). */
+    val profileId: String get() = promptProfile ?: PromptProfiles.DEFAULT_ID
 
     fun baseUrlOr(default: String): String = baseUrl ?: default
 

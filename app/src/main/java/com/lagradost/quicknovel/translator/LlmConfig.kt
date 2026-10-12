@@ -21,6 +21,9 @@ object LlmConfig {
     /** Preset id stored for a free-text model / base URL / extra body. */
     const val CUSTOM_PRESET_ID = "custom"
 
+    /** Prompt profile of a custom model until the user picks one (see docs/translation-models.md). */
+    const val CUSTOM_PROMPT_PROFILE = PromptProfiles.DEFAULT_ID
+
     /** Structured model presets shown in settings. A "Custom…" entry is added by the UI. */
     val PRESETS: List<ModelPreset> get() = ModelPresets.ALL
 

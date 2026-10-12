@@ -1,6 +1,8 @@
 package com.lagradost.quicknovel.bench
 
 import com.lagradost.quicknovel.translator.ModelPresets
+import com.lagradost.quicknovel.translator.PromptProfiles
+import com.lagradost.quicknovel.translator.PromptTemplates
 import com.lagradost.quicknovel.translator.TranslationOptions
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -53,6 +55,42 @@ class BenchConfigPresetTest {
         assertEquals(10.0, spec.outputPerM, 0.0)
         assertEquals("low", spec.extraBody["verbosity"])
         assertEquals("none", spec.extraBody["reasoning_effort"])
+    }
+
+    @Test
+    fun promptProfileVariantsResolveAndReachTheEngine() = runBlocking {
+        val variant = config.model("gpt-6-luna@general")!!
+        assertEquals("gpt-6-luna", variant.apiModel)
+        assertEquals("general", variant.profileId)
+        assertEquals(config.model("gpt-6-luna")!!.inputPerM, variant.inputPerM, 0.0)
+        assertEquals("gemini", config.model("google/gemini-3.1-flash-lite@gemini")!!.profileId)
+        // A variant is still its model for self-judging exclusion.
+        assertTrue(isSelfJudgment("gpt-6-luna", "gpt-6-luna@general"))
+        assertTrue(isSelfJudgment("google/gemini-3.1-flash-lite", "google/gemini-3.1-flash-lite@gemini"))
+        assertFalse(isSelfJudgment("gpt-6-luna", "google/gemini-3.1-flash-lite@gemini"))
+
+        val dir = Files.createTempDirectory("bench-test").toFile()
+        try {
+            val ledger = CostLedger(java.io.File(dir, "ledger.json"), 1.0, "test")
+            val options = RunOptions({ "test-key" }, config.baseUrl, ledger, TranslationOptions(strictMode = false))
+            val sample = Sample("ja-test", "ja", "test", "", "パウロは笑った。\n彼は歩いた。", 13)
+            val bible = Bible("ja-test", premise = "", entries = listOf(BibleEntry("パウロ", "Paul", "character", "male", "father")))
+            for (id in listOf("gpt-6-luna", "gpt-6-luna@general", "google/gemini-3.1-flash-lite@gemini")) {
+                val model = config.model(id)!!
+                val transport = FakeChatTransport()
+                assertNull(id, BenchEngineAdapter(transport = transport).translate(sample, bible, model, options).error)
+                assertEquals(id, emptyList<String>(), transport.problems(model, config.baseUrl))
+                val system = transport.requests.first().body.path("messages").first().path("content").asText()
+                assertEquals(id, PromptTemplates.systemPrompt("ja", PromptProfiles.byId(model.profileId)), system)
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun unknownPromptProfileIsRejected() {
+        ModelSpec(preset = "gpt-6-luna", id = "x", promptProfile = "nope").resolved()
     }
 
     @Test

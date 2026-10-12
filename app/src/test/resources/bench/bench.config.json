@@ -91,6 +91,13 @@
     { "preset": "or-gpt-6-luna", "enabled": false },
     { "preset": "gemini-3.1-flash-lite", "enabled": false },
     { "preset": "deepseek-flash", "enabled": false },
-    { "preset": "qwen3.8-flash", "enabled": false }
+    { "preset": "qwen3.8-flash", "enabled": false },
+
+    { "preset": "gpt-6-luna", "id": "gpt-6-luna@rerun", "promptProfile": "default", "enabled": false },
+    { "preset": "gpt-6-luna", "id": "gpt-6-luna@general", "promptProfile": "general", "enabled": false },
+    { "preset": "gpt-6-luna", "id": "gpt-6-luna@luna", "promptProfile": "luna", "enabled": false },
+    { "preset": "or-gemini-3.1-flash-lite", "id": "google/gemini-3.1-flash-lite@rerun", "promptProfile": "default", "priceNote": "OpenRouter default route, estimate", "enabled": false },
+    { "preset": "or-gemini-3.1-flash-lite", "id": "google/gemini-3.1-flash-lite@general", "promptProfile": "general", "priceNote": "OpenRouter default route, estimate", "enabled": false },
+    { "preset": "or-gemini-3.1-flash-lite", "id": "google/gemini-3.1-flash-lite@gemini", "promptProfile": "gemini", "priceNote": "OpenRouter default route, estimate", "enabled": false }
   ]
 }

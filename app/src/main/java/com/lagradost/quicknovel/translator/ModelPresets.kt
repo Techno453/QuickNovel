@@ -85,6 +85,8 @@ data class ModelPreset(
     val tokensPerChar: TokensPerChar,
     val notes: String = "",
     val tier: PresetTier,
+    /** [PromptProfile] id for this model, chosen from the translation benchmark (default = standard prompt). */
+    val promptProfile: String = PromptProfiles.DEFAULT_ID,
 ) {
     fun toEngineConfig(apiKey: String = ""): EngineConfig = EngineConfig(
         baseUrl = baseUrl,
@@ -96,6 +98,7 @@ data class ModelPreset(
         presetId = id,
         providerId = provider.id,
         label = label,
+        promptProfile = promptProfile,
     )
 }
 
@@ -112,6 +115,8 @@ data class EngineConfig(
     val providerId: String = LlmProviders.CUSTOM.id,
     /** Display name (preset label or the model id). */
     val label: String = model,
+    /** [PromptProfile] id (extra system-prompt rules for this model). */
+    val promptProfile: String = PromptProfiles.DEFAULT_ID,
 ) {
     val isCustom: Boolean get() = presetId == null
 

@@ -94,6 +94,8 @@ class TranslationEngine(
     sendTemperature: Boolean = true,
     private val headers: Map<String, String> = emptyMap(),
     private val fallback: TranslationEngine? = null,
+    /** [PromptProfile] id for this model's system prompt (overridable per call via [TranslationOptions.promptProfile]). */
+    private val promptProfile: String = PromptProfiles.DEFAULT_ID,
 ) {
     /** Engine for [config], optionally with a [fallback] config for blocked or refused chunks. */
     constructor(
@@ -111,6 +113,7 @@ class TranslationEngine(
         sendTemperature = config.sendTemperature,
         headers = config.headers,
         fallback = fallback?.takeUnless { it.sameModelAs(config) }?.let { TranslationEngine(it, sourceLang, client, null) },
+        promptProfile = config.promptProfile,
     )
 
     private val endpoint = LlmConfig.chatCompletionsUrl(baseUrl)
@@ -119,6 +122,9 @@ class TranslationEngine(
 
     /** Model id requests are sent with. */
     val modelId: String get() = model
+
+    /** Prompt profile id this engine uses when [TranslationOptions.promptProfile] is null. */
+    val promptProfileId: String get() = promptProfile
 
     /** Model id of the fallback engine, or null. */
     val fallbackModelId: String? get() = fallback?.model
@@ -622,7 +628,7 @@ class TranslationEngine(
         options: TranslationOptions,
         depth: Int
     ): ChunkOutput {
-        val system = PromptTemplates.systemPrompt(sourceLang)
+        val system = PromptTemplates.systemPrompt(sourceLang, PromptProfiles.byId(options.promptProfile ?: promptProfile))
         val result = try {
             chat(system, PromptTemplates.buildUserPrompt(chunk, promptTerms, sourceLang, context, preceding))
         } catch (e: TranslationApiException) {
@@ -690,7 +696,8 @@ class TranslationEngine(
     ): ChunkOutput? {
         val engine = fallback ?: return null
         return try {
-            engine.translateChunk(chunk, promptTerms, checkTerms, context, preceding, options, depth)
+            // The fallback model uses its own prompt profile, never the primary's override.
+            engine.translateChunk(chunk, promptTerms, checkTerms, context, preceding, options.copy(promptProfile = null), depth)
                 .takeIf { it.translation.isNotBlank() }
                 ?.copy(fallbackChunks = 1)
         } catch (e: CancellationException) {

@@ -63,8 +63,11 @@ data class JudgePanelSpec(
     val promptOverheadTokens: Int = 900,
 )
 
-/** Model ids compared without provider prefix and case: `google/gemini-3.1-flash-lite` == `gemini-3.1-flash-lite`. */
-fun normalizeModelId(id: String): String = id.trim().lowercase().substringAfterLast('/')
+/**
+ * Model ids compared without provider prefix, variant suffix and case:
+ * `google/gemini-3.1-flash-lite` == `gemini-3.1-flash-lite` == `gemini-3.1-flash-lite@general`.
+ */
+fun normalizeModelId(id: String): String = id.trim().lowercase().substringBefore('@').substringAfterLast('/')
 
 /** A judge never scores its own model's output. */
 fun isSelfJudgment(judgeId: String, modelId: String): Boolean = normalizeModelId(judgeId) == normalizeModelId(modelId)

@@ -32,6 +32,8 @@ object SecurePrefs {
     private const val KEY_BASE_URL = "openai_base_url"
     /** Custom extra request-body JSON. */
     private const val KEY_EXTRA_BODY = "custom_extra_body"
+    /** Custom model's prompt profile id ([PromptProfiles]). */
+    private const val KEY_CUSTOM_PROMPT_PROFILE = "custom_prompt_profile"
     /** Selected preset id, or [LlmConfig.CUSTOM_PRESET_ID]. */
     const val KEY_PRESET = "model_preset"
     /** Fallback preset id; absent = off. */
@@ -188,6 +190,15 @@ object SecurePrefs {
     fun getCustomExtraBodyJson(context: Context?): String =
         getPrefs(context)?.getString(KEY_EXTRA_BODY, null).orEmpty()
 
+    /** Prompt profile of the custom model ([LlmConfig.CUSTOM_PROMPT_PROFILE] until the user picks one). */
+    fun getCustomPromptProfile(context: Context?): String =
+        getPrefs(context)?.getString(KEY_CUSTOM_PROMPT_PROFILE, null)?.takeIf { PromptProfiles.exists(it) }
+            ?: LlmConfig.CUSTOM_PROMPT_PROFILE
+
+    fun setCustomPromptProfile(context: Context, id: String) = edit(context) {
+        if (PromptProfiles.exists(id)) putString(KEY_CUSTOM_PROMPT_PROFILE, id) else remove(KEY_CUSTOM_PROMPT_PROFILE)
+    }
+
     /** Active model config (without the key). */
     private fun activeConfig(context: Context?): EngineConfig {
         getPreset(context)?.let { return it.toEngineConfig() }
@@ -199,6 +210,7 @@ object SecurePrefs {
             extraBody = LlmConfig.parseExtraBody(getCustomExtraBodyJson(context)),
             sendTemperature = true, // dropped automatically if the model rejects it, or via "temperature": null
             providerId = LlmProviders.forBaseUrl(baseUrl).id,
+            promptProfile = getCustomPromptProfile(context),
         )
     }
 

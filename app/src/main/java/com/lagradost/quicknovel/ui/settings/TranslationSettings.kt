@@ -38,6 +38,7 @@ import com.lagradost.quicknovel.translator.LlmProviders
 import com.lagradost.quicknovel.translator.ModelPreset
 import com.lagradost.quicknovel.translator.ModelPresets
 import com.lagradost.quicknovel.translator.PresetTier
+import com.lagradost.quicknovel.translator.PromptProfiles
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationLanguages
@@ -442,6 +443,7 @@ object TranslationSettings {
             mutableStateOf(if (SecurePrefs.isCustomModel(context)) SecurePrefs.getCustomModel(context) else "")
         }
         var customExtra by remember { mutableStateOf(SecurePrefs.getCustomExtraBodyJson(context)) }
+        var customProfile by remember { mutableStateOf(SecurePrefs.getCustomPromptProfile(context)) }
         val extraValid = LlmConfig.parseExtraBodyOrNull(customExtra) != null
         val dismiss = { showDialog = false }
 
@@ -513,6 +515,15 @@ object TranslationSettings {
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
                         )
+                        GroupLabel("Prompt")
+                        PromptProfiles.ALL.forEach { profile ->
+                            ChoiceRow(
+                                selected = customProfile == profile.id,
+                                label = profile.label,
+                                detail = null,
+                                notes = profile.description,
+                            ) { customProfile = profile.id }
+                        }
                     }
                 }
             },
@@ -522,6 +533,7 @@ object TranslationSettings {
                     onClick = {
                         if (selected == custom) {
                             SecurePrefs.setCustomModel(context, customUrl, customModel, customExtra)
+                            SecurePrefs.setCustomPromptProfile(context, customProfile)
                         } else {
                             SecurePrefs.selectPreset(context, selected)
                         }

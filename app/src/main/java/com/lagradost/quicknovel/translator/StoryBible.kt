@@ -31,6 +31,12 @@ data class TranslationOptions(
     val carryStoryContext: Boolean = true,
     /** Minimum model confidence for auto-adding a discovered term. */
     val autoAddMinConfidence: Float = DEFAULT_AUTO_ADD_CONFIDENCE,
+    /**
+     * [PromptProfile] id for the primary model, overriding the engine's own (from its
+     * [EngineConfig.promptProfile]); null = the engine's. Never applied to the fallback model,
+     * which always uses its own profile.
+     */
+    val promptProfile: String? = null,
 ) {
     companion object {
         const val DEFAULT_AUTO_ADD_CONFIDENCE = 0.6f

@@ -1,5 +1,7 @@
 package com.lagradost.quicknovel.bench
 
+import com.lagradost.quicknovel.translator.PromptProfiles
+import com.lagradost.quicknovel.translator.PromptTemplates
 import com.lagradost.quicknovel.translator.StoryContext
 import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationOptions
@@ -99,7 +101,8 @@ class BenchEngineAdapter(
                 chapterNum = 1,
                 glossaryTerms = toGlossary(bible),
                 context = toContext(bible),
-                options = options.engineOptions,
+                // The model's prompt profile goes through the engine options, as an override of the engine's own.
+                options = options.engineOptions.copy(promptProfile = model.profileId),
             )
             text = htmlToLines(result.englishText)
             pending = result.pendingTerms.size
@@ -203,6 +206,10 @@ class FakeChatTransport : Interceptor {
                 if (value != null && !r.body.has(key)) add("$key missing")
             }
             if (model.sendTemperature == false && r.body.has("temperature")) add("temperature sent")
+            val system = r.body.path("messages").firstOrNull { it.path("role").asText() == "system" }?.path("content")?.asText().orEmpty()
+            val profileRules = PromptProfiles.byId(model.profileId).rules
+            if (profileRules.isNotEmpty() && !system.contains(profileRules.first())) add("prompt profile ${model.profileId} missing from the system prompt")
+            if (profileRules.isEmpty() && system.contains("\n${PromptTemplates.BASE_RULE_COUNT + 1}. ")) add("profile rules sent for the default profile")
             model.headers.forEach { (k, v) -> if (r.headers[k] != v) add("header $k missing") }
         }
     }.distinct()

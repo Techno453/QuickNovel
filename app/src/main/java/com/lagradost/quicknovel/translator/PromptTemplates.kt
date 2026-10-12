@@ -37,7 +37,10 @@ In ${TranslationProtocol.TERMS_MARKER} list only names and recurring terms (peop
 """.trim()
 
     private fun system(intro: String, conventions: String, languageName: String) =
-        "$intro\nConventions:\n${conventions.trim()}\n${rules(languageName)}\n$OUTPUT_PROTOCOL"
+        "$intro\nConventions:\n${conventions.trim()}\n${rules(languageName)}"
+
+    /** Number of rules in [rules]; profile rules are numbered after them. */
+    const val BASE_RULE_COUNT = 7
 
     private val CHINESE_SYSTEM = system(
         "You are an expert literary translator of Chinese web novels (xianxia, wuxia, xuanhuan, urban fantasy) into fluent English.",
@@ -76,12 +79,21 @@ In ${TranslationProtocol.TERMS_MARKER} list only names and recurring terms (peop
     )
 
     /** Back-compat alias for the Chinese system prompt. */
-    val SYSTEM_PROMPT: String get() = CHINESE_SYSTEM
+    val SYSTEM_PROMPT: String get() = systemPrompt(TranslationLanguages.CHINESE)
 
-    fun systemPrompt(sourceLang: String?): String = when (TranslationLanguages.normalize(sourceLang)) {
-        TranslationLanguages.JAPANESE -> JAPANESE_SYSTEM
-        TranslationLanguages.KOREAN -> KOREAN_SYSTEM
-        else -> CHINESE_SYSTEM
+    /**
+     * System prompt for [sourceLang]: conventions, the numbered rules, then [profile]'s extra rules
+     * (numbered after [BASE_RULE_COUNT]; see [PromptProfile]) and the output protocol. The default
+     * profile adds nothing.
+     */
+    fun systemPrompt(sourceLang: String?, profile: PromptProfile = PromptProfiles.DEFAULT): String {
+        val head = when (TranslationLanguages.normalize(sourceLang)) {
+            TranslationLanguages.JAPANESE -> JAPANESE_SYSTEM
+            TranslationLanguages.KOREAN -> KOREAN_SYSTEM
+            else -> CHINESE_SYSTEM
+        }
+        val extra = profile.rulesFor(sourceLang).mapIndexed { i, rule -> "${BASE_RULE_COUNT + i + 1}. ${rule.trim()}\n" }
+        return head + extra.joinToString("") + "\n" + OUTPUT_PROTOCOL
     }
 
     // ------------------------------------------------------------------------------------------
