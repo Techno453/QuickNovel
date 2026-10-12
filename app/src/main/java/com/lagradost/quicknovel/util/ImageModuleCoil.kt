@@ -1,5 +1,6 @@
 package com.lagradost.quicknovel.util
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.net.Uri
@@ -22,14 +23,18 @@ import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.crossfade
+import coil3.request.transformations
+import coil3.transform.Transformation
 import coil3.util.DebugLogger
-import com.lagradost.nicehttp.ignoreAllSSLErrors
 import com.lagradost.quicknovel.BuildConfig
+import com.lagradost.quicknovel.MainActivity
+import com.lagradost.quicknovel.USER_AGENT
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.ui.UiImage
+import com.lagradost.quicknovel.ui.common.PosterHeaders
+import com.lagradost.quicknovel.ui.common.PosterModel
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
-import okhttp3.OkHttpClient
 import okhttp3.Response
 import okio.Path.Companion.toOkioPath
 import java.io.File
@@ -72,32 +77,59 @@ class DynamicInterceptor : Interceptor {
 }
 
 
+/** Adds the app's browser user agent to image requests that carry none (OkHttp would send "okhttp/x"). */
+class DefaultUserAgentInterceptor(private val userAgent: String) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        if (request.header(PosterHeaders.USER_AGENT_HEADER) != null) return chain.proceed(request)
+        return chain.proceed(request.newBuilder().header(PosterHeaders.USER_AGENT_HEADER, userAgent).build())
+    }
+}
+
+/**
+ * The one image loader of the app (Coil's singleton, built by BaseApplication). Covers, avatars
+ * and reader images all go through it; docs/images.md has the numbers and the reasons.
+ */
 object ImageLoader {
     private const val TAG = "CoilImgLoader"
+
+    /** Disk cache folder under cacheDir; the folder used before 3.9.1 is removed once. */
+    const val DISK_CACHE_DIR = "images"
+    private const val OLD_DISK_CACHE_DIR = "qn_image_cache"
+    const val DISK_CACHE_BYTES = 256L * 1024 * 1024
+    const val MEMORY_CACHE_PERCENT = 0.25
 
     internal fun buildImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
         .crossfade(200)
         .allowHardware(false) // SDK_INT >= 28, cant use hardware bitmaps for Palette Builder
+        // Coil 3 ignores Cache-Control by default (there is no respectCacheHeaders any more), so
+        // a cover stays on disk even when the site answers no-store; only the LRU size evicts it.
         .diskCachePolicy(CachePolicy.ENABLED)
         .networkCachePolicy(CachePolicy.ENABLED)
+        .memoryCachePolicy(CachePolicy.ENABLED)
         .memoryCache {
-            MemoryCache.Builder().maxSizePercent(context, 0.1) // Use 10 % of the app's available memory for caching
-                .build()
+            // A quarter of the app's memory class: software bitmaps (allowHardware false) for a
+            // few screens of covers.
+            MemoryCache.Builder().maxSizePercent(context, MEMORY_CACHE_PERCENT).build()
         }
         .diskCache {
+            Thread {
+                runCatching { context.cacheDir.resolve(OLD_DISK_CACHE_DIR).deleteRecursively() }
+            }.start()
             DiskCache.Builder()
-                .directory(context.cacheDir.resolve("qn_image_cache").toOkioPath())
-                .maxSizeBytes(512L * 1024 * 1024) // 512 MB
-                .maxSizePercent(0.04) // Use 4 % of the device's storage space for disk caching
+                .directory(context.cacheDir.resolve(DISK_CACHE_DIR).toOkioPath())
+                .maxSizeBytes(DISK_CACHE_BYTES)
                 .build()
         }
         /** Pass interceptors with care, unnecessary passing tokens to servers
         or image hosting services causes unauthorized exceptions **/
         .components {
             add(OkHttpNetworkFetcherFactory(callFactory = {
-                OkHttpClient()
+                // The providers' client (shared connection pool, TLS settings, 30 s read
+                // timeout), plus the browser user agent and the per-request Cloudflare switch.
+                MainActivity.app.baseClient
                     .newBuilder()
-                    .ignoreAllSSLErrors()
+                    .addInterceptor(DefaultUserAgentInterceptor(USER_AGENT))
                     .addInterceptor(DynamicInterceptor())
                     .build()
             }))
@@ -107,6 +139,36 @@ object ImageLoader {
             Log.d(TAG, "buildImageLoader: Setting COIL Image Loader.")
         }
         .build()
+
+    /**
+     * The request for a cover: the saved file, or the url with its headers (plus the default user
+     * agent) and the url as disk cache key. Every card, the result page and the preview sheet
+     * build their cover requests here.
+     */
+    fun posterRequest(
+        context: Context,
+        model: PosterModel,
+        transformations: List<Transformation> = emptyList(),
+        builder: ImageRequest.Builder.() -> Unit = {},
+    ): ImageRequest {
+        val file = model.file
+        return ImageRequest.Builder(context)
+            .data(if (file != null) File(file) else model.url)
+            .apply {
+                if (file == null) {
+                    httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
+                        PosterHeaders.withDefaults(model.headers, USER_AGENT).forEach { (key, value) ->
+                            headerBuilder[key] = value
+                        }
+                    }.build())
+                    model.cacheKey?.let { diskCacheKey(it) }
+                }
+            }
+            .crossfade(true)
+            .transformations(transformations)
+            .apply(builder)
+            .build()
+    }
 
     /** Use DebugLogger on debug builds which won't slow down release builds & use EventListener for
     Errors on release builds. **/
@@ -147,7 +209,7 @@ object ImageLoader {
         // which can be overridden by extensions.
         this.load(imageData, SingletonImageLoader.get(context)) {
             this.httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
-                headers?.forEach { (key, value) ->
+                PosterHeaders.withDefaults(headers, USER_AGENT).forEach { (key, value) ->
                     headerBuilder[key] = value
                 }
             }.build())
