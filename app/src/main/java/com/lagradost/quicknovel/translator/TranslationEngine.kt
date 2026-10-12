@@ -31,9 +31,30 @@ import kotlin.math.abs
 import kotlin.math.min
 
 data class TranslationResult(
+    /** Chapter HTML (<p> per paragraph). */
     val englishText: String,
+    /** Terms for manual review: low confidence, conflicts, or auto-add disabled. */
     val pendingTerms: List<PendingTerm>,
-    val chunkCount: Int
+    val chunkCount: Int,
+    /** Confident new terms (auto_added = true, id = 0); already used for the rest of this chapter. */
+    val autoAddedTerms: List<GlossaryTerm> = emptyList(),
+    /** Existing unlocked auto-added terms that gained a gender / notes (keep their ids). */
+    val updatedTerms: List<GlossaryTerm> = emptyList(),
+    /** Chapter summary for the next chapter's context ("" if the model gave none). */
+    val chapterSummary: String = "",
+    /** Source names of the characters present in this chapter. */
+    val charactersPresent: List<String> = emptyList(),
+    /** Bible terms whose rendering was missing from the kept output (summed over chunks). */
+    val glossaryViolations: Int = 0,
+    /** Untranslated CJK runs left in the kept output. */
+    val untranslatedFragments: Int = 0,
+    /** Chunks whose kept output had fewer than 70% of the input paragraphs. */
+    val paragraphWarnings: Int = 0,
+    /** Strict-mode re-requests made. */
+    val retries: Int = 0,
+    /** "源 → English" for each violated term (distinct), for logs and UI. */
+    val violatedTerms: List<String> = emptyList(),
+    val leakedFragments: List<String> = emptyList(),
 )
 
 class TranslationApiException(
@@ -97,10 +118,13 @@ class TranslationEngine(
         /** Closing quotes/brackets that belong to the sentence they close. */
         private const val CLOSERS = "」』”’\"'）)】》〉］]｝}〕"
 
-        /** Matches [NEW: source → suggestion] with →, ->, =>, ⇒, ＞ arrows and full-width brackets/colons. */
-        internal val NEW_TERM_PATTERN = Regex(
-            """[\[［]\s*NEW\s*[:：]\s*(.+?)\s*(?:→|->|－>|-＞|－＞|=>|⇒|＞|>)\s*(.+?)\s*[\]］]"""
-        )
+        /** Legacy inline marker pattern (see [TranslationProtocol.NEW_TERM_PATTERN]). */
+        internal val NEW_TERM_PATTERN: Regex get() = TranslationProtocol.NEW_TERM_PATTERN
+
+        private const val MAX_PROMPT_TERMS = 120
+        private const val MAX_RECENT_CHARACTERS = 20
+        private const val SUMMARY_MERGE_THRESHOLD = 900
+        private const val MAX_SUMMARY_CHARS = 1000
 
         /** "End of Chapter" boilerplate lines that source sites append. */
         private val END_OF_CHAPTER = Regex(
@@ -254,13 +278,11 @@ class TranslationEngine(
 
         /** Extracts (source, suggestion) pairs from [NEW: …] markers. */
         internal fun extractNewTerms(text: String): List<Pair<String, String>> =
-            NEW_TERM_PATTERN.findAll(text).map { m ->
-                m.groupValues[1].trim() to m.groupValues[2].trim()
-            }.filter { it.first.isNotEmpty() && it.second.isNotEmpty() }.toList()
+            TranslationProtocol.extractNewTerms(text)
 
         /** Replaces [NEW: source → suggestion] markers with just the suggestion. */
         internal fun stripNewTermMarkers(text: String): String =
-            text.replace(NEW_TERM_PATTERN) { it.groupValues[2].trim() }
+            TranslationProtocol.stripNewTermMarkers(text)
 
         /** Removes markdown code fences and an echoed "## Translation:" heading from model output. */
         internal fun cleanModelOutput(raw: String): String {
@@ -326,10 +348,44 @@ class TranslationEngine(
         }
     }
 
+    /** Output of one source chunk (possibly assembled from split halves). */
+    private data class ChunkOutput(
+        val translation: String,
+        val terms: List<DiscoveredTerm>,
+        val summaries: List<String>,
+        val summaryCharacters: List<String>,
+        val violatedTerms: List<GlossaryTerm>,
+        val leakedFragments: List<String>,
+        val paragraphWarnings: Int,
+        val retries: Int,
+        /** Issue score of the kept attempt (lower is better). */
+        val issueCount: Int,
+        val outputParagraphs: Int,
+    ) {
+        operator fun plus(other: ChunkOutput) = ChunkOutput(
+            translation = listOf(translation, other.translation).filter { it.isNotBlank() }.joinToString("\n\n"),
+            terms = terms + other.terms,
+            summaries = summaries + other.summaries,
+            summaryCharacters = summaryCharacters + other.summaryCharacters,
+            violatedTerms = violatedTerms + other.violatedTerms,
+            leakedFragments = leakedFragments + other.leakedFragments,
+            paragraphWarnings = paragraphWarnings + other.paragraphWarnings,
+            retries = retries + other.retries,
+            issueCount = issueCount + other.issueCount,
+            outputParagraphs = outputParagraphs + other.outputParagraphs,
+        )
+    }
+
     /**
-     * Translates a whole chapter.
+     * Translates a whole chapter with the Story Bible protocol.
+     *
+     * Pure JVM entry point (no Android dependencies) so benchmarks can call it directly with an
+     * explicit bible, context and options.
      *
      * @param sourceText chapter text in [sourceLang] (plain text or HTML)
+     * @param glossaryTerms the Story Bible (all terms of the novel)
+     * @param context continuity context and translation style
+     * @param options strict-mode retries, auto-add, carry-context switches
      * @param onProgress fraction of chunks done, 0..1
      */
     suspend fun translateChapter(
@@ -337,61 +393,209 @@ class TranslationEngine(
         novelId: String,
         chapterNum: Int,
         glossaryTerms: List<GlossaryTerm>,
+        context: StoryContext = StoryContext(),
+        options: TranslationOptions = TranslationOptions(),
         onProgress: (Float) -> Unit = {}
     ): TranslationResult = withContext(Dispatchers.IO) {
-        val chunks = splitIntoChunks(htmlToPlainText(sourceText), chunkSizeFor(sourceLang))
-        val aliases = glossaryTerms.associateWith { parseAliases(it.aliases) }
-        val translatedParts = mutableListOf<String>()
-        val allPendingTerms = mutableListOf<PendingTerm>()
+        val plainSource = htmlToPlainText(sourceText)
+        val chunks = splitIntoChunks(plainSource, chunkSizeFor(sourceLang))
+        val chunkContext = if (options.carryStoryContext) context else StoryContext(style = context.style)
+
+        val bible = glossaryTerms.toMutableList()
+        val autoAdded = LinkedHashMap<Long, GlossaryTerm>() // temporary negative id → new term
+        val updated = LinkedHashMap<Long, GlossaryTerm>() // existing DB id → updated term
+        val pending = mutableListOf<PendingTerm>()
+        var nextTempId = -1L
+
+        val recentCharacters = LinkedHashSet(chunkContext.recentCharacters)
+        var preceding = chunkContext.previousEnglishTail
+        val parts = mutableListOf<String>()
+        val summaries = mutableListOf<String>()
+        val summaryCharacters = mutableListOf<String>()
+        val violated = mutableListOf<GlossaryTerm>()
+        val leaks = mutableListOf<String>()
+        var paragraphWarnings = 0
+        var retries = 0
 
         chunks.forEachIndexed { index, chunk ->
             coroutineContext.ensureActive()
             onProgress(index.toFloat() / chunks.size)
 
-            val raw = translateChunk(chunk, aliases, depth = 0)
+            val inChunk = QualityChecks.termsInSource(chunk, bible)
+            val promptTerms = selectPromptTerms(inChunk, bible, recentCharacters)
+            val out = translateChunk(chunk, promptTerms, inChunk, chunkContext, preceding, options, depth = 0)
 
-            extractNewTerms(raw).mapTo(allPendingTerms) { (source, suggestion) ->
-                PendingTerm(
-                    novelId = novelId,
-                    source = source,
-                    suggestedEnglish = suggestion,
-                    chapterNum = chapterNum,
-                    context = chunk.take(200)
-                )
+            // Fold discovered terms into the in-memory bible so the next chunk already uses them.
+            val decisions = BibleMerger.decide(out.terms, bible, novelId, chapterNum, chunk, options)
+            for (term in decisions.autoAdd) {
+                val withId = term.copy(id = nextTempId--)
+                bible += withId
+                autoAdded[withId.id] = withId
+                if (withId.isCharacter) recentCharacters += withId.source
             }
-            translatedParts.add(stripNewTermMarkers(raw).trim())
+            for (term in decisions.updates) {
+                val i = bible.indexOfFirst { it.id == term.id }
+                if (i >= 0) bible[i] = term
+                if (term.id < 0) autoAdded[term.id] = term else updated[term.id] = term
+            }
+            pending += decisions.pending
+            inChunk.filter { it.isCharacter }.forEach { recentCharacters += it.source }
+
+            parts += out.translation
+            if (options.carryStoryContext) preceding = out.translation
+            summaries += out.summaries
+            summaryCharacters += out.summaryCharacters
+            violated += out.violatedTerms
+            leaks += out.leakedFragments
+            paragraphWarnings += out.paragraphWarnings
+            retries += out.retries
         }
+
+        val summary = buildChapterSummary(summaries, options)
+        val present = (QualityChecks.termsInSource(plainSource, bible).filter { it.isCharacter }.map { it.source } +
+            summaryCharacters.filter { BibleMerger.containsCjk(it) }).distinct()
 
         onProgress(1f)
 
         TranslationResult(
-            englishText = buildParagraphHtml(translatedParts),
-            pendingTerms = allPendingTerms.distinctBy { it.source },
-            chunkCount = chunks.size
+            englishText = buildParagraphHtml(parts),
+            pendingTerms = pending.distinctBy { it.source to it.suggestedEnglish.lowercase() },
+            chunkCount = chunks.size,
+            autoAddedTerms = autoAdded.values.map { it.copy(id = 0) },
+            updatedTerms = updated.values.toList(),
+            chapterSummary = summary,
+            charactersPresent = present,
+            glossaryViolations = violated.size,
+            untranslatedFragments = leaks.size,
+            paragraphWarnings = paragraphWarnings,
+            retries = retries,
+            violatedTerms = violated.map { "${it.source} → ${it.english}" }.distinct(),
+            leakedFragments = leaks.distinct(),
         )
     }
 
-    private fun relevantTerms(chunk: String, aliases: Map<GlossaryTerm, List<String>>): List<GlossaryTerm> =
-        aliases.filter { (term, alts) ->
-            (term.source.isNotEmpty() && chunk.contains(term.source)) || alts.any { it.isNotEmpty() && chunk.contains(it) }
-        }.keys.toList()
+    /** Bible entries for the prompt: terms in this chunk, plus recently present characters (pronoun context). */
+    private fun selectPromptTerms(
+        inChunk: List<GlossaryTerm>,
+        bible: List<GlossaryTerm>,
+        recentCharacters: Set<String>,
+    ): List<GlossaryTerm> {
+        val inChunkSet = inChunk.toHashSet()
+        val recent = bible.filter { it.isCharacter && it !in inChunkSet && it.source in recentCharacters }
+            .take(MAX_RECENT_CHARACTERS)
+        return (inChunk + recent).take(MAX_PROMPT_TERMS)
+    }
 
-    /** Translates one chunk; if the model runs out of output tokens, splits it and retries. */
+    /** Merges chunk summaries; only long multi-chunk summaries get a (cheap) merge call, and only with story context on. */
+    private suspend fun buildChapterSummary(summaries: List<String>, options: TranslationOptions): String {
+        val parts = summaries.map { it.trim() }.filter { it.isNotEmpty() }
+        val merged = parts.joinToString(" ")
+        if (parts.size > 1 && merged.length > SUMMARY_MERGE_THRESHOLD && options.carryStoryContext) {
+            try {
+                val result = chat(PromptTemplates.SUMMARY_MERGE_SYSTEM, merged, temperature = 0.0, maxRetries = 1)
+                cleanModelOutput(result.content).replace(Regex("""\s+"""), " ").trim()
+                    .takeIf { it.isNotEmpty() }?.let { return it.take(MAX_SUMMARY_CHARS) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // fall back to the plain merge
+            }
+        }
+        return if (merged.length <= MAX_SUMMARY_CHARS) merged else merged.take(MAX_SUMMARY_CHARS).substringBeforeLast(' ') + "…"
+    }
+
+    /**
+     * Translates one chunk; if the model runs out of output tokens, splits it and retries.
+     * In strict mode a chunk that fails the checks is re-requested once with a reminder and the
+     * attempt with fewer issues is kept.
+     */
     private suspend fun translateChunk(
         chunk: String,
-        aliases: Map<GlossaryTerm, List<String>>,
+        promptTerms: List<GlossaryTerm>,
+        checkTerms: List<GlossaryTerm>,
+        context: StoryContext,
+        preceding: String,
+        options: TranslationOptions,
         depth: Int
-    ): String {
-        val prompt = PromptTemplates.buildUserPrompt(chunk, relevantTerms(chunk, aliases), sourceLang)
-        val result = chat(PromptTemplates.systemPrompt(sourceLang), prompt)
+    ): ChunkOutput {
+        val system = PromptTemplates.systemPrompt(sourceLang)
+        val result = chat(system, PromptTemplates.buildUserPrompt(chunk, promptTerms, sourceLang, context, preceding))
         if (result.finishReason == "length" && depth < MAX_LENGTH_SPLIT_DEPTH && chunk.length >= MIN_SPLIT_CHARS) {
             val (first, second) = splitInHalf(chunk)
             if (first.isNotBlank() && second.isNotBlank()) {
-                return translateChunk(first, aliases, depth + 1) + "\n\n" +
-                        translateChunk(second, aliases, depth + 1)
+                val a = translateChunk(
+                    first, promptTerms, QualityChecks.termsInSource(first, checkTerms), context, preceding, options, depth + 1
+                )
+                val b = translateChunk(
+                    second, promptTerms, QualityChecks.termsInSource(second, checkTerms), context,
+                    if (options.carryStoryContext) a.translation else "", options, depth + 1
+                )
+                return a + b
             }
         }
-        return cleanModelOutput(result.content)
+
+        var best = evaluate(chunk, result.content, checkTerms)
+        if (!options.strictMode || best.issueCount == 0) return best
+
+        val reminder = PromptTemplates.buildReminder(
+            ChunkQuality(
+                violatedTerms = best.violatedTerms,
+                leakedFragments = best.leakedFragments,
+                inputParagraphs = QualityChecks.countParagraphs(chunk),
+                outputParagraphs = best.outputParagraphs,
+            ),
+            sourceLang
+        )
+        try {
+            val retry = chat(system, PromptTemplates.buildUserPrompt(chunk, promptTerms, sourceLang, context, preceding, reminder))
+            val second = evaluate(chunk, retry.content, checkTerms)
+            if (second.translation.isNotBlank() && isBetter(second, best)) best = second
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Keep the first attempt; a failed retry must not fail the chapter.
+        }
+        return best.copy(retries = 1)
+    }
+
+    private fun evaluate(chunk: String, raw: String, checkTerms: List<GlossaryTerm>): ChunkOutput {
+        val parsed = TranslationProtocol.parse(raw)
+        val quality = QualityChecks.check(chunk, parsed.translation, checkTerms)
+        return ChunkOutput(
+            translation = parsed.translation,
+            terms = parsed.terms,
+            summaries = listOf(parsed.summary).filter { it.isNotBlank() },
+            summaryCharacters = parsed.summaryCharacters,
+            violatedTerms = quality.violatedTerms,
+            leakedFragments = quality.leakedFragments,
+            paragraphWarnings = if (quality.paragraphShortfall) 1 else 0,
+            retries = 0,
+            issueCount = quality.issueCount,
+            outputParagraphs = quality.outputParagraphs,
+        )
+    }
+
+    private fun isBetter(candidate: ChunkOutput, current: ChunkOutput): Boolean =
+        candidate.issueCount < current.issueCount ||
+            (candidate.issueCount == current.issueCount && candidate.outputParagraphs > current.outputParagraphs)
+
+    /**
+     * "Analyze novel" pre-pass for one excerpt: extracts characters (gender, role, relationships,
+     * speech style) and other terms plus a premise. No translation.
+     */
+    suspend fun extractStoryBible(
+        excerpt: String,
+        knownSources: Collection<String>,
+        previousPremise: String,
+        style: TranslationStyle?,
+        chapterLabel: String,
+    ): BibleExtraction = withContext(Dispatchers.IO) {
+        val result = chat(
+            PromptTemplates.analysisSystemPrompt(sourceLang),
+            PromptTemplates.buildAnalysisPrompt(excerpt, sourceLang, knownSources, previousPremise, style, chapterLabel),
+            temperature = 0.1
+        )
+        TranslationProtocol.parseAnalysis(result.content)
     }
 
     /**
@@ -510,14 +714,6 @@ class TranslationEngine(
             )
         } catch (e: Exception) {
             throw TranslationApiException("Failed to parse API response: ${e.message}")
-        }
-    }
-
-    private fun parseAliases(aliasesJson: String): List<String> {
-        return try {
-            mapper.readValue(aliasesJson, List::class.java).filterIsInstance<String>()
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 

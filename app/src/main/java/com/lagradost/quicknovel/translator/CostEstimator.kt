@@ -87,6 +87,36 @@ object CostEstimator {
         )
     }
 
+    /** Source characters per "Analyze novel" request. */
+    const val ANALYSIS_CHARS_PER_CALL = 8000
+
+    /** Analysis output (character sheet JSON) is ~0.3x its input. */
+    private const val ANALYSIS_OUTPUT_RATIO = 0.3
+
+    /** Prompt overhead per analysis call (instructions, known-term list, premise so far). */
+    private const val ANALYSIS_OVERHEAD_TOKENS = 900
+
+    /**
+     * Estimate for the "Analyze novel" pre-pass over [chapterCount] chapters: input-heavy,
+     * one call per [ANALYSIS_CHARS_PER_CALL] source characters.
+     */
+    fun estimateAnalysis(
+        chapterCount: Int,
+        model: String,
+        sourceLang: String? = TranslationLanguages.DEFAULT,
+        avgCharsPerChapter: Int = 4000
+    ): Estimate {
+        if (chapterCount <= 0) return Estimate(0, 0, pricingFor(model)?.let { 0.0 })
+        val chars = chapterCount.toLong() * avgCharsPerChapter
+        val calls = ((chars + ANALYSIS_CHARS_PER_CALL - 1) / ANALYSIS_CHARS_PER_CALL).toInt().coerceAtLeast(1)
+        val inputTokens = (chars * tokensPerChar(sourceLang)).roundToInt() + calls * ANALYSIS_OVERHEAD_TOKENS
+        val outputTokens = (inputTokens * ANALYSIS_OUTPUT_RATIO).roundToInt()
+        val usd = pricingFor(model)?.let { p ->
+            inputTokens / 1_000_000.0 * p.inputPerMillion + outputTokens / 1_000_000.0 * p.outputPerMillion
+        }
+        return Estimate(inputTokens, outputTokens, usd)
+    }
+
     /** Back-compat: (total tokens, USD) with unknown models priced as gpt-4o-mini. */
     fun estimateCost(sourceCharCount: Int, model: String): Pair<Int, Double> {
         val e = estimate(sourceCharCount, model)

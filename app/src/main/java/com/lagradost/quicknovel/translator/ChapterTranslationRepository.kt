@@ -2,7 +2,6 @@ package com.lagradost.quicknovel.translator
 
 import android.content.Context
 import android.util.Log
-import com.lagradost.quicknovel.translator.db.TranslatedChapter
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -58,7 +57,6 @@ object ChapterTranslationRepository {
                 getCached(ctx, novelId, chapterIndex)?.let { return@withLock it }
 
                 val source = fetchSource()?.takeIf { it.isNotBlank() } ?: return@withLock null
-                val db = TranslatorDatabase.getInstance(ctx)
                 val model = SecurePrefs.getModel(ctx)
                 val engine = TranslationEngine(
                     apiKey = apiKey,
@@ -66,26 +64,19 @@ object ChapterTranslationRepository {
                     baseUrl = SecurePrefs.getBaseUrl(ctx),
                     sourceLang = lang
                 )
+                // Same Story Bible, style and continuity context as the batch translator.
+                val inputs = StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIndex, lang)
                 val result = engine.translateChapter(
                     sourceText = source,
                     novelId = novelId,
                     chapterNum = chapterIndex,
-                    glossaryTerms = db.glossaryDao().getAllTermsSync(novelId)
+                    glossaryTerms = inputs.bible,
+                    context = inputs.context,
+                    options = inputs.options
                 )
                 if (result.englishText.isBlank()) return@withLock null
 
-                db.translationDao().insert(
-                    TranslatedChapter(
-                        novelId = novelId,
-                        chapterNum = chapterIndex,
-                        englishText = result.englishText,
-                        model = model,
-                        sourceLang = lang
-                    )
-                )
-                if (result.pendingTerms.isNotEmpty()) {
-                    db.pendingTermDao().insertAll(result.pendingTerms)
-                }
+                StoryBibleRepository.persistChapter(ctx, novelId, chapterIndex, result, model, lang)
                 result.englishText
             }
         } catch (e: CancellationException) {

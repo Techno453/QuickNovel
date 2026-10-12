@@ -210,6 +210,6 @@ class TranslationEngineHelpersTest {
         assertTrue(PromptTemplates.systemPrompt("ko").contains("hyung"))
         val user = PromptTemplates.buildUserPrompt("本文", emptyList(), "ja")
         assertTrue(user.contains("## Japanese Text:"))
-        assertTrue(user.contains("[NEW:"))
+        assertTrue(user.contains(TranslationProtocol.TERMS_MARKER)) // structured tail replaced inline [NEW:] markers
     }
 }
