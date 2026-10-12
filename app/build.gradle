@@ -187,6 +187,8 @@ tasks.withType(Test).configureEach {
             systemProperty key, v.toString()
         }
     }
+    // Live provider tests (src/test/.../providers/cjk, docs/sources.md): -Dlive=1 or LIVE=1.
+    if (System.getenv('LIVE') != null) systemProperty 'live', System.getenv('LIVE')
     if (System.getProperty('bench') != null || System.getenv('BENCH') != null ||
             System.getProperty('live') != null || System.getenv('LIVE') != null) {
         outputs.upToDateWhen { false }
