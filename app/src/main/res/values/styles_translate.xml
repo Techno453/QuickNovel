@@ -47,12 +47,16 @@
         <item name="android:textColorHint">?attr/grayTextColor</item>
     </style>
 
-    <!-- The app's filled filter chip with text that stays readable on the primary colour. -->
-    <style name="TranslateFilterChip" parent="ChipFilled">
-        <item name="textColor">@color/translate_chip_text</item>
+    <!-- Filter chip shaped like the Compose FilterChips in Browse (8 dp corners, thin outline,
+         tinted fill when checked, no check mark), readable in black, dark and light themes. -->
+    <style name="TranslateFilterChip" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">@color/translate_chip_background</item>
+        <item name="chipStrokeColor">@color/translate_chip_stroke</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="chipCornerRadius">8dp</item>
+        <item name="checkedIconVisible">false</item>
         <item name="android:textColor">@color/translate_chip_text</item>
-        <item name="checkedIconTint">@color/translate_chip_text</item>
-        <item name="chipIconTint">@color/translate_chip_text</item>
+        <item name="chipMinTouchTargetSize">40dp</item>
     </style>
 
     <style name="TranslateTextButton" parent="Widget.MaterialComponents.Button.TextButton">
