@@ -77,7 +77,8 @@
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
                 android:text="@string/reader_glossary_edit"
-                app:icon="@drawable/ic_baseline_edit_24" />
+                app:icon="@drawable/ic_baseline_edit_24"
+                app:iconGravity="textStart" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/lookup_lock"
@@ -85,7 +86,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/reader_glossary_lock" />
+                android:text="@string/reader_glossary_lock"
+                app:iconGravity="textStart" />
         </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
@@ -96,6 +98,7 @@
             android:layout_marginTop="16dp"
             android:text="@string/reader_glossary_add"
             android:visibility="gone"
-            app:icon="@drawable/ic_glossary_24" />
+            app:icon="@drawable/ic_glossary_24"
+            app:iconGravity="textStart" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
