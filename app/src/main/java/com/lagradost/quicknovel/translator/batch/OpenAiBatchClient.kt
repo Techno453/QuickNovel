@@ -3,6 +3,7 @@ package com.lagradost.quicknovel.translator.batch
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.translator.LlmConfig
+import com.lagradost.quicknovel.translator.TokenUsage
 import com.lagradost.quicknovel.translator.TranslationApiException
 import com.lagradost.quicknovel.translator.TranslationEngine
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,8 @@ class OpenAiBatchClient(
         val failed: Int,
         /** Validation errors (status failed), joined. */
         val errors: String?,
+        /** Tokens billed so far for the whole batch (`usage`, batches created after 2025-09-07); null if absent. */
+        val usage: TokenUsage? = null,
     )
 
     companion object {
@@ -62,7 +65,8 @@ class OpenAiBatchClient(
             val counts = node.path("request_counts")
             val errors = node.path("errors").path("data").takeIf { it.isArray }
                 ?.joinToString("; ") { e ->
-                    listOfNotNull(text(e, "code"), text(e, "message")).joinToString(": ")
+                    val line = e.path("line").takeIf { it.isNumber }?.let { "line ${it.asInt()}" }
+                    listOfNotNull(line, text(e, "code"), text(e, "message")).joinToString(": ")
                 }?.takeIf { it.isNotBlank() }
             return BatchInfo(
                 id = node.path("id").asText(""),
@@ -74,6 +78,9 @@ class OpenAiBatchClient(
                 completed = counts.path("completed").asInt(0),
                 failed = counts.path("failed").asInt(0),
                 errors = errors,
+                usage = node.path("usage").takeIf { it.isObject }?.let { u ->
+                    TokenUsage(u.path("input_tokens").asInt(0), u.path("output_tokens").asInt(0))
+                },
             )
         }
     }

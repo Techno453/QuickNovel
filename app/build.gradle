@@ -231,8 +231,11 @@ tasks.withType(Test).configureEach {
     }
     // Live provider tests (src/test/.../providers/cjk, docs/sources.md): -Dlive=1 or LIVE=1.
     if (System.getenv('LIVE') != null) systemProperty 'live', System.getenv('LIVE')
+    // Live OpenAI Batch API test (src/test/.../bench/BatchLiveTest): -Dlive.batch=1 or LIVE_BATCH=1.
+    if (System.getenv('LIVE_BATCH') != null) systemProperty 'live.batch', System.getenv('LIVE_BATCH')
     if (System.getProperty('bench') != null || System.getenv('BENCH') != null ||
-            System.getProperty('live') != null || System.getenv('LIVE') != null) {
+            System.getProperty('live') != null || System.getenv('LIVE') != null ||
+            System.getProperty('live.batch') != null || System.getenv('LIVE_BATCH') != null) {
         outputs.upToDateWhen { false }
         testLogging.showStandardStreams = true
     }

@@ -39,19 +39,24 @@ enum class BatchStatus(val label: String) {
         fun fromName(name: String?): BatchStatus = entries.firstOrNull { it.name == name } ?: FAILED
 
         /**
-         * Maps an OpenAI batch status to the local one. Terminal states with an output file map to
-         * PROCESSING (the results still have to be stored); [afterProcessing] gives the final state.
+         * Maps an OpenAI batch status to the local one. Terminal states with an output or error
+         * file map to PROCESSING (the results still have to be stored, or the per-chapter errors
+         * recorded); [afterProcessing] gives the final state. A batch whose every request failed
+         * ends `completed` with only an error file.
          */
-        fun fromOpenAi(status: String?, hasOutputFile: Boolean): BatchStatus = when (status) {
-            "validating" -> VALIDATING
-            "in_progress" -> IN_PROGRESS
-            "finalizing" -> FINALIZING
-            "cancelling" -> CANCELLING
-            "completed" -> if (hasOutputFile) PROCESSING else FAILED
-            "expired" -> if (hasOutputFile) PROCESSING else EXPIRED
-            "cancelled" -> if (hasOutputFile) PROCESSING else CANCELLED
-            "failed" -> FAILED
-            else -> IN_PROGRESS // unknown future state: keep polling
+        fun fromOpenAi(status: String?, hasOutputFile: Boolean, hasErrorFile: Boolean = false): BatchStatus {
+            val hasResults = hasOutputFile || hasErrorFile
+            return when (status) {
+                "validating" -> VALIDATING
+                "in_progress" -> IN_PROGRESS
+                "finalizing" -> FINALIZING
+                "cancelling" -> CANCELLING
+                "completed" -> if (hasResults) PROCESSING else FAILED
+                "expired" -> if (hasResults) PROCESSING else EXPIRED
+                "cancelled" -> if (hasResults) PROCESSING else CANCELLED
+                "failed" -> FAILED
+                else -> IN_PROGRESS // unknown future state: keep polling
+            }
         }
 
         /** Final local state once the results of a batch that ended as [openAiStatus] are stored. */

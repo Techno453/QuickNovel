@@ -29,6 +29,7 @@ import com.lagradost.quicknovel.translator.batch.BatchOutputParser
 import com.lagradost.quicknovel.translator.batch.BatchRequestBuilder
 import com.lagradost.quicknovel.translator.batch.BatchStatus
 import com.lagradost.quicknovel.translator.batch.BuiltChapter
+import com.lagradost.quicknovel.translator.batch.ChunkOutcome
 import com.lagradost.quicknovel.translator.batch.OpenAiBatchClient
 import com.lagradost.quicknovel.translator.db.BatchChapter
 import com.lagradost.quicknovel.translator.db.BatchJob
@@ -155,7 +156,7 @@ object BatchManager {
             val info = client.createBatch(fileId, mapOf("app" to "QuickNovel", "novel" to novelName.take(200), "job" to job.id.toString()))
             dao.insertChapters(built.chapters.map { it.toEntity(job.id) })
             job = job.copy(
-                status = BatchStatus.fromOpenAi(info.status, info.outputFileId != null).name,
+                status = BatchStatus.fromOpenAi(info.status, info.outputFileId != null, info.errorFileId != null).name,
                 openaiBatchId = info.id,
                 inputFileId = fileId,
                 requestCount = built.requestCount,
@@ -236,7 +237,7 @@ object BatchManager {
         val key = openAiKey(ctx) ?: return job
         val client = OpenAiBatchClient(key)
         val info = client.getBatch(batchId)
-        val status = BatchStatus.fromOpenAi(info.status, info.outputFileId != null)
+        val status = BatchStatus.fromOpenAi(info.status, info.outputFileId != null, info.errorFileId != null)
         var updated = job.copy(
             status = status.name,
             outputFileId = info.outputFileId ?: job.outputFileId,
@@ -302,9 +303,11 @@ object BatchManager {
                     return@withChapterLock
                 }
                 if (chapter.okCount == 0) {
-                    // Nothing came back (expired / cancelled before it ran): leave it to the normal path.
+                    // Nothing usable came back (every request failed, or expired / cancelled before it
+                    // ran): leave it to the normal path, with the error file's reason when there is one.
                     status = BatchChapterStatus.NEEDS_LIVE
-                    note = "No results for this chapter"
+                    note = chapter.outcomes.filterIsInstance<ChunkOutcome.Failed>().firstOrNull()?.reason
+                        ?.let { "No results for this chapter: $it" } ?: "No results for this chapter"
                     return@withChapterLock
                 }
                 val inputs = StoryBibleRepository.loadChapterInputs(ctx, job.novelId, row.chapterNum, job.sourceLang)
@@ -358,7 +361,7 @@ object BatchManager {
         return try {
             val info = OpenAiBatchClient(key).cancelBatch(batchId)
             dao.updateJob(
-                job.copy(status = BatchStatus.fromOpenAi(info.status, info.outputFileId != null).name, updatedAt = System.currentTimeMillis())
+                job.copy(status = BatchStatus.fromOpenAi(info.status, info.outputFileId != null, info.errorFileId != null).name, updatedAt = System.currentTimeMillis())
             )
             BatchScheduler.ensurePolling(ctx)
             null
