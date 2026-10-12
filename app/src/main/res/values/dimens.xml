@@ -20,6 +20,9 @@
     <dimen name="roundedImageRadius">7dp</dimen>
     <dimen name="navbarHeight">0dp</dimen>
     <dimen name="nav_view_height">70dp</dimen>
+    <dimen name="nav_rail_width">80dp</dimen>
+    <!-- Bottom sheets and dialogs are capped at this width on wide windows -->
+    <dimen name="max_sheet_width">640dp</dimen>
     <dimen name="screenEdgeMargin">24dp</dimen>
 
     <dimen name="rounded_button_radius">4dp</dimen>

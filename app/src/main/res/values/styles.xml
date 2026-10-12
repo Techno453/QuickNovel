@@ -205,6 +205,8 @@
 
     <style name="AppModalStyle" parent="Widget.Design.BottomSheet.Modal">
         <item name="android:background">@drawable/rounded_dialog</item>
+        <!-- Centred and capped on wide windows (foldable inner screen, tablets, landscape) -->
+        <item name="android:maxWidth">@dimen/max_sheet_width</item>
     </style>
 
     <style name="Theme.AlertDialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
