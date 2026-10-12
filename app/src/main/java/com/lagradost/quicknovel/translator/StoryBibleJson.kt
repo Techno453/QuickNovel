@@ -64,7 +64,7 @@ object StoryBibleJson {
                     context = mapper.treeToValue(node, NovelContext::class.java).copy(novelId = novelId)
                 }
             }
-            else -> throw IllegalArgumentException("Expected a JSON array of terms or a Story Bible export")
+            else -> throw IllegalArgumentException("Expected a JSON array of terms or a glossary export")
         }
 
         val terms = termsNode.mapNotNull { node ->
