@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipDrawable
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.CommonActivity
 import com.lagradost.quicknovel.DownloadState
@@ -50,9 +51,12 @@ import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.translator.TranslatorNovelId
+import com.lagradost.quicknovel.ui.glossary.AnalyzeNovelDialogFragment
 import com.lagradost.quicknovel.ui.glossary.GlossaryFragment
+import com.lagradost.quicknovel.ui.translate.NovelChapterSource
 import com.lagradost.quicknovel.ui.translate.TranslateRangeDialogFragment
 import com.lagradost.quicknovel.ui.translate.TranslateViewModel
+import com.lagradost.quicknovel.ui.translate.TranslationProgress
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
@@ -88,6 +92,51 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 putInt("startAction", startAction)
             }
 
+        /**
+         * The completed run that was last announced. The activity-scoped progress LiveData keeps
+         * its final value, so without this every reopened result page would announce it again.
+         */
+        private var announcedCompletion: TranslationProgress? = null
+    }
+
+    private fun openGlossary(novelId: String, novelName: String) {
+        activity?.navigate(
+            R.id.global_to_navigation_glossary,
+            GlossaryFragment.newInstance(novelId, novelName)
+        )
+    }
+
+    /** "Translation finished: 3 of 3 chapters translated · 2 glossary deviations · 4 new terms". */
+    private fun announceTranslationFinished(progress: TranslationProgress, novelId: String, novelName: String) {
+        val ctx = context ?: return
+        val parts = buildList {
+            add(
+                if (progress.total > 0) ctx.getString(R.string.translation_finished_title) + ": " +
+                    ctx.getString(R.string.translation_finished_text, progress.current, progress.total)
+                else ctx.getString(R.string.translation_finished_title)
+            )
+            if (progress.total > 0) add(progress.qualitySummary(ctx))
+            if (progress.newTermsFound > 0) add(
+                ctx.resources.getQuantityString(
+                    R.plurals.new_terms_to_review, progress.newTermsFound, progress.newTermsFound
+                )
+            )
+        }
+        val msg = parts.joinToString(" · ")
+        if (progress.newTermsFound > 0) {
+            val root = binding?.root ?: return
+            Snackbar.make(root, msg, Snackbar.LENGTH_LONG)
+                .setDuration(8000)
+                .setAction(R.string.glossary_review_new_terms) { openGlossary(novelId, novelName) }
+                .apply {
+                    view.findViewById<android.widget.TextView>(
+                        com.google.android.material.R.id.snackbar_text
+                    )?.maxLines = 4
+                }
+                .show()
+        } else {
+            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun fixLayout(view: View) {
@@ -690,15 +739,24 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 ).show(childFragmentManager, "translate_range")
             }
 
+            // Long-press: "Analyze novel…" with the chapter list already loaded on this page.
+            resultTranslateBtn.setOnLongClickListener { v ->
+                val response = (viewModel.loadResponse.value as? Resource.Success)?.value as? StreamResponse
+                    ?: return@setOnLongClickListener false
+                v.popupMenu(listOf(R.string.glossary_menu_analyze to R.string.glossary_menu_analyze), null) {
+                    val apiName = viewModel.apiName
+                    val novelId = TranslatorNovelId.from(apiName, response.name)
+                    NovelChapterSource.remember(novelId, apiName, response.name, response.author, response.data)
+                    AnalyzeNovelDialogFragment.newInstance(novelId)
+                        .show(childFragmentManager, "analyze_novel")
+                }
+                true
+            }
+
             resultGlossaryBtn.setOnClickListener {
                 val response = (viewModel.loadResponse.value as? Resource.Success)?.value
                     ?: return@setOnClickListener
-                val novelId = TranslatorNovelId.from(viewModel.apiName, response.name)
-                val novelName = response.name
-                activity?.navigate(
-                    R.id.global_to_navigation_glossary,
-                    GlossaryFragment.newInstance(novelId, novelName)
-                )
+                openGlossary(TranslatorNovelId.from(viewModel.apiName, response.name), response.name)
             }
 
             /*downloadDeleteTrashFromResult.setOnClickListener {
@@ -763,10 +821,11 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 progress.completed -> {
                     setTranslateEnabled(true)
                     binding.resultTranslateBtn.text = "Translate"
-                    val msg = if (progress.newTermsFound > 0)
-                        "Translation complete! ${progress.newTermsFound} new terms found — review them in the Glossary."
-                    else "Translation complete!"
-                    android.widget.Toast.makeText(requireContext(), msg, android.widget.Toast.LENGTH_LONG).show()
+                    val name = (viewModel.loadResponse.value as? Resource.Success)?.value?.name
+                    if (announcedCompletion !== progress && thisNovelId != null && name != null) {
+                        announcedCompletion = progress
+                        announceTranslationFinished(progress, thisNovelId, name)
+                    }
                 }
                 progress.error != null -> {
                     setTranslateEnabled(true)
