@@ -101,7 +101,7 @@ removed. The new prompt itself has not been benchmarked yet.
 
 | Path | Trigger | Chapters fetched for analysis reused? | Progress |
 |---|---|---|---|
-| Manual Analyze novel (Glossary menu, result page long-press, translate dialog hint) | always runs, re-run allowed; sets the state | n/a | Glossary screen + notification |
+| Manual Analyze novel (Glossary menu, result page ⋮ menu, translate dialog hint) | always runs, re-run allowed; sets the state | n/a | Glossary screen + notification |
 | Batch translation (Translate dialog → `TranslationForegroundService` `ACTION_START`) | novel never analyzed and the setting is on | yes (in-memory cache for the job) | notification "Analyzing novel before translating", result-page button "Analyzing novel… n/m", Glossary screen |
 | Read-ahead worker | same, before its first chapter of the novel | yes | read-ahead notification "Analyzing novel… n/m" |
 | Reader on-demand translation (`ChapterTranslationRepository.getOrTranslate`) | same | yes (the current chapter; others come from the reader's chapter file cache) | toast "Analyzing the novel before its first translation…" |
@@ -394,8 +394,9 @@ same pipeline as online novels: translate chapter / range, overnight batch, read
   Chapter *i* is therefore the same text in the reader, the result page, jobs and the DB.
 - **Language:** `SourceLanguageDetector` counts scripts in the first chapters (up to 6000
   characters): mostly Hangul → `ko`, enough kana → `ja`, otherwise Han → `zh`; fewer than 20 CJK
-  letters → undecided. The long-press menu on the result page's Translate button has "Source
-  language…", and Translate asks for the language when none was detected. The override wins over
+  letters → undecided. The result page shows the language under the stats (tap to change) and
+  its ⋮ menu next to Translate has "Source language…"; Translate asks for the language when none
+  was detected. The override wins over
   detection and survives re-imports.
 - **Source text:** jobs read chapters through `ChapterTextSource` (`lang`, `size`, `load(i)`).
   Online novels load through the provider; imported books read the stored EPUB copy, so no
