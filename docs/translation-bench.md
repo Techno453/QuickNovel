@@ -27,14 +27,90 @@ Overrides, as `-Dbench.<name>=…`, environment `BENCH_<NAME>=…`, or a line in
 | `bench.models` | `-Dbench.models=gpt-5-mini,anthropic/claude-haiku-5.5` | run only these model ids (must exist in the config) |
 | `bench.samples` | `-Dbench.samples=zh-doupo` | run only these sample ids |
 | `bench.dryRun` | `-Dbench.dryRun=true` | fetch samples, fake outputs, compute metrics, write the report; **no API calls** |
-| `bench.judge` | `-Dbench.judge=false` | skip the LLM judge |
-| `bench.reportOnly` | `-Dbench.reportOnly=true` | no API calls: rebuild the report from stored results (metrics recomputed) |
+| `bench.judge` | `-Dbench.judge=false` | skip all LLM judging |
+| `bench.judges` | `-Dbench.judges=gpt-5.4-mini,deepseek/deepseek-v4.1-flash` | run only these judges (ids from `judge.model` / `judges.panel`) |
+| `bench.reportOnly` | `-Dbench.reportOnly=true` | no API calls: rebuild the report from stored results, stored judge scores and manual judge files (metrics recomputed) |
+| `bench.rejudge` | `-Dbench.rejudge=true` | judging only, on stored outputs: no smoke test, bible or translation calls; cells already scored are skipped |
 | `bench.budget` / `BENCH_BUDGET_USD` | `BENCH_BUDGET_USD=1.50` | cost cap (default 2.50) |
 | `bench.parallelism` | `-Dbench.parallelism=2` | concurrent translations (default 4) |
 
 Re-running a subset (e.g. one model after fixing its parameters) merges into the report: the
 latest result per (sample, model) is kept in `app/build/translation-bench/results/` and every
 report is built from those, so never re-run everything to fix one model.
+
+## Judge panel
+
+Every output is scored by a panel of LLM judges: `judge.model` (the original single judge,
+gpt-6-luna) plus the models in the top-level `judges.panel` block of the config. Panel entries
+take the same fields as `models` entries (prices, `baseUrl`, `keyName`, `headers`, `extraBody`,
+`reasoningEffort`), so each judge goes through the same request plumbing and cost metering. The
+default panel spans three providers with reasoning off: `gpt-5.4-mini` (OpenAI,
+`reasoning_effort: none`), `google/gemini-3.1-flash-lite` and `deepseek/deepseek-v4.1-flash`
+(OpenRouter, `reasoning: {enabled: false}`). `judges.temperature` (default 0) is sent where the
+provider accepts it and dropped automatically when rejected; `judges.maxCompletionTokens` caps the
+reply (default 300).
+
+- **Blind rubric.** The judge sees the source excerpt, the story bible the translator was given and
+  the translation, never the model name. It returns JSON with integer 1–10 scores for
+  **accuracy** (meaning preserved, nothing omitted or added), **fluency** (natural English) and
+  **consistency** (bible names/terms and genders followed; capitalization-only differences do not
+  count) plus a one-sentence note. Replies are parsed robustly (code fences, prose around the
+  object, `"8/10"`, `terminology` for `consistency`, clamped to 1–10); a provider that rejects JSON
+  mode is asked again without it.
+- **Self-judging exclusion.** A judge never scores its own model's output. Ids are compared without
+  provider prefix and case (`google/gemini-3.1-flash-lite` == `gemini-3.1-flash-lite`). Those
+  cells are filled by the remaining judges only and listed in the report. The v1 judge's stored
+  self-scores are kept only for the "luna-only" comparison column.
+- **Aggregation.** Per output: each judge's score (mean of the three criteria), the panel mean and
+  the spread (max − min). Per model: **Panel adj.** (primary; the leaderboard is sorted by it),
+  **Panel raw**, the **v1-only** mean (the old single-judge leaderboard, self-score included), each
+  judge's mean, and the v1 → panel rank change (⚑ = 3+ places). *Panel adj.* first removes each
+  judge's leniency bias (its mean difference from the other judges on the same outputs, scaled so
+  the biases sum to zero); where every judge scored an output it equals the raw mean, and where a
+  judge is missing (its own model) it stops a strict or lenient judge's absence from moving that
+  model.
+- **Agreement.** The report adds a judge table (outputs scored, mean given, leniency bias, spend),
+  a Spearman rank-correlation matrix of the judges' model rankings (over the models both judges
+  scored, n shown), the models whose rank moves 3+ places with every judge's note, the outputs
+  with the largest spread, and a generated "What changed vs single-judge" paragraph.
+- **Stored scores.** Panel scores live in `app/build/translation-bench/judges/<judge>/<sample>/<model>.json`
+  with the translation's run id and a hash of the exact prompt. A newer translation or a changed
+  prompt (rubric, bible, source) makes a score stale. v1 scores stored in the results count as the
+  `judge.model` judge's, so gpt-6-luna is never re-paid.
+
+### Rejudge
+
+```sh
+BENCH=1 ./gradlew :app:testDebugUnitTest --tests "com.lagradost.quicknovel.bench.TranslationBench" -Dbench=1 -Dbench.rejudge=true --console=plain
+```
+
+Judges the stored outputs only. For every (judge, sample, model) cell that has no current score
+it builds the prompt, estimates the cost from its token count and the judge's prices, logs the
+per-judge projection, and drops the most expensive judge while `ledger + projection > budget`
+(pass `-Dbench.budget=…` to cap a single rejudge). A second run makes no calls. Bibles must be
+cached (rejudge never seeds them).
+
+Cost: one judgment is about 8–9k input tokens and ~150 output. The default panel over 16 models ×
+3 samples (45 calls per judge after self-exclusion) measured **$0.25** on 2026-10-11:
+gpt-5.4-mini $0.167, gemini-3.1-flash-lite $0.053, deepseek-v4.1-flash $0.028. In a normal run
+the panel judges each new output right after it is translated (included in the per-phase
+estimate).
+
+### Manual judges
+
+Human scores join the panel from `app/build/translation-bench/manual-judges/<judge-name>.json`:
+
+```json
+[
+  { "sample": "zh-doupo", "model": "gpt-6-luna", "accuracy": 8, "fluency": 7, "consistency": 9, "note": "One-sentence note." }
+]
+```
+
+`sample` is a sample id and `model` a model id exactly as in the config; scores are 1–10 (clamped).
+Each file is one judge named after the file and shown as "<name> (manual)" in every per-judge
+column, the panel means, the spread and the Spearman table; it may cover any subset of outputs.
+The self-exclusion rule applies if the name matches a model id. Unreadable files are reported in
+the notes and ignored. `-Dbench.reportOnly=true` merges them with no API calls.
 
 ## API keys
 
@@ -62,13 +138,16 @@ phase and drops up to `maxDropsPerPhase` of its most expensive models if the est
 exceed 90% of the cap. Delete `ledger.json` to reset the running total.
 
 A default run (3 samples × 8 OpenAI + 8 OpenRouter models, judge on) measured about $0.60
-(2026-10-11); the OpenAI phase alone is about $0.40.
+(2026-10-11); the OpenAI phase alone is about $0.40. The judge panel adds about $0.25 per full run
+(see [Rejudge](#rejudge)).
 
 ## Samples
 
 Configured in `samples` (one ~3,000-char excerpt per language, trimmed at a paragraph boundary
 between `sampleMinChars` and `sampleMaxChars`). Sources fetched at run time with OkHttp + Jsoup
-and cached under `app/build/translation-bench/cache/`:
+and cached under `app/build/translation-bench/cache/`. The exact excerpt that was translated is
+snapshotted in `cache/sample-<id>.json` and reused while its `origin` matches the configured
+`url`, so report and rejudge runs grade the same text even if the site changes:
 
 - `syosetu` (`.p-novel__body p`), `kakuyomu` (`.widget-episodeBody p`), `quanben`
   (`#contentbody`), `novelpia` (`POST /proc/viewer_data/<episode>` with the viewer Referer;
@@ -107,8 +186,8 @@ Each entry in `models`:
 - `maxTokensParam` overrides the output-limit field (`max_tokens` for non-OpenAI by default);
   `completionFactor`/`minCompletionTokens` size it (default 2.5 × prompt tokens).
 - `enabled: false` keeps a model in the config without running it.
-- Models are run in phases by provider (OpenAI first); the bible and the judge always use
-  `bibleModel` / `judge.model` (OpenAI).
+- Models are run in phases by provider (OpenAI first); the bible always uses `bibleModel`
+  (OpenAI); judges are `judge.model` plus `judges.panel`.
 
 ## Story bible
 
@@ -126,13 +205,17 @@ story-bible API lands, only `BenchEngineAdapter.kt` needs to change.
   (first 600 chars of each output under the source), glossary misses / leaks / gender flags /
   refusals, total spend for the run and the ledger.
 - `report.html`: the same with full outputs side by side (source | each model) and metric chips.
-- `raw/<model>/<sample>.txt`, `bibles/`, `samples/`, `metrics.json`.
+- `raw/<model>/<sample>.txt`, `bibles/`, `samples/`, `metrics.json` (includes per-judge scores,
+  biases, Spearman pairs and exclusions).
+
+Shared across runs: `results/` (latest translation per sample/model), `judges/` (panel scores),
+`manual-judges/`, `cache/` (pages, sample snapshots, bibles), `ledger.json`.
 
 ### Reading the leaderboard
 
-- **Judge**: `judge.model` scores accuracy, fluency and terminology 1–10 (average shown). A
-  small model judging larger ones is noisy; treat differences under ~0.5 as ties and read the
-  outputs.
+- **Panel adj. / Panel raw / v1-only / per-judge**: see [Judge panel](#judge-panel). Cheap
+  judges are noisy and differ a lot in leniency (on the 2026-10-11 run gemini-3.1-flash-lite gave
+  9.5 on average, gpt-5.4-mini 6.5); treat differences under ~0.5 as ties and read the outputs.
 - **Adherence %**: bible terms present in the sample whose English rendering appears in the
   output. A correct but different rendering counts as a miss; check the misses list.
 - **CJK leaks**: untranslated Han/kana/Hangul characters in the output.
