@@ -21,7 +21,7 @@ import com.lagradost.quicknovel.translator.batch.BatchStatus
         BatchChapter::class,
         NovelMetadataTranslation::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class TranslatorDatabase : RoomDatabase() {
@@ -184,9 +184,29 @@ abstract class TranslatorDatabase : RoomDatabase() {
             }
         }
 
+        /** SQL of [MIGRATION_7_8] (kept separate so a JVM unit test can check it). */
+        val MIGRATION_7_8_SQL = listOf(
+            "ALTER TABLE novel_metadata_translations ADD COLUMN title_upgrade_tried_at INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE novel_metadata_translations ADD COLUMN synopsis_upgrade_tried_at INTEGER NOT NULL DEFAULT 0",
+        )
+
+        /**
+         * v8 (additive): novel_metadata_translations.title_upgrade_tried_at /
+         * synopsis_upgrade_tried_at, so a Google translation is replaced by AI at most once (per
+         * 30 days) instead of once per session. Existing rows start untried.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_7_8_SQL.forEach { db.execSQL(it) }
+            }
+        }
+
         /** Every migration, oldest first; all registered in [getInstance]. */
         val ALL_MIGRATIONS: Array<Migration>
-            get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            get() = arrayOf(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+                MIGRATION_7_8,
+            )
 
         fun getInstance(context: Context): TranslatorDatabase {
             return instance ?: synchronized(this) {

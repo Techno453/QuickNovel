@@ -173,15 +173,24 @@ never waits: the original is shown until the translation arrives.
   in one call (`{"title", "synopsis"}`; synopses are cut at 4000 characters). About $0.0002 per
   novel with gpt-6-luna.
 
-**Cache**: table `novel_metadata_translations` in the translator database (version 7, additive
-migration 6 to 7, checked against Room's generated schema in `TranslatorDatabaseMigrationTest`):
+**Cache**: table `novel_metadata_translations` in the translator database (created by the
+additive migration 6 to 7, two columns added by the additive migration 7 to 8 in version 8, both
+checked against Room's generated schema in `TranslatorDatabaseMigrationTest`):
 `novel_id` (`apiName/novelName`), `source_lang`, `title_hash`, `translated_title`,
 `title_engine`, `synopsis_hash`, `translated_synopsis`, `synopsis_engine`, `model`,
-`updated_at`. Title and synopsis are hashed separately (`SourceHash`) because listings only know
-the title. Rows are kept forever and re-translated only when the hash of the original changes;
-the one exception is a Google translation, which is redone once per session when AI is
-available. A text that failed with every engine is not retried in the same session. Deleting a
-novel's translations keeps these rows (they are tiny, paid for, and shown again in Browse).
+`updated_at`, `title_upgrade_tried_at`, `synopsis_upgrade_tried_at`. Title and synopsis are
+hashed separately (`SourceHash`) because listings only know the title. Rows are kept forever and
+re-translated only when the hash of the original changes; the one exception is a Google
+translation, which is redone with AI once when AI is available: the attempt is stored in the
+row's `*_upgrade_tried_at` (milliseconds, 0 = never tried) whether it succeeds or not (a failed
+call, an unusable or refused reply, a wrong key or model), so a later launch does not ask again;
+a failed attempt is repeated only after 30 days (`MetadataTranslator.UPGRADE_RETRY_MS`), and
+never twice in one session. A new Google text starts untried, even when it is the fallback of a
+failed AI call, so it gets one upgrade attempt on a later launch. The same rule covers the
+latest-chapter label, tags and chapter names, which share this table. A text that failed with
+every engine has no row: it is not retried in the same session, but is on the next launch.
+Deleting a novel's translations keeps these rows (they are tiny, paid for, and shown again in
+Browse).
 
 ## Limitations
 

@@ -47,6 +47,130 @@ class MetadataTranslatorTest {
 
     private fun req(i: Int, title: String = "標題$i") = MetadataTranslator.TitleRequest("api/$i", "zh", title)
 
+    private val day = 24L * 60 * 60 * 1000
+
+    @Test
+    fun aGoogleTitleIsUpgradedOnceAndTheAttemptIsPersisted() = runBlocking {
+        var clock = 1_000_000_000L
+        val store = MapStore()
+        val backend = FakeBackend(MetadataPolicy(ai = false, google = true))
+        fun session() = MetadataTranslator(store, backend, this, batchWindowMs = 10, now = { clock })
+        assertEquals("G 標題1", session().title(req(1)))
+        assertEquals(0L, store.rows["api/1"]!!.titleUpgradeTriedAt)
+
+        // AI becomes available but fails: one attempt, recorded in the row, Google title kept.
+        backend.policy = MetadataPolicy(ai = true, google = true)
+        backend.aiFails = true
+        val second = session()
+        assertEquals("G 標題1", second.title(req(1)))
+        assertEquals("G 標題1", second.title(req(1)))
+        assertEquals(1, backend.aiTitleBatches.size)
+        val row = store.rows["api/1"]!!
+        assertEquals("google", row.titleEngine)
+        assertEquals(clock, row.titleUpgradeTriedAt)
+
+        // Later launches (new translator over the same store) do not ask again, even with AI working.
+        backend.aiFails = false
+        clock += 29 * day
+        assertEquals("G 標題1", session().title(req(1)))
+        assertEquals("G 標題1", session().title(req(1)))
+        assertEquals(1, backend.aiTitleBatches.size)
+        assertEquals(1, backend.googleCalls.get())
+
+        // After 30 days it is tried once more, and this time it works.
+        clock += 2 * day
+        assertEquals("AI 標題1", session().title(req(1)))
+        assertEquals(2, backend.aiTitleBatches.size)
+        assertEquals("ai", store.rows["api/1"]!!.titleEngine)
+        assertEquals("AI 標題1", session().title(req(1)))
+        assertEquals(2, backend.aiTitleBatches.size)
+    }
+
+    @Test
+    fun anUnusableAiReplyCountsAsAnAttempt() = runBlocking {
+        val store = MapStore()
+        val backend = object : MetadataBackend {
+            var policy = MetadataPolicy(ai = false, google = true)
+            var aiCalls = 0
+            override suspend fun policy() = policy
+            override fun aiModel() = "gpt-test"
+            override suspend fun aiTitles(lang: String, titles: List<String>): List<String?> {
+                aiCalls++
+                return titles // echoed back: nothing usable
+            }
+            override suspend fun aiNovel(lang: String, novelId: String, title: String, synopsis: String) = null to null
+            override suspend fun google(lang: String, text: String) = "G $text"
+        }
+        assertEquals("G 標題1", MetadataTranslator(store, backend, this, batchWindowMs = 10).title(req(1)))
+        backend.policy = MetadataPolicy(ai = true, google = true)
+        repeat(3) {
+            assertEquals("G 標題1", MetadataTranslator(store, backend, this, batchWindowMs = 10).title(req(1)))
+        }
+        assertEquals(1, backend.aiCalls)
+        assertTrue(store.rows["api/1"]!!.titleUpgradeTriedAt > 0)
+    }
+
+    @Test
+    fun aTitleWithoutAnyTranslationIsRetriedOnTheNextLaunch() = runBlocking {
+        val store = MapStore()
+        val backend = FakeBackend().apply { aiFails = true; googleFails = true }
+        assertNull(MetadataTranslator(store, backend, this, batchWindowMs = 10).title(req(1)))
+        assertTrue(store.rows.isEmpty())
+        backend.aiFails = false
+        assertEquals("AI 標題1", MetadataTranslator(store, backend, this, batchWindowMs = 10).title(req(1)))
+        assertEquals(2, backend.aiTitleBatches.size)
+    }
+
+    @Test
+    fun aGoogleSynopsisIsUpgradedOnceAndTheAttemptIsPersisted() = runBlocking {
+        var clock = 1_000_000_000L
+        val store = MapStore()
+        val backend = FakeBackend(MetadataPolicy(ai = false, google = true))
+        fun session() = MetadataTranslator(store, backend, this, batchWindowMs = 10, now = { clock })
+        val google = MetadataTranslator.Translated("G 題名", "G あらすじ")
+        assertEquals(google, session().novel("api/1", "ja", "題名", "あらすじ"))
+
+        backend.policy = MetadataPolicy(ai = true, google = true)
+        backend.aiFails = true
+        val second = session()
+        assertEquals(google, second.novel("api/1", "ja", "題名", "あらすじ"))
+        assertEquals(google, second.novel("api/1", "ja", "題名", "あらすじ"))
+        assertEquals(1, backend.aiNovelCalls.get())
+        val row = store.rows["api/1"]!!
+        assertEquals("google", row.synopsisEngine)
+        assertEquals(clock, row.titleUpgradeTriedAt)
+        assertEquals(clock, row.synopsisUpgradeTriedAt)
+
+        backend.aiFails = false
+        clock += 29 * day
+        assertEquals(google, session().novel("api/1", "ja", "題名", "あらすじ"))
+        // The listing path sees the same recorded attempt for the title.
+        assertEquals("G 題名", session().title(MetadataTranslator.TitleRequest("api/1", "ja", "題名")))
+        assertEquals(1, backend.aiNovelCalls.get())
+        assertTrue(backend.aiTitleBatches.isEmpty())
+
+        clock += 2 * day
+        assertEquals(MetadataTranslator.Translated("AI 題名", "AI あらすじ"), session().novel("api/1", "ja", "題名", "あらすじ"))
+        assertEquals(2, backend.aiNovelCalls.get())
+        assertEquals("ai", store.rows["api/1"]!!.synopsisEngine)
+        assertEquals(MetadataTranslator.Translated("AI 題名", "AI あらすじ"), session().novel("api/1", "ja", "題名", "あらすじ"))
+        assertEquals(2, backend.aiNovelCalls.get())
+        assertEquals(2, backend.googleCalls.get())
+    }
+
+    @Test
+    fun aStoredSynopsisIsKeptWhenANovelIsOpenedWithoutOne() = runBlocking {
+        val store = MapStore()
+        val backend = FakeBackend(MetadataPolicy(ai = false, google = true))
+        MetadataTranslator(store, backend, this, batchWindowMs = 10).novel("api/1", "ja", "題名", "あらすじ")
+        backend.policy = MetadataPolicy(ai = true, google = true)
+        // The title is upgraded (and the row rewritten) by a call that has no synopsis.
+        val noSynopsis = MetadataTranslator(store, backend, this, batchWindowMs = 10).novel("api/1", "ja", "題名", null)
+        assertEquals("AI 題名", noSynopsis.title)
+        assertEquals("G あらすじ", store.rows["api/1"]!!.translatedSynopsis)
+        assertEquals("google", store.rows["api/1"]!!.synopsisEngine)
+    }
+
     @Test
     fun aPageOfTitlesIsOneCallPerTwentyTitles() = runBlocking {
         val store = MapStore()

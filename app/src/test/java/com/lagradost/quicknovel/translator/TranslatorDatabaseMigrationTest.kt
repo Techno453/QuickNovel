@@ -37,7 +37,31 @@ class TranslatorDatabaseMigrationTest {
         val migrations = TranslatorDatabase.ALL_MIGRATIONS
         assertEquals(1, migrations.first().startVersion)
         migrations.toList().zipWithNext().forEach { (a, b) -> assertEquals(a.endVersion, b.startVersion) }
-        assertEquals(7, migrations.last().endVersion)
+        assertEquals(8, migrations.last().endVersion)
+    }
+
+    @Test
+    fun migration7To8OnlyAddsTheUpgradeAttemptColumns() {
+        val statements = mutableListOf<String>()
+        TranslatorDatabase.MIGRATION_7_8.migrate(recordingDb(statements))
+        assertEquals(TranslatorDatabase.MIGRATION_7_8_SQL, statements)
+        assertEquals(
+            listOf(
+                "ALTER TABLE novel_metadata_translations ADD COLUMN title_upgrade_tried_at INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE novel_metadata_translations ADD COLUMN synopsis_upgrade_tried_at INTEGER NOT NULL DEFAULT 0",
+            ),
+            statements,
+        )
+    }
+
+    @Test
+    fun upgradeAttemptsDefaultToNeverTried() {
+        val row = com.lagradost.quicknovel.translator.db.NovelMetadataTranslation(
+            novelId = "api/n", sourceLang = "zh", titleHash = "h", translatedTitle = "T",
+            titleEngine = "google", updatedAt = 1,
+        )
+        assertEquals(0L, row.titleUpgradeTriedAt)
+        assertEquals(0L, row.synopsisUpgradeTriedAt)
     }
 
     @Test
@@ -49,18 +73,27 @@ class TranslatorDatabaseMigrationTest {
         assertTrue(statements[0].startsWith("CREATE TABLE IF NOT EXISTS `novel_metadata_translations`"))
     }
 
-    /** Same check as [migration5To6MatchesRoomsGeneratedSchema] for the v7 table. */
+    /**
+     * Same check as [migration5To6MatchesRoomsGeneratedSchema] for the v7 table: its v7 CREATE
+     * plus the columns v8 adds (appended by ALTER TABLE, in that order) is what Room creates.
+     */
     @Test
-    fun migration6To7MatchesRoomsGeneratedSchema() {
+    fun migrations6To8MatchRoomsGeneratedSchema() {
         val generated = listOf(
             "build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
             "app/build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
         ).map { java.io.File(it) }.firstOrNull { it.isFile }
         org.junit.Assume.assumeTrue("KSP output not found", generated != null)
         val impl = generated!!.readText()
-        TranslatorDatabase.MIGRATION_6_7_SQL.forEach { sql ->
-            assertTrue("Room creates a different schema than:\n$sql", impl.contains(sql))
+        val added = TranslatorDatabase.MIGRATION_7_8_SQL.joinToString("") { sql ->
+            val column = sql.substringAfter("ADD COLUMN ")
+            val name = column.substringBefore(' ')
+            ", `$name` " + column.substringAfter(' ')
         }
+        val create = TranslatorDatabase.MIGRATION_6_7_SQL.single()
+        val expected = create.replace(", PRIMARY KEY(`novel_id`))", "$added, PRIMARY KEY(`novel_id`))")
+        assertTrue(expected != create)
+        assertTrue("Room creates a different schema than:\n$expected", impl.contains(expected))
     }
 
     @Test
