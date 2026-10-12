@@ -36,6 +36,7 @@ the wizard, the dialogs, Spending, the glossary and the notifications).
 | **Genres** | The multi-select genre chip and sheet of a source page: "All genres", "Genres: Fantasy, Mystery", "Genres: 3 selected"; sheet title "Genres", buttons Clear / Done (`clear`, `done`); notes "Novels from any selected genre, merged by rank." and "Only the first 4 genres in this list are loaded." (`browse_genres*` in `strings_browse.xml`) | Tags, Categories, Filter | One word for the axis; it replaces the old single-choice "Genre" chip row (`browse_genre`, removed). |
 | **API key**, **Test connection** | Key rows and the free key check (wizard and settings) | Verify, "API key is valid!" | The wizard already said Test connection. |
 | **Source changed** | Stale translations (chip, Translate dialog checkbox) | stale | The chip's wording. |
+| **Preview** | The result page button that opens the online novel in the reader, translated one chapter at a time without the glossary (long-press tooltip "Read online, translated one chapter at a time, without the glossary"), the chapter-row tap, and the reader line "Preview · translated without the glossary" | Stream Read (on the result page) | Says what the user gets; see translation-pipeline.md "Preview". Upstream's `stream_read` stays only as the content description of the play buttons on history / search cards, which still stream normally. |
 
 **Glossary vs Story Bible vs character sheet.** The three names described one thing. "Story
 Bible" is the better technical name (it covers places, sects, techniques, the premise and the
@@ -261,8 +262,8 @@ Notes and deliberate skips:
 - **L1:** kept (`LibraryUpdateNotifier` keeps the book icon).
 - **Sweep:** no "AI Translation", "character sheet", "Verify" or "Read-ahead" left in user-facing
   text of these areas; "Story Bible" stays in code, prompts, the export file name and the JSON
-  format. Title Case labels that remain ("Reload Chapter", "Open In Browser", "Stream Read", reader
-  settings) are upstream strings, left as in pass one. The Translate dialog's AlertDialog buttons
+  format. Title Case labels that remain ("Reload Chapter", "Open In Browser", reader settings) are
+  upstream strings, left as in pass one ("Stream Read" on the result page later became Preview). The Translate dialog's AlertDialog buttons
   keep the platform letter spacing (pass one area, unchanged).
 - **Verified** on emulators (phone 1080x2400 and Fold 8 inner 2448x1848, screenshots not
   committed): result page row and ⋮ menu, Show original icon, glossary subtitle from a translated

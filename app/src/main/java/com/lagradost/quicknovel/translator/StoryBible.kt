@@ -37,9 +37,25 @@ data class TranslationOptions(
      * which always uses its own profile.
      */
     val promptProfile: String? = null,
+    /**
+     * Fold the terms the model reports into the bible (auto-added, updated or pending).
+     * Off = the reported terms are discarded: no auto-added, updated or pending terms at all.
+     */
+    val collectTerms: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_AUTO_ADD_CONFIDENCE = 0.6f
+
+        /**
+         * Preview (result page "Preview", docs/translation-pipeline.md "Preview"): a plain chapter
+         * translation without the glossary. Keeps [base]'s strict mode and prompt profile; no
+         * auto-added or pending terms and no story context carried between chunks or chapters.
+         */
+        fun preview(base: TranslationOptions = TranslationOptions()): TranslationOptions = base.copy(
+            autoAddTerms = false,
+            carryStoryContext = false,
+            collectTerms = false,
+        )
     }
 }
 

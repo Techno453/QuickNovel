@@ -502,7 +502,12 @@ class ReaderSettingsSheet(
         }
         ioSafe {
             val show = viewModel.translatesOnDemand()
-            activity.runOnUiThread { binding.readAiTranslationSection.isVisible = show }
+            val preview = viewModel.isPreview
+            activity.runOnUiThread {
+                binding.readAiTranslationSection.isVisible = show
+                // Preview: one chapter at a time, no glossary, no read ahead (says so instead).
+                binding.readAiPreviewNote.isVisible = show && preview
+            }
         }
 
         binding.readLanguage.setOnClickListener { _ ->

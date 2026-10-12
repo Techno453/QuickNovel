@@ -51,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SmallFloatingActionButton
@@ -58,6 +59,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
@@ -555,6 +560,7 @@ private fun LanguageRow(label: SourceLanguageLabel, modifier: Modifier, onClick:
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadSection(
     state: ResultState,
@@ -629,17 +635,24 @@ private fun DownloadSection(
             }
         }
         if (!state.isImported && state.hasChapters) {
-            TextButton(
-                shape = RoundedShape(),
-                colors = Colors.blackButton,
-                modifier = Modifier
-                    .padding(2.dp)
-                    .fillMaxWidth(),
-                onClick = { action(ResultPageAction.StreamRead) }
+            // Preview (was upstream's Stream Read): long press shows what it does.
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                tooltip = { PlainTooltip { Text(stringResource(R.string.preview_desc)) } },
+                state = rememberTooltipState(),
             ) {
-                Icon(painterResource(R.drawable.netflix_play), contentDescription = null, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.stream_read))
+                TextButton(
+                    shape = RoundedShape(),
+                    colors = Colors.blackButton,
+                    modifier = Modifier
+                        .padding(2.dp)
+                        .fillMaxWidth(),
+                    onClick = { action(ResultPageAction.Preview) }
+                ) {
+                    Icon(painterResource(R.drawable.netflix_play), contentDescription = null, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.preview))
+                }
             }
         }
 
@@ -939,7 +952,8 @@ private fun ChapterRow(
             Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = { action(ResultPageAction.ChapterAction(response, chapter, ChapterOperation.Stream)) },
+                    onClickLabel = if (state.isImported) null else stringResource(R.string.preview),
+                    onClick = { action(ResultPageAction.ChapterAction(response, chapter, ChapterOperation.Preview)) },
                     onLongClick = { menuOpen = true },
                 )
                 .padding(horizontal = 16.dp, vertical = 10.dp),

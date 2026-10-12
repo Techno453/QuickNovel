@@ -21,6 +21,9 @@
     <string name="result_filter_sort">Filter and sort</string>
     <string name="result_sort_ascending">ascending</string>
     <string name="result_sort_descending">descending</string>
+    <!-- Preview (was upstream's Stream Read; docs/translation-pipeline.md "Preview") -->
+    <string name="preview">Preview</string>
+    <string name="preview_desc">Read online, translated one chapter at a time, without the glossary</string>
     <plurals name="result_chapter_count">
         <item quantity="one">%d chapter</item>
         <item quantity="other">%d chapters</item>

@@ -164,8 +164,8 @@ data class ResultReviewState(
 )
 
 enum class ChapterOperation {
-    /** Open the chapter in the reader. */
-    Stream,
+    /** Open the chapter in the reader as a preview (imported books: their stored EPUB). */
+    Preview,
 
     /** Mark read / unread. */
     ToggleRead,
@@ -202,7 +202,8 @@ sealed class ResultPageAction {
     data class DownloadFrom(val start: Int?) : ResultPageAction()
     data object ConfirmDelete : ResultPageAction()
     data object ReadEpub : ResultPageAction()
-    data object StreamRead : ResultPageAction()
+    /** "Preview": the streamed reader, translated chapter by chapter without the glossary. */
+    data object Preview : ResultPageAction()
 
     /** Translate button (a chapter's long-press menu passes [startChapter]). */
     data class Translate(val startChapter: Int? = null) : ResultPageAction()
@@ -762,8 +763,11 @@ class ResultViewModel2(
         else removeKey(EPUB_CURRENT_POSITION_READ_AT, "${res.name}/$index")
     }
 
-    /** Opens the reader (streaming), at [chapter] if given; imported books read their stored EPUB. */
-    private fun streamRead(chapter: ImmutableChapterData?) = launchWithLoad { res, id ->
+    /**
+     * Preview: opens the streamed reader in preview mode (docs/translation-pipeline.md "Preview"),
+     * at [chapter] if given; imported books read their stored EPUB as before.
+     */
+    private fun preview(chapter: ImmutableChapterData?) = launchWithLoad { res, id ->
         withContext(Dispatchers.IO) {
             addToHistory(res, id)
             val importedId = ImportedBookId.fromResultUrl(res.url)
@@ -780,7 +784,7 @@ class ResultViewModel2(
                     res.author, res.name, apiName, res.synopsis
                 )
             } else {
-                BookDownloader2.stream(res, apiName)
+                BookDownloader2.stream(res, apiName, preview = true)
             }
         }
         if (chapter != null) refreshReadTimes()
@@ -930,7 +934,7 @@ class ResultViewModel2(
             }
 
             is ResultPageAction.ChapterAction -> when (action.operation) {
-                ChapterOperation.Stream -> streamRead(action.chapter)
+                ChapterOperation.Preview -> preview(action.chapter)
                 ChapterOperation.ToggleRead -> launchWithLoad { res, _ ->
                     val read = state.value.readAt.containsKey(action.chapter.index)
                     withContext(Dispatchers.IO) { setReadChapter(res, action.chapter.index, !read) }
@@ -1002,7 +1006,7 @@ class ResultViewModel2(
             }
 
             ResultPageAction.ReadEpub -> readEpub()
-            ResultPageAction.StreamRead -> streamRead(null)
+            ResultPageAction.Preview -> preview(null)
 
             is ResultPageAction.Translate -> translate(action.startChapter)
             ResultPageAction.Analyze -> analyze()

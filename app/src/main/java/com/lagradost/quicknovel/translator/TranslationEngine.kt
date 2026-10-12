@@ -617,7 +617,11 @@ class TranslationEngine(
             val out = produce(ChunkRequest(index, chunk, promptTerms, inChunk, chunkContext, preceding))
 
             // Fold discovered terms into the in-memory bible so the next chunk already uses them.
-            val decisions = BibleMerger.decide(out.terms, bible, novelId, chapterNum, chunk, options)
+            val decisions = if (options.collectTerms) {
+                BibleMerger.decide(out.terms, bible, novelId, chapterNum, chunk, options)
+            } else {
+                TermDecisions() // preview: reported terms are discarded
+            }
             for (term in decisions.autoAdd) {
                 val withId = term.copy(id = nextTempId--)
                 bible += withId

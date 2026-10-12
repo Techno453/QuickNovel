@@ -62,6 +62,8 @@ import com.lagradost.quicknovel.ui.ScrollIndex
 import com.lagradost.quicknovel.ui.ScrollVisibilityIndex
 import com.lagradost.quicknovel.ui.UiText
 import com.lagradost.quicknovel.ui.reader.OriginalNotice
+import com.lagradost.quicknovel.ui.reader.PreviewChapters
+import com.lagradost.quicknovel.ui.reader.PreviewNotice
 import com.lagradost.quicknovel.ui.toScroll
 import com.lagradost.quicknovel.ui.toUiText
 import com.lagradost.quicknovel.ui.txt
@@ -176,6 +178,28 @@ abstract class AbstractBook {
     /** Returns true if this book comes from a translatable (zh/ja/ko) source. */
     open fun isTranslatableSource(): Boolean = false
 
+    /**
+     * The result page's Preview (docs/translation-pipeline.md "Preview"): chapters are translated
+     * one at a time when opened, without the analysis, the glossary, story context or read ahead.
+     */
+    open val isPreview: Boolean = false
+
+    /** Preview: chapters served from a translation made without the glossary (a preview's). */
+    protected val previewTranslatedChapters: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * Preview: the chapter the reader has open, the only one a preview translates (set by
+     * `ReadActivityViewModel` before it loads chapters; -1 = none yet).
+     */
+    @Volatile
+    var previewOpenChapter: Int = -1
+
+    /** Preview: chapters served as the original only because they were not open yet. */
+    protected val previewDeferredChapters: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    /** True if chapter [index] waits as the original until the preview opens it. */
+    fun isPreviewDeferred(index: Int): Boolean = index in previewDeferredChapters
+
     /** Chapters whose text was last served from the AI translation DB (or translated on demand). */
     val aiTranslatedChapters: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
@@ -183,6 +207,23 @@ abstract class AbstractBook {
     private val originalNotices: MutableMap<Int, OriginalNotice> = ConcurrentHashMap()
 
     fun originalNotice(index: Int): OriginalNotice? = originalNotices[index]
+
+    /**
+     * The small line under chapter [index]'s title: the [OriginalNotice], or in a preview the
+     * [PreviewNotice] (which carries the original notice as its reason).
+     */
+    fun chapterNotice(index: Int): UiText? {
+        val original = originalNotices[index]
+        if (!isPreview) return original?.let { txt(it.text) }
+        val line = PreviewNotice.lineFor(
+            translatable = translatesOnDemand(),
+            translated = index in aiTranslatedChapters,
+            withoutGlossary = index in previewTranslatedChapters,
+            deferred = index in previewDeferredChapters,
+            original = original,
+        ) ?: return null
+        return line.reason?.let { txt(line.notice.text, txt(it.text)) } ?: txt(line.notice.text)
+    }
 
     /** Records why chapter [index] is served as the original (nothing when [onPurpose], i.e. Reload). */
     protected fun noteOriginal(ctx: Context?, index: Int, translatable: Boolean, onPurpose: Boolean) {
@@ -197,10 +238,20 @@ abstract class AbstractBook {
         if (reason == null) originalNotices.remove(index) else originalNotices[index] = reason
     }
 
-    protected fun noteTranslated(index: Int) {
+    protected fun noteTranslated(index: Int, withoutGlossary: Boolean = false) {
         aiTranslatedChapters += index
+        if (withoutGlossary) previewTranslatedChapters += index else previewTranslatedChapters -= index
+        previewDeferredChapters -= index
         originalNotices.remove(index)
     }
+
+    /** True when opening a chapter would translate it now (switch on and a key; [OriginalNotice] null). */
+    protected fun wouldTranslateWhenOpened(ctx: Context): Boolean = OriginalNotice.reasonFor(
+        translatable = true,
+        onPurpose = false,
+        onDemand = SecurePrefs.isTranslateOnDemandEnabled(ctx),
+        hasKey = !SecurePrefs.getApiKey(ctx).isNullOrBlank(),
+    ) == null
 
     /**
      * True when missing chapters are translated when opened ("Translate chapters when opened"):
@@ -216,13 +267,15 @@ abstract class AbstractBook {
 
     /** The reader moved to chapter [index]: keep the next chapters translated (read-ahead mode). */
     fun onChapterOpened(index: Int) {
+        if (isPreview) return // a preview translates only the chapter being opened
         val ctx = context ?: return
         val novelId = translatorNovelId() ?: return
         ReadAheadScheduler.onChapterOpened(ctx, novelId, index)
     }
 }
 
-class QuickBook(val data: QuickStreamData) : AbstractBook() {
+/** A streamed online book; [isPreview] when opened from the result page's Preview. */
+class QuickBook(val data: QuickStreamData, override val isPreview: Boolean = false) : AbstractBook() {
     override fun resolveUrl(url: String): String {
         return Apis.getApiFromNameNull(data.meta.apiName)?.fixUrl(url) ?: url
     }
@@ -279,19 +332,42 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
 
         // Translatable (zh/ja/ko) sources: stored AI translation, or on-demand translation if enabled
         val sourceLang = TranslationLanguages.langOfApi(data.meta.apiName)
+        var deferred = false
         if (sourceLang != null && !reload) {
             val novelId = TranslatorNovelId.from(data.meta.apiName, data.meta.name)
-            ChapterTranslationRepository.getOrTranslate(
+            if (isPreview) {
+                // A preview translates only the open chapter: the reader's preloaded neighbours are
+                // served stored, or as the original until they are opened (openPreviewChapter).
+                ChapterTranslationRepository.getCachedEntry(ctx, novelId, index)?.let { entry ->
+                    noteTranslated(index, ChapterTranslationRepository.isPreviewTranslation(entry))
+                    return entry.englishText
+                }
+                deferred = PreviewChapters.defers(wouldTranslateWhenOpened(ctx), index, previewOpenChapter)
+            }
+            if (!deferred) ChapterTranslationRepository.getOrTranslate(
                 ctx, novelId, index, sourceLang,
                 chapterCount = data.data.size,
-                // Before the novel's first translation, the first chapters are analyzed (once).
-                fetchChapter = { i -> data.data.getOrNull(i)?.let { ctx.getQuickChapter(data.meta, it, i, false)?.html } },
-                analysisListener = analysisListener,
+                // Before the novel's first translation, the first chapters are analyzed (once);
+                // never in a preview, which translates this chapter alone without the glossary.
+                fetchChapter = if (isPreview) null else { i ->
+                    data.data.getOrNull(i)?.let { ctx.getQuickChapter(data.meta, it, i, false)?.html }
+                },
+                analysisListener = if (isPreview) null else analysisListener,
+                preview = isPreview,
             ) {
                 ctx.getQuickChapter(data.meta, data.data[index], index, false)?.html
-            }?.let { noteTranslated(index); return it }
+            }?.let { html ->
+                // The label tells a preview's own translations from stored ones made with the glossary.
+                val withoutGlossary = isPreview && ChapterTranslationRepository.isPreviewTranslation(
+                    ChapterTranslationRepository.getCachedEntry(ctx, novelId, index)
+                )
+                noteTranslated(index, withoutGlossary)
+                return html
+            }
         }
         aiTranslatedChapters -= index
+        previewTranslatedChapters -= index
+        if (deferred) previewDeferredChapters += index else previewDeferredChapters -= index
         noteOriginal(ctx, index, translatable = sourceLang != null, onPurpose = reload)
 
         return ctx.getQuickChapter(

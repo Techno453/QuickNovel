@@ -592,10 +592,12 @@ object BookDownloader2Helper {
         }
     }
 
-    fun openQuickStream(activity: Activity?, uri: Uri?) {
+    /** Opens the streamed reader; [preview] = the result page's Preview ([BookDownloader2.EXTRA_PREVIEW]). */
+    fun openQuickStream(activity: Activity?, uri: Uri?, preview: Boolean = false) {
         if (uri == null || activity == null) return
         val myIntent = Intent(activity, ReadActivity2::class.java)
         myIntent.setDataAndType(uri, "quickstream")
+        if (preview) myIntent.putExtra(BookDownloader2.EXTRA_PREVIEW, true)
         activity.startActivity(myIntent)
     }
 
@@ -1201,18 +1203,22 @@ object ImageDownloader {
 }
 
 object BookDownloader2 {
-    fun openQuickStream(uri: Uri?) = main {
-        BookDownloader2Helper.openQuickStream(activity, uri)
+    fun openQuickStream(uri: Uri?, preview: Boolean = false) = main {
+        BookDownloader2Helper.openQuickStream(activity, uri, preview)
     }
 
     private val streamMutex = Mutex()
 
     // TODO refactor to use immutable
+    /**
+     * Opens the reader on the online book. [preview] (result page Preview) only applies to
+     * streamed chapter lists: the reader translates chapter by chapter without the glossary.
+     */
     @WorkerThread
-    suspend fun stream(res: LoadResponse, apiName: String) {
+    suspend fun stream(res: LoadResponse, apiName: String, preview: Boolean = false) {
         when (res) {
             is StreamResponse -> {
-                stream(res, apiName)
+                stream(res, apiName, preview)
             }
 
             is EpubResponse -> {
@@ -1284,7 +1290,7 @@ object BookDownloader2 {
     }
 
     @WorkerThread
-    suspend fun stream(res: StreamResponse, apiName: String) {
+    suspend fun stream(res: StreamResponse, apiName: String, preview: Boolean = false) {
         if (streamMutex.isLocked) return
         streamMutex.withLock {
             if (res.data.isEmpty()) {
@@ -1308,7 +1314,7 @@ object BookDownloader2 {
                     )
                 )
 
-            openQuickStream(uri)
+            openQuickStream(uri, preview)
         }
     }
 
@@ -1421,6 +1427,9 @@ object BookDownloader2 {
      */
     /** Intent extra: translator novel id of an imported book ([ImportedBooks]). */
     const val EXTRA_IMPORTED_NOVEL_ID = "importedNovelId"
+
+    /** Boolean extra of a quickstream reader intent: the result page's Preview (see `QuickBook.isPreview`). */
+    const val EXTRA_PREVIEW = "preview"
 
     /** Translator id of an imported EPUB/TXT book, null for anything else. */
     private fun importedNovelId(apiName: String, name: String, author: String?): String? =

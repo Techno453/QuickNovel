@@ -150,6 +150,12 @@ known language; `AbstractBook.translatesOnDemand`):
   `ui/reader/OriginalNotice` (`OriginalNoticeTest`); `ChapterStartSpanned.notice` carries it.
 - **Show original:** long-press on a translated chapter's title offers "Show original" (on other
   chapters "Reload Chapter"); both reload the original text.
+- **Preview** (result page; `QuickBook.isPreview`): only the open chapter is translated, without
+  the glossary; preloaded chapters wait as the original until opened. The title line says
+  "Preview · translated without the glossary" (or "Preview · …" with the original notice's
+  reason, or "Preview · translated when you reach this chapter"), the Translate tab adds a preview
+  note, and the glossary lookup is off. Details:
+  [translation-pipeline.md](translation-pipeline.md#preview).
 
 ## Imported books
 
