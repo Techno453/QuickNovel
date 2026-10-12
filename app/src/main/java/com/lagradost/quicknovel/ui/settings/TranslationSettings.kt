@@ -6,12 +6,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,7 +32,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.translator.CostEstimator
 import com.lagradost.quicknovel.translator.LlmConfig
+import com.lagradost.quicknovel.translator.LlmProviders
+import com.lagradost.quicknovel.translator.ModelPreset
+import com.lagradost.quicknovel.translator.ModelPresets
+import com.lagradost.quicknovel.translator.PresetTier
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationLanguages
@@ -224,19 +233,25 @@ object TranslationSettings {
             )
         }
         val styleItems = STYLE_LANGUAGES.flatMap { lang -> styleDefaults(context, lang, translateIcon) }
+        // Bumped whenever the model, fallback or a key changes so dependent rows re-read SecurePrefs.
+        val configVersion = remember { mutableStateOf(0) }
 
         val items: List<Preference.PreferenceItem<out Any?, out Any?>> = listOf(
             Preference.PreferenceItem.CustomPreference(
-                title = "API key",
-                content = { ApiKeyPreference(context) },
-            ),
-            Preference.PreferenceItem.CustomPreference(
-                title = "API base URL",
-                content = { BaseUrlPreference(context) },
-            ),
-            Preference.PreferenceItem.CustomPreference(
                 title = "Translation model",
-                content = { ModelPreference(context) },
+                content = { ModelPreference(context, configVersion) },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = "API key",
+                content = { ApiKeyPreference(context, configVersion) },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = "Fallback model",
+                content = { FallbackPreference(context, configVersion) },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = "Fallback API key",
+                content = { FallbackKeyPreference(context, configVersion) },
             ),
             Preference.PreferenceItem.SwitchPreference(
                 icon = translateIcon,
@@ -309,23 +324,32 @@ object TranslationSettings {
         )
     }
 
+    /** "≈ $0.29 / 100 ch" for a preset, Chinese source, with the current strict-mode setting. */
+    private fun per100(preset: ModelPreset, strictMode: Boolean): String =
+        CostEstimator.formatPer100(CostEstimator.estimateForPreset(preset, 100, TranslationLanguages.CHINESE, strictMode))
+
+    private fun maskedKey(key: String?): String = key?.let { "set (…${it.takeLast(4)})" } ?: "not set"
+
+    /** API key for the selected model's provider (keys are stored per provider). */
     @Composable
-    private fun ApiKeyPreference(context: Context) {
+    private fun ApiKeyPreference(context: Context, version: MutableState<Int>) {
         val scope = rememberCoroutineScope()
-        var savedKey by remember { mutableStateOf(SecurePrefs.getApiKey(context)) }
+        val provider = remember(version.value) { SecurePrefs.getActiveProvider(context) }
+        var savedKey by remember(version.value) { mutableStateOf(SecurePrefs.getApiKey(context, provider.id)) }
         var verifying by remember { mutableStateOf(false) }
 
         TextInputPreference(
             title = "API key",
-            subtitle = savedKey?.let { "Set (…${it.takeLast(4)})" } ?: "Not set",
+            subtitle = "${provider.label}: ${maskedKey(savedKey)}",
             initialValue = savedKey ?: "",
-            placeholder = "sk-...",
+            placeholder = provider.keyPlaceholder,
             masked = true,
             onSave = { value ->
                 val key = value.trim()
-                SecurePrefs.setApiKey(context, key)
+                SecurePrefs.setApiKey(context, provider.id, key)
                 savedKey = key.ifBlank { null }
-                showToast(if (key.isNotBlank()) "API key saved" else "API key cleared")
+                version.value++
+                showToast(if (key.isNotBlank()) "${provider.label} API key saved" else "${provider.label} API key cleared")
             },
             extraButtonLabel = if (verifying) "Verifying…" else "Verify",
             extraButtonEnabled = !verifying,
@@ -337,11 +361,7 @@ object TranslationSettings {
                     verifying = true
                     scope.launch {
                         val error = try {
-                            TranslationEngine(
-                                key,
-                                SecurePrefs.getModel(context),
-                                SecurePrefs.getBaseUrl(context),
-                            ).verify()
+                            TranslationEngine(SecurePrefs.engineConfig(context).copy(apiKey = key)).verify()
                         } finally {
                             verifying = false
                         }
@@ -352,79 +372,143 @@ object TranslationSettings {
         )
     }
 
+    /** One selectable row: radio, label, detail line and (when selected) the notes. */
     @Composable
-    private fun BaseUrlPreference(context: Context) {
-        var baseUrl by remember { mutableStateOf(SecurePrefs.getBaseUrl(context)) }
-        TextInputPreference(
-            title = "API base URL",
-            subtitle = baseUrl + if (LlmConfig.isDefaultBaseUrl(baseUrl)) " (OpenAI)" else "",
-            initialValue = baseUrl,
-            placeholder = LlmConfig.DEFAULT_BASE_URL,
-            onSave = { value ->
-                SecurePrefs.setBaseUrl(context, value)
-                baseUrl = SecurePrefs.getBaseUrl(context)
-            },
-            extraButtonLabel = "Reset",
-            onExtraButton = {
-                SecurePrefs.setBaseUrl(context, null)
-                baseUrl = SecurePrefs.getBaseUrl(context)
-            },
-            closeOnExtraButton = true,
+    private fun ChoiceRow(selected: Boolean, label: String, detail: String?, notes: String?, onClick: () -> Unit) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                Text(label)
+                if (!detail.isNullOrBlank()) {
+                    Text(detail, style = MaterialTheme.typography.bodySmall)
+                }
+                if (selected && !notes.isNullOrBlank()) {
+                    Text(
+                        notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun GroupLabel(text: String) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
         )
     }
 
-    /** Model presets ([SecurePrefs.modelPresets]) plus a free-text custom model. */
+    /**
+     * Model presets ([SecurePrefs.modelPresets], grouped by tier, with the cost per 100 chapters) plus
+     * a custom model (free-text base URL, model id and extra request-body JSON).
+     */
     @Composable
-    private fun ModelPreference(context: Context) {
-        var model by remember { mutableStateOf(SecurePrefs.getModel(context)) }
+    private fun ModelPreference(context: Context, version: MutableState<Int>) {
         var showDialog by remember { mutableStateOf(false) }
-        val presets = SecurePrefs.modelPresets
-        val label = presets.firstOrNull { it.first == model }?.second ?: "Custom: $model"
+        val strictMode = SecurePrefs.isStrictModeEnabled(context)
+        val summary = remember(version.value, strictMode) {
+            val preset = SecurePrefs.getPreset(context)
+            if (preset != null) {
+                "${preset.label} (${preset.provider.label}) · ${per100(preset, strictMode)} (zh)"
+            } else {
+                val model = SecurePrefs.getCustomModel(context)
+                val estimate = CostEstimator.estimateCostForChapters(100, model, TranslationLanguages.CHINESE, strictMode)
+                "Custom: $model at ${SecurePrefs.getCustomBaseUrl(context)} · ${CostEstimator.formatPer100(estimate)}"
+            }
+        }
 
         TextPreferenceWidget(
             title = "Translation model",
-            subtitle = label,
+            subtitle = summary,
             icon = painterResource(R.drawable.ic_baseline_translate_24),
             onPreferenceClick = { showDialog = true },
         )
         if (!showDialog) return
 
-        val isPreset = presets.any { it.first == model }
-        var selected by remember { mutableStateOf(if (isPreset) model else null) }
-        var custom by remember { mutableStateOf(if (isPreset) "" else model) }
+        val custom = SecurePrefs.CUSTOM_PRESET_ID
+        var selected by remember { mutableStateOf(SecurePrefs.getPresetId(context)) }
+        var customUrl by remember { mutableStateOf(SecurePrefs.getCustomBaseUrl(context)) }
+        var customModel by remember {
+            mutableStateOf(if (SecurePrefs.isCustomModel(context)) SecurePrefs.getCustomModel(context) else "")
+        }
+        var customExtra by remember { mutableStateOf(SecurePrefs.getCustomExtraBodyJson(context)) }
+        val extraValid = LlmConfig.parseExtraBodyOrNull(customExtra) != null
         val dismiss = { showDialog = false }
 
         AlertDialog(
             onDismissRequest = dismiss,
             title = { Text("Translation model") },
             text = {
-                Column {
-                    presets.forEach { (id, name) ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selected = id }
-                        ) {
-                            RadioButton(selected = selected == id, onClick = { selected = id })
-                            Text(name)
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "Cost per 100 chapters of 4,500 Chinese characters" +
+                            (if (strictMode) ", strict mode on." else ".") +
+                            " Each provider needs its own API key.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    PresetTier.entries.forEach { tier ->
+                        val presets = SecurePrefs.modelPresets.filter { it.tier == tier }
+                        if (presets.isEmpty()) return@forEach
+                        GroupLabel(tier.label)
+                        presets.forEach { p ->
+                            ChoiceRow(
+                                selected = selected == p.id,
+                                label = p.label,
+                                detail = "${p.provider.label} · ${per100(p, strictMode)}",
+                                notes = p.notes,
+                            ) { selected = p.id }
                         }
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selected = null }
-                    ) {
-                        RadioButton(selected = selected == null, onClick = { selected = null })
-                        Text("Custom…")
-                    }
-                    if (selected == null) {
+                    GroupLabel("Other")
+                    ChoiceRow(
+                        selected = selected == custom,
+                        label = "Custom…",
+                        detail = "Any OpenAI-compatible endpoint (local server, other providers)",
+                        notes = null,
+                    ) { selected = custom }
+                    if (selected == custom) {
                         OutlinedTextField(
-                            value = custom,
-                            onValueChange = { custom = it },
-                            placeholder = { Text("e.g. deepseek-chat") },
+                            value = customUrl,
+                            onValueChange = { customUrl = it },
+                            label = { Text("Base URL") },
+                            placeholder = { Text(LlmConfig.DEFAULT_BASE_URL) },
                             singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                        )
+                        OutlinedTextField(
+                            value = customModel,
+                            onValueChange = { customModel = it },
+                            label = { Text("Model id") },
+                            placeholder = { Text("e.g. glm-5.3-flash") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                        )
+                        OutlinedTextField(
+                            value = customExtra,
+                            onValueChange = { customExtra = it },
+                            label = { Text("Extra request body (JSON, optional)") },
+                            placeholder = { Text("{\"reasoning_effort\":\"none\"}") },
+                            isError = !extraValid,
+                            supportingText = {
+                                Text(
+                                    if (extraValid) "Merged into every request; a null value removes a field, e.g. \"temperature\": null"
+                                    else "Must be a JSON object"
+                                )
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
@@ -434,15 +518,110 @@ object TranslationSettings {
             },
             confirmButton = {
                 TextButton(
-                    enabled = selected != null || custom.isNotBlank(),
+                    enabled = selected != custom || (customModel.isNotBlank() && extraValid),
                     onClick = {
-                        SecurePrefs.setModel(context, selected ?: custom.trim())
-                        model = SecurePrefs.getModel(context)
+                        if (selected == custom) {
+                            SecurePrefs.setCustomModel(context, customUrl, customModel, customExtra)
+                        } else {
+                            SecurePrefs.selectPreset(context, selected)
+                        }
+                        version.value++
                         dismiss()
                     }) { Text(stringResource(R.string.ok)) }
             },
             dismissButton = {
                 TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    /** Fallback model for passages blocked by a content filter or refused (off by default). */
+    @Composable
+    private fun FallbackPreference(context: Context, version: MutableState<Int>) {
+        var showDialog by remember { mutableStateOf(false) }
+        val strictMode = SecurePrefs.isStrictModeEnabled(context)
+        val summary = remember(version.value) {
+            val preset = ModelPresets.byId(SecurePrefs.getFallbackPresetId(context))
+            if (preset == null) {
+                "Off. Re-translates passages blocked by a content filter or refused. Suggested: " +
+                    ModelPresets.SUGGESTED_FALLBACKS.joinToString(" or ") { it.label }
+            } else {
+                val primary = SecurePrefs.engineConfig(context)
+                buildString {
+                    append("${preset.label} (${preset.provider.label})")
+                    when {
+                        preset.toEngineConfig().sameModelAs(primary) -> append(" · same as the translation model, not used")
+                        SecurePrefs.getApiKey(context, preset.provider.id) == null ->
+                            append(" · needs a ${preset.provider.label} API key")
+                        else -> append(" · used for blocked or refused passages")
+                    }
+                }
+            }
+        }
+
+        TextPreferenceWidget(
+            title = "Fallback model",
+            subtitle = summary,
+            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            onPreferenceClick = { showDialog = true },
+        )
+        if (!showDialog) return
+
+        var selected by remember { mutableStateOf(SecurePrefs.getFallbackPresetId(context)) }
+        val dismiss = { showDialog = false }
+        AlertDialog(
+            onDismissRequest = dismiss,
+            title = { Text("Fallback model") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "Used once for a passage that the translation model's provider blocks (content filter) " +
+                            "or that comes back as a refusal or summary. Suggested: " +
+                            ModelPresets.SUGGESTED_FALLBACKS.joinToString(" or ") { it.label } + ".",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    ChoiceRow(selected = selected == null, label = "Off", detail = null, notes = null) { selected = null }
+                    SecurePrefs.modelPresets.forEach { p ->
+                        ChoiceRow(
+                            selected = selected == p.id,
+                            label = p.label,
+                            detail = "${p.provider.label} · ${per100(p, strictMode)}",
+                            notes = p.notes,
+                        ) { selected = p.id }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    SecurePrefs.setFallbackPresetId(context, selected)
+                    version.value++
+                    dismiss()
+                }) { Text(stringResource(R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    /** API key for the fallback model's provider; only shown when it differs from the main model's provider. */
+    @Composable
+    private fun FallbackKeyPreference(context: Context, version: MutableState<Int>) {
+        val provider = remember(version.value) {
+            ModelPresets.byId(SecurePrefs.getFallbackPresetId(context))?.provider
+                ?.takeIf { it.id != SecurePrefs.getActiveProvider(context).id && it != LlmProviders.CUSTOM }
+        } ?: return
+        val savedKey = remember(version.value) { SecurePrefs.getApiKey(context, provider.id) }
+        TextInputPreference(
+            title = "Fallback API key",
+            subtitle = "${provider.label}: ${maskedKey(savedKey)}",
+            initialValue = savedKey ?: "",
+            placeholder = provider.keyPlaceholder,
+            masked = true,
+            onSave = { value ->
+                SecurePrefs.setApiKey(context, provider.id, value.trim())
+                version.value++
+                showToast(if (value.isNotBlank()) "${provider.label} API key saved" else "${provider.label} API key cleared")
             },
         )
     }

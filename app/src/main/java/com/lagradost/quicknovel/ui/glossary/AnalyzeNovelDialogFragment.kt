@@ -42,6 +42,7 @@ class AnalyzeNovelDialogFragment : DialogFragment() {
 
         fun update() {
             binding.analyzeCountLabel.text = getString(R.string.analyze_chapters, count)
+            // Analysis makes no strict-mode retries; the estimate depends on the model and source language.
             val estimate = CostEstimator.estimateAnalysis(count, model, lang)
             binding.analyzeEstimate.text = getString(R.string.analyze_estimate, CostEstimator.formatEstimate(estimate), model)
         }

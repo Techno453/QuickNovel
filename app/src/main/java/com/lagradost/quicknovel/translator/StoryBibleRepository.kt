@@ -93,11 +93,12 @@ object StoryBibleRepository {
                 novelId = novelId,
                 chapterNum = chapterNum,
                 englishText = result.englishText,
-                model = model,
+                model = result.modelUsed.ifBlank { model },
                 sourceLang = lang,
                 glossaryViolations = result.glossaryViolations,
                 cjkLeaks = result.untranslatedFragments,
                 paragraphWarnings = result.paragraphWarnings,
+                usedFallback = result.usedFallback,
             )
         )
         if (result.chapterSummary.isNotBlank() || result.charactersPresent.isNotEmpty()) {

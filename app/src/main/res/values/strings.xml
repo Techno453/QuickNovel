@@ -345,6 +345,10 @@
         <item quantity="one">%d possibly incomplete passage</item>
         <item quantity="other">%d possibly incomplete passages</item>
     </plurals>
+    <plurals name="chapters_used_fallback">
+        <item quantity="one">%1$d chapter used the fallback model (%2$s)</item>
+        <item quantity="other">%1$d chapters used the fallback model (%2$s)</item>
+    </plurals>
     <plurals name="new_terms_to_review">
         <item quantity="one">%d new term</item>
         <item quantity="other">%d new terms</item>

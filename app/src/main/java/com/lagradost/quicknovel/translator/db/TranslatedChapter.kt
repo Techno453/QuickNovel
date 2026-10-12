@@ -21,4 +21,6 @@ data class TranslatedChapter(
     @ColumnInfo(name = "cjk_leaks") val cjkLeaks: Int? = null,
     /** Chunks whose output had fewer than 70% of the input paragraphs. */
     @ColumnInfo(name = "paragraph_warnings") val paragraphWarnings: Int? = null,
+    /** True if some passages were re-translated by the fallback model ([model] records the model(s) used). */
+    @ColumnInfo(name = "used_fallback", defaultValue = "0") val usedFallback: Boolean = false,
 )

@@ -47,7 +47,7 @@ object ChapterTranslationRepository {
 
         val lang = TranslationLanguages.normalize(sourceLang) ?: return null
         if (!SecurePrefs.isTranslateOnDemandEnabled(ctx)) return null
-        val apiKey = SecurePrefs.getApiKey(ctx) ?: return null
+        val config = SecurePrefs.engineConfig(ctx).takeIf { it.apiKey.isNotBlank() } ?: return null
 
         val lockKey = "$novelId#$chapterIndex"
         val mutex = locks.getOrPut(lockKey) { Mutex() }
@@ -57,13 +57,8 @@ object ChapterTranslationRepository {
                 getCached(ctx, novelId, chapterIndex)?.let { return@withLock it }
 
                 val source = fetchSource()?.takeIf { it.isNotBlank() } ?: return@withLock null
-                val model = SecurePrefs.getModel(ctx)
-                val engine = TranslationEngine(
-                    apiKey = apiKey,
-                    model = model,
-                    baseUrl = SecurePrefs.getBaseUrl(ctx),
-                    sourceLang = lang
-                )
+                val model = config.model
+                val engine = TranslationEngine(config, lang, fallback = SecurePrefs.fallbackEngineConfig(ctx))
                 // Same Story Bible, style and continuity context as the batch translator.
                 val inputs = StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIndex, lang)
                 val result = engine.translateChapter(

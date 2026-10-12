@@ -22,9 +22,20 @@ object SecurePrefs {
     private const val PREFS_FILE = "translator_secure_prefs"
     private const val FALLBACK_PREFS_FILE = "translator_prefs_fallback"
 
-    private const val KEY_API_KEY = "openai_api_key"
+    /** Pre-preset single API key; migrated to [KEY_PROVIDER_KEY_PREFIX] + provider id. */
+    private const val KEY_LEGACY_API_KEY = "openai_api_key"
+    /** Per-provider API keys: api_key_openai, api_key_google, ... */
+    private const val KEY_PROVIDER_KEY_PREFIX = "api_key_"
+    /** Custom model id (also the model of installs from before presets). */
     private const val KEY_MODEL = "openai_model"
+    /** Custom base URL. */
     private const val KEY_BASE_URL = "openai_base_url"
+    /** Custom extra request-body JSON. */
+    private const val KEY_EXTRA_BODY = "custom_extra_body"
+    /** Selected preset id, or [LlmConfig.CUSTOM_PRESET_ID]. */
+    const val KEY_PRESET = "model_preset"
+    /** Fallback preset id; absent = off. */
+    const val KEY_FALLBACK_PRESET = "fallback_preset"
     private const val KEY_TRANSLATION_ENABLED = "translation_enabled"
     private const val KEY_GTRANSLATE_TITLES = "gtranslate_titles"
     private const val KEY_TRANSLATE_SEARCH = "translate_search_queries"
@@ -46,6 +57,7 @@ object SecurePrefs {
 
     const val MODEL_GPT4O = LlmConfig.MODEL_GPT4O
     const val MODEL_GPT4O_MINI = LlmConfig.MODEL_GPT4O_MINI
+    const val CUSTOM_PRESET_ID = LlmConfig.CUSTOM_PRESET_ID
 
     @Volatile
     private var prefs: SharedPreferences? = null
@@ -78,6 +90,7 @@ object SecurePrefs {
                 autoAddTerms = created.getBoolean(KEY_AUTO_ADD_TERMS, true)
                 strictMode = created.getBoolean(KEY_STRICT_MODE, true)
                 carryStoryContext = created.getBoolean(KEY_CARRY_STORY_CONTEXT, true)
+                migrateToPresets(created)
                 prefs = created
             }
         }
@@ -102,6 +115,28 @@ object SecurePrefs {
         }
     }
 
+    /**
+     * One-time move from the single model / base URL / key settings to presets and per-provider
+     * keys (see [LlmConfig.migrateLegacySelection]); the old key moves to the slot of the provider
+     * it was used with.
+     */
+    private fun migrateToPresets(p: SharedPreferences) {
+        if (p.contains(KEY_PRESET)) return
+        val storedModel = p.getString(KEY_MODEL, null)?.trim()?.takeIf { it.isNotEmpty() }
+        val storedUrl = p.getString(KEY_BASE_URL, null)?.takeIf { it.isNotBlank() }
+        val legacyKey = p.getString(KEY_LEGACY_API_KEY, null)?.trim()?.takeIf { it.isNotEmpty() }
+        val selection = LlmConfig.migrateLegacySelection(storedModel, storedUrl, legacyKey != null)
+        val editor = p.edit()
+        editor.putString(KEY_PRESET, selection.presetId)
+        selection.customModel?.let { editor.putString(KEY_MODEL, it) }
+        if (legacyKey != null) {
+            val slot = KEY_PROVIDER_KEY_PREFIX + selection.keyProviderId
+            if (!p.contains(slot)) editor.putString(slot, legacyKey)
+            editor.remove(KEY_LEGACY_API_KEY)
+        }
+        editor.apply()
+    }
+
     /** Loads the store off the main thread so later reads are instant. Safe to call repeatedly. */
     fun warmUp(context: Context) {
         getPrefs(context)
@@ -115,40 +150,110 @@ object SecurePrefs {
         getPrefs(context)?.edit()?.apply { block() }?.apply()
     }
 
-    // ---- API key / backend ----
+    // ---- Model presets / backend ----
 
-    fun getApiKey(context: Context?): String? =
-        getPrefs(context)?.getString(KEY_API_KEY, null)?.takeIf { it.isNotBlank() }
+    /** Model presets for settings UIs. Anything else is a custom model. */
+    val modelPresets: List<ModelPreset> get() = LlmConfig.PRESETS
 
-    fun setApiKey(context: Context, key: String?) = edit(context) { putString(KEY_API_KEY, key) }
-
-    fun hasApiKey(context: Context?): Boolean = getApiKey(context) != null
-
-    fun getModel(context: Context?): String =
-        getPrefs(context)?.getString(KEY_MODEL, null)?.trim()?.takeIf { it.isNotEmpty() }
-            ?: LlmConfig.DEFAULT_MODEL
-
-    /** Stores any model id (preset or custom free text); blank resets to the default model. */
-    fun setModel(context: Context, model: String) = edit(context) {
-        if (model.isBlank()) remove(KEY_MODEL) else putString(KEY_MODEL, model.trim())
+    /** Selected preset id, or [CUSTOM_PRESET_ID]. */
+    fun getPresetId(context: Context?): String {
+        val id = getPrefs(context)?.getString(KEY_PRESET, null)
+        return if (id == CUSTOM_PRESET_ID || ModelPresets.byId(id) != null) id!! else LlmConfig.DEFAULT_PRESET_ID
     }
 
-    /** Model presets for settings UIs: (model id, label). Anything else is a custom model. */
-    val modelPresets: List<Pair<String, String>> get() = LlmConfig.MODEL_PRESETS
+    /** The selected preset; null when a custom model is configured. */
+    fun getPreset(context: Context?): ModelPreset? = ModelPresets.byId(getPresetId(context))
 
-    /** True if the configured model is not one of [modelPresets] (free-text custom model). */
-    fun isCustomModel(context: Context?): Boolean =
-        LlmConfig.MODEL_PRESETS.none { it.first == getModel(context) }
+    /** Selects a preset (base URL, model, extra body and temperature behaviour come from it). */
+    fun selectPreset(context: Context, id: String) = edit(context) {
+        putString(KEY_PRESET, if (ModelPresets.byId(id) != null) id else CUSTOM_PRESET_ID)
+    }
 
-    /** OpenAI-compatible base URL, e.g. https://api.openai.com/v1 (normalized). */
-    fun getBaseUrl(context: Context?): String =
+    fun isCustomModel(context: Context?): Boolean = getPresetId(context) == CUSTOM_PRESET_ID
+
+    /** Custom model: free-text base URL, model id and extra request-body JSON (validated by the UI). */
+    fun setCustomModel(context: Context, baseUrl: String?, model: String, extraBodyJson: String?) = edit(context) {
+        putString(KEY_PRESET, CUSTOM_PRESET_ID)
+        if (baseUrl.isNullOrBlank()) remove(KEY_BASE_URL) else putString(KEY_BASE_URL, LlmConfig.normalizeBaseUrl(baseUrl))
+        if (model.isBlank()) remove(KEY_MODEL) else putString(KEY_MODEL, model.trim())
+        if (extraBodyJson.isNullOrBlank()) remove(KEY_EXTRA_BODY) else putString(KEY_EXTRA_BODY, extraBodyJson.trim())
+    }
+
+    fun getCustomModel(context: Context?): String =
+        getPrefs(context)?.getString(KEY_MODEL, null)?.trim()?.takeIf { it.isNotEmpty() } ?: LlmConfig.DEFAULT_MODEL
+
+    fun getCustomBaseUrl(context: Context?): String =
         LlmConfig.normalizeBaseUrl(getPrefs(context)?.getString(KEY_BASE_URL, null))
 
-    /** Stores the base URL; blank resets to the default. */
-    fun setBaseUrl(context: Context, url: String?) = edit(context) {
-        if (url.isNullOrBlank()) remove(KEY_BASE_URL)
-        else putString(KEY_BASE_URL, LlmConfig.normalizeBaseUrl(url))
+    fun getCustomExtraBodyJson(context: Context?): String =
+        getPrefs(context)?.getString(KEY_EXTRA_BODY, null).orEmpty()
+
+    /** Active model config (without the key). */
+    private fun activeConfig(context: Context?): EngineConfig {
+        getPreset(context)?.let { return it.toEngineConfig() }
+        val baseUrl = getCustomBaseUrl(context)
+        val model = getCustomModel(context)
+        return EngineConfig(
+            baseUrl = baseUrl,
+            model = model,
+            extraBody = LlmConfig.parseExtraBody(getCustomExtraBodyJson(context)),
+            sendTemperature = true, // dropped automatically if the model rejects it, or via "temperature": null
+            providerId = LlmProviders.forBaseUrl(baseUrl).id,
+        )
     }
+
+    /** Everything the engine needs for the selected model, including its provider's API key. */
+    fun engineConfig(context: Context?): EngineConfig {
+        val config = activeConfig(context)
+        return config.copy(apiKey = getApiKey(context, config.providerId).orEmpty())
+    }
+
+    /** Provider of the selected model (API keys are stored per provider). */
+    fun getActiveProvider(context: Context?): LlmProvider = LlmProviders.byId(activeConfig(context).providerId)
+
+    /** Model id of the selected model. */
+    fun getModel(context: Context?): String = activeConfig(context).model
+
+    /** Base URL of the selected model (normalized). */
+    fun getBaseUrl(context: Context?): String = LlmConfig.normalizeBaseUrl(activeConfig(context).baseUrl)
+
+    // ---- Fallback model ----
+
+    /** Fallback preset id, or null when the fallback is off (default). */
+    fun getFallbackPresetId(context: Context?): String? =
+        getPrefs(context)?.getString(KEY_FALLBACK_PRESET, null)?.takeIf { ModelPresets.byId(it) != null }
+
+    fun setFallbackPresetId(context: Context, id: String?) = edit(context) {
+        if (id == null || ModelPresets.byId(id) == null) remove(KEY_FALLBACK_PRESET) else putString(KEY_FALLBACK_PRESET, id)
+    }
+
+    /**
+     * Engine config for the fallback model, or null when it is off, is the same model as the
+     * primary, or its provider has no API key.
+     */
+    fun fallbackEngineConfig(context: Context?): EngineConfig? {
+        val preset = ModelPresets.byId(getFallbackPresetId(context)) ?: return null
+        val key = getApiKey(context, preset.provider.id) ?: return null
+        return preset.toEngineConfig(key).takeUnless { it.sameModelAs(activeConfig(context)) }
+    }
+
+    // ---- API keys (per provider) ----
+
+    fun getApiKey(context: Context?, providerId: String): String? =
+        getPrefs(context)?.getString(KEY_PROVIDER_KEY_PREFIX + providerId, null)?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** API key for the selected model's provider. */
+    fun getApiKey(context: Context?): String? = getApiKey(context, activeConfig(context).providerId)
+
+    fun setApiKey(context: Context, providerId: String, key: String?) = edit(context) {
+        if (key.isNullOrBlank()) remove(KEY_PROVIDER_KEY_PREFIX + providerId)
+        else putString(KEY_PROVIDER_KEY_PREFIX + providerId, key.trim())
+    }
+
+    /** Sets the API key for the selected model's provider. */
+    fun setApiKey(context: Context, key: String?) = setApiKey(context, activeConfig(context).providerId, key)
+
+    fun hasApiKey(context: Context?): Boolean = getApiKey(context) != null
 
     // ---- Toggles (memory-cached) ----
 

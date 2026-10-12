@@ -116,6 +116,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 else ctx.getString(R.string.translation_finished_title)
             )
             if (progress.total > 0) add(progress.qualitySummary(ctx))
+            progress.fallbackSummary(ctx)?.let { add(it) }
             if (progress.newTermsFound > 0) add(
                 ctx.resources.getQuantityString(
                     R.plurals.new_terms_to_review, progress.newTermsFound, progress.newTermsFound

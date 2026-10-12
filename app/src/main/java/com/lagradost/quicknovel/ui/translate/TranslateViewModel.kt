@@ -25,12 +25,21 @@ data class TranslationProgress(
     val untranslatedFragments: Int = 0,
     /** Chunks with fewer than 70% of the source paragraphs. */
     val paragraphWarnings: Int = 0,
+    /** Chapters in which some passages were re-translated by the fallback model. */
+    val fallbackChapters: Int = 0,
+    /** Fallback model id (null when no fallback is configured). */
+    val fallbackModel: String? = null,
 ) {
     val hasQualityIssues: Boolean
         get() = glossaryDeviations > 0 || untranslatedFragments > 0 || paragraphWarnings > 0
 
     /** "3 glossary deviations, 1 untranslated fragment" (or "no consistency issues"). */
     fun qualitySummary(ctx: Context): String = qualitySummary(ctx, glossaryDeviations, untranslatedFragments, paragraphWarnings)
+
+    /** "2 chapters used the fallback model (gemini-3.1-flash-lite)", or null if none did. */
+    fun fallbackSummary(ctx: Context): String? = fallbackChapters.takeIf { it > 0 }?.let {
+        ctx.resources.getQuantityString(R.plurals.chapters_used_fallback, it, it, fallbackModel ?: "?")
+    }
 
     companion object {
         fun qualitySummary(ctx: Context, deviations: Int, fragments: Int, paragraphWarnings: Int): String {

@@ -58,6 +58,12 @@ class TranslateRangeDialogFragment : DialogFragment() {
         val chapters = pendingChapters ?: emptyList()
         val sourceLang = TranslationLanguages.langOfApi(apiName) ?: TranslationLanguages.DEFAULT
 
+        val config = SecurePrefs.engineConfig(ctx)
+        val strictMode = SecurePrefs.isStrictModeEnabled(ctx)
+        val fallbackLabel = SecurePrefs.fallbackEngineConfig(ctx)?.label
+        var bibleTerms = 0
+        var updateEstimates: () -> Unit = {}
+
         viewModel.loadTranslatedNums(novelId)
         NovelChapterSource.remember(novelId, apiName, novelName.orEmpty(), novelAuthor, chapters)
 
@@ -67,6 +73,8 @@ class TranslateRangeDialogFragment : DialogFragment() {
             val characters = dao.countCharacters(novelId)
             val totalTerms = dao.countForNovel(novelId)
             binding.bibleStatus.text = getString(R.string.bible_status, characters, totalTerms - characters)
+            bibleTerms = totalTerms
+            updateEstimates()
             val showHint = characters == 0 && chapters.isNotEmpty()
             binding.bibleAnalyzeHint.visibility = if (showHint) View.VISIBLE else View.GONE
             binding.bibleAnalyzeButton.visibility = if (showHint) View.VISIBLE else View.GONE
@@ -80,7 +88,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
         binding.rangeTo.setText(minOf(50, total).toString())
         binding.rangeAvailable.text = "Available: 1–$total"
 
-        fun updateEstimates() {
+        updateEstimates = {
             val from = (binding.rangeFrom.text.toString().toIntOrNull() ?: 1) - 1
             val to = (binding.rangeTo.text.toString().toIntOrNull() ?: 1) - 1
             val alreadyTranslated = viewModel.translatedChapterNums.value ?: emptyList()
@@ -95,9 +103,13 @@ class TranslateRangeDialogFragment : DialogFragment() {
 
             binding.chaptersToTranslate.text = "Chapters to translate: $toTranslate"
 
-            val model = SecurePrefs.getModel(ctx)
-            val estimate = CostEstimator.estimateForChapters(toTranslate, model, sourceLang)
-            binding.estimatedCost.text = "Est. cost: ${CostEstimator.formatEstimate(estimate)} — $model, ${TranslationLanguages.displayName(sourceLang)} → English"
+            val estimate = CostEstimator.estimateForConfig(config, toTranslate, sourceLang, strictMode, bibleTerms)
+            binding.estimatedCost.text = buildString {
+                append("Est. cost: ${CostEstimator.formatEstimate(estimate)} — ${config.label}, ")
+                append("${TranslationLanguages.displayName(sourceLang)} → English")
+                if (strictMode) append(", strict mode")
+                if (fallbackLabel != null) append("\nFallback for blocked or refused passages: $fallbackLabel")
+            }
         }
 
         viewModel.translatedChapterNums.observe(this) { updateEstimates() }

@@ -75,15 +75,10 @@ object SearchQueryTranslator {
 
     private suspend fun translateUncached(query: String, lang: String, ctx: Context?): String? {
         if (SecurePrefs.isAiSearchEnabled(ctx)) {
-            val apiKey = SecurePrefs.getApiKey(ctx)
-            if (apiKey != null) {
+            val config = SecurePrefs.engineConfig(ctx)
+            if (config.apiKey.isNotBlank()) {
                 try {
-                    val engine = TranslationEngine(
-                        apiKey = apiKey,
-                        model = SecurePrefs.getModel(ctx),
-                        baseUrl = SecurePrefs.getBaseUrl(ctx),
-                        sourceLang = lang
-                    )
+                    val engine = TranslationEngine(config, lang)
                     engine.translateShort(query, PromptTemplates.searchQuerySystemPrompt(lang))
                         .takeIf { it.isNotBlank() }
                         ?.let { return it }

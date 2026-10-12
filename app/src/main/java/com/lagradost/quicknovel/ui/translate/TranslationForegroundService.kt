@@ -317,12 +317,7 @@ class TranslationForegroundService : Service() {
             try {
                 val api = Apis.getApiFromNameOrNull(apiName)
                 val sourceLang = TranslationLanguages.normalize(api?.api?.lang) ?: TranslationLanguages.DEFAULT
-                val engine = TranslationEngine(
-                    apiKey = apiKey,
-                    model = SecurePrefs.getModel(ctx),
-                    baseUrl = SecurePrefs.getBaseUrl(ctx),
-                    sourceLang = sourceLang
-                )
+                val engine = TranslationEngine(SecurePrefs.engineConfig(ctx).copy(apiKey = apiKey), sourceLang)
                 val count = requestedCount.coerceIn(1, SecurePrefs.MAX_ANALYZE_CHAPTERS).coerceAtMost(chapters.size)
 
                 val texts = mutableListOf<AnalysisChapter>()
@@ -460,13 +455,13 @@ class TranslationForegroundService : Service() {
 
                 val api = Apis.getApiFromNameOrNull(apiName)
                 val sourceLang = TranslationLanguages.normalize(api?.api?.lang) ?: TranslationLanguages.DEFAULT
-                val model = SecurePrefs.getModel(ctx)
-                val engine = TranslationEngine(
-                    apiKey = apiKey,
-                    model = model,
-                    baseUrl = SecurePrefs.getBaseUrl(ctx),
-                    sourceLang = sourceLang
-                )
+                val config = SecurePrefs.engineConfig(ctx).copy(apiKey = apiKey)
+                val model = config.model
+                val fallbackConfig = SecurePrefs.fallbackEngineConfig(ctx)
+                val engine = TranslationEngine(config, sourceLang, fallback = fallbackConfig)
+                if (fallbackConfig == null && SecurePrefs.getFallbackPresetId(ctx) != null) {
+                    Log.w(TAG, "Fallback model configured but unusable (no API key for its provider, or same model)")
+                }
 
                 // Chapter indices are the translation keys; work on indices directly (no indexOf).
                 val alreadyTranslated = translationDao.getTranslatedChapterNums(novelId).toHashSet()
@@ -479,6 +474,7 @@ class TranslationForegroundService : Service() {
                 var deviations = 0
                 var fragments = 0
                 var paragraphWarnings = 0
+                var fallbackChapters = 0
 
                 fun progress(current: Int, name: String) = TranslationProgress(
                     current, toTranslate.size, name,
@@ -486,6 +482,8 @@ class TranslationForegroundService : Service() {
                     glossaryDeviations = deviations,
                     untranslatedFragments = fragments,
                     paragraphWarnings = paragraphWarnings,
+                    fallbackChapters = fallbackChapters,
+                    fallbackModel = engine.fallbackModelId,
                 )
 
                 toTranslate.forEachIndexed { idx, chapterIdx ->
@@ -532,6 +530,10 @@ class TranslationForegroundService : Service() {
                         deviations += result.glossaryViolations
                         fragments += result.untranslatedFragments
                         paragraphWarnings += result.paragraphWarnings
+                        if (result.usedFallback) {
+                            fallbackChapters++
+                            Log.i(TAG, "Chapter $chapterIdx: ${result.fallbackChunks} passage(s) re-translated with ${engine.fallbackModelId}")
+                        }
                         if (result.violatedTerms.isNotEmpty() || result.leakedFragments.isNotEmpty()) {
                             Log.i(TAG, "Chapter $chapterIdx: deviations=${result.violatedTerms} leaks=${result.leakedFragments} retries=${result.retries}")
                         }
@@ -689,6 +691,7 @@ class TranslationForegroundService : Service() {
             val lines = buildList {
                 add(getString(R.string.translation_finished_text, p.current, p.total))
                 add(p.qualitySummary(this@TranslationForegroundService))
+                p.fallbackSummary(this@TranslationForegroundService)?.let { add(it) }
                 if (p.newTermsFound > 0) {
                     add(resources.getQuantityString(R.plurals.new_terms_to_review, p.newTermsFound, p.newTermsFound))
                 }
