@@ -2,6 +2,8 @@ package com.lagradost.quicknovel.util
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -62,6 +64,58 @@ class InAppUpdater {
         /** GitHub repo whose releases are offered as updates (the fork, not upstream). */
         private const val UPDATE_REPO = "Techno453/QuickNovel"
 
+        /** Releases page, shown when an update cannot be installed over this build. */
+        private const val RELEASES_PAGE = "https://github.com/$UPDATE_REPO/releases"
+
+        /**
+         * Rolling release that .github/workflows/pre-release.yml replaces on every push to master;
+         * its single asset is `QuickNovel-<versionName>-pre.<CI run number>.apk`, a debug build.
+         */
+        private const val PRE_RELEASE_TAG = "pre-release"
+        private val preReleaseBuildRegex = Regex("""pre\.(\d+)\.apk$""")
+
+        /**
+         * Which releases this build follows. Debug builds (applicationId `….debug`, installed next
+         * to the release app) follow the rolling pre-release of debug APKs; release builds follow
+         * the latest stable release. Each channel only ever offers its own kind of APK, so an
+         * update always has this build's applicationId.
+         */
+        enum class Channel { STABLE, PRE_RELEASE }
+
+        val channel: Channel get() = if (BuildConfig.DEBUG) Channel.PRE_RELEASE else Channel.STABLE
+
+        /**
+         * Upstream's comparison, unchanged: the first asset's name must contain an `x.y.z`
+         * version, which is compared as a string with the installed versionName.
+         */
+        internal fun stableUpdate(release: GithubRelease, installedVersionName: String?): Update {
+            val versionRegex = Regex("""(.*?((\d)\.(\d)\.(\d)).*\.apk)""")
+            val foundAsset = release.assets.getOrNull(0)
+            val foundVersion = foundAsset?.name?.let { versionRegex.find(it) }
+            val shouldUpdate =
+                if (foundAsset?.browser_download_url != "" && foundVersion != null) installedVersionName?.compareTo(
+                    foundVersion.groupValues[2]
+                )!! < 0 else false
+            return if (foundVersion != null) {
+                Update(shouldUpdate, foundAsset.browser_download_url, foundVersion.groupValues[2], release.body)
+            } else {
+                Update(false, null, null, null)
+            }
+        }
+
+        /** Pre-release channel: newer when the asset's CI run number is above this build's. */
+        internal fun preReleaseUpdate(release: GithubRelease, installedBuild: Int): Update {
+            val asset = release.assets.firstOrNull { it.name.endsWith(".apk") } ?: return Update(false, null, null, null)
+            val build = preReleaseBuildRegex.find(asset.name)?.groupValues?.get(1)?.toIntOrNull()
+                ?: return Update(false, null, null, null)
+            return Update(
+                shouldUpdate = build > installedBuild && asset.browser_download_url.isNotBlank(),
+                updateURL = asset.browser_download_url,
+                updateVersion = asset.name.removePrefix("QuickNovel-").removeSuffix(".apk"),
+                changelog = release.body,
+            )
+        }
+
         private val mapper = JsonMapper.builder().addModule(
             KotlinModule.Builder()
                 .withReflectionCacheSize(512)
@@ -76,53 +130,27 @@ class InAppUpdater {
 
         private suspend fun Activity.getAppUpdate(): Update {
             try {
-                val url = "https://api.github.com/repos/$UPDATE_REPO/releases/latest"
+                val url = when (channel) {
+                    Channel.STABLE -> "https://api.github.com/repos/$UPDATE_REPO/releases/latest"
+                    Channel.PRE_RELEASE -> "https://api.github.com/repos/$UPDATE_REPO/releases/tags/$PRE_RELEASE_TAG"
+                }
                 val headers = mapOf("Accept" to "application/vnd.github.v3+json")
                 val response =
                     mapper.readValue<GithubRelease>(app.get(url, headers = headers).text)
 
-                val versionRegex = Regex("""(.*?((\d)\.(\d)\.(\d)).*\.apk)""")
+                return when (channel) {
+                    Channel.STABLE -> {
+                        val currentVersion = packageName?.let {
+                            packageManager.getPackageInfo(
+                                it,
+                                0
+                            )
+                        }
+                        stableUpdate(response, currentVersion?.versionName)
+                    }
 
-                /*
-                val releases = response.map { it.assets }.flatten()
-                    .filter { it.content_type == "application/vnd.android.package-archive" }
-                val found =
-                    releases.sortedWith(compareBy {
-                        versionRegex.find(it.name)?.groupValues?.get(2)
-                    }).toList().lastOrNull()*/
-//                val found =
-//                    response.sortedWith(compareBy { release ->
-//                        release.assets.filter { it.content_type == "application/vnd.android.package-archive" }
-//                            .getOrNull(0)?.name?.let { it1 ->
-//                                versionRegex.find(
-//                                    it1
-//                                )?.groupValues?.get(2)
-//                            }
-//                    }).toList().lastOrNull()
-                val foundAsset = response.assets.getOrNull(0)
-                val currentVersion = packageName?.let {
-                    packageManager.getPackageInfo(
-                        it,
-                        0
-                    )
+                    Channel.PRE_RELEASE -> preReleaseUpdate(response, BuildConfig.CI_BUILD_NUMBER)
                 }
-
-                val foundVersion = foundAsset?.name?.let { versionRegex.find(it) }
-                val shouldUpdate =
-                    if (foundAsset?.browser_download_url != "" && foundVersion != null) currentVersion?.versionName?.compareTo(
-                        foundVersion.groupValues[2]
-                    )!! < 0 else false
-                return if (foundVersion != null) {
-                    Update(
-                        shouldUpdate,
-                        foundAsset.browser_download_url,
-                        foundVersion.groupValues[2],
-                        response.body
-                    )
-                } else {
-                    Update(false, null, null, null)
-                }
-
             } catch (e: Exception) {
                 println(e)
                 return Update(false, null, null, null)
@@ -276,6 +304,13 @@ class InAppUpdater {
 
                 isDownloadingUpdate = false
 
+                // Android refuses an APK with another package name or signing key as an update;
+                // explain that instead of handing the installer an APK it will reject.
+                installBlocker(rFile)?.let { reason ->
+                    showCannotInstall(reason)
+                    return true
+                }
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     val contentUri = FileProvider.getUriForFile(
                         this,
@@ -308,8 +343,63 @@ class InAppUpdater {
             }
         }
 
+        @Suppress("DEPRECATION")
+        private fun signaturesOf(info: PackageInfo?): Set<String>? {
+            info ?: return null
+            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.signingInfo?.let { if (it.hasMultipleSigners()) it.apkContentsSigners else it.signingCertificateHistory }
+            } else {
+                info.signatures
+            }
+            return signatures?.map { it.toCharsString() }?.toSet()?.takeIf { it.isNotEmpty() }
+        }
+
+        /**
+         * Why [apk] cannot be installed as an update of this app (another applicationId or
+         * another signing key), or null when it can or the platform does not tell us.
+         */
+        @Suppress("DEPRECATION")
+        private fun Activity.installBlocker(apk: File): String? {
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                PackageManager.GET_SIGNING_CERTIFICATES
+            } else {
+                PackageManager.GET_SIGNATURES
+            }
+            val archive = packageManager.getPackageArchiveInfo(apk.absolutePath, flags)
+                ?: return getString(R.string.update_not_an_apk)
+            if (archive.packageName != packageName) {
+                return getString(R.string.update_other_package, archive.packageName, packageName)
+            }
+            val update = signaturesOf(archive)
+            val installed = signaturesOf(runCatching { packageManager.getPackageInfo(packageName, flags) }.getOrNull())
+            if (update != null && installed != null && update.intersect(installed).isEmpty()) {
+                return getString(R.string.update_other_key)
+            }
+            return null
+        }
+
+        private fun Activity.showCannotInstall(reason: String) {
+            runOnUiThread {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.update_cannot_install_title)
+                    .setMessage(reason)
+                    .setPositiveButton(R.string.update_open_releases) { _, _ ->
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE))) }
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+        }
+
         suspend fun Activity.runAutoUpdate(checkAutoUpdate: Boolean = true): Boolean {
             val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
+
+            // A locally built debug app (CI build number 0) is signed with the developer's own key
+            // and can never take a CI pre-release as an update: no prompt on start. A manual
+            // "Check for update" still looks and explains the key mismatch if one is downloaded.
+            if (checkAutoUpdate && channel == Channel.PRE_RELEASE && BuildConfig.CI_BUILD_NUMBER == 0) {
+                return false
+            }
 
             if (!checkAutoUpdate || settingsManager.getBoolean(
                     getString(R.string.auto_update_key),
@@ -327,9 +417,13 @@ class InAppUpdater {
                         }
 
                         val builder: AlertDialog.Builder = AlertDialog.Builder(this)
+                        val installedLabel = when (channel) {
+                            Channel.STABLE -> currentVersion?.versionName
+                            Channel.PRE_RELEASE -> "${currentVersion?.versionName} (build ${BuildConfig.CI_BUILD_NUMBER})"
+                        }
                         builder.setTitle(
                             getString(R.string.new_update_found_format).format(
-                                currentVersion?.versionName,
+                                installedLabel,
                                 update.updateVersion
                             )
                         )
