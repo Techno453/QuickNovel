@@ -19,14 +19,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +52,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
@@ -64,6 +73,7 @@ import com.lagradost.quicknovel.MainActivity.Companion.navigate
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.compose.BaseSearchBar
 import com.lagradost.quicknovel.compose.AdaptiveAtLeast
+import com.lagradost.quicknovel.compose.MaxContentWidth
 import com.lagradost.quicknovel.compose.PosterMinCellWidth
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseItem
@@ -98,6 +108,19 @@ object SearchScreen : Screen {
             viewModel.onAction(HomeAction.ConfigureApisLanguages(selectionLangState.toPersistentSet()))
         }
 
+        // Language chip: remembered in SharedPreferences ("search_language", default All).
+        val languagePref = store.provider.searchLanguage
+        val languageValue by languagePref.collectAsState()
+        LaunchedEffect(languageValue) {
+            viewModel.onAction(HomeAction.SelectLanguage(SearchLanguage.fromPref(languageValue)))
+        }
+        val onAction = remember(viewModel, languagePref) {
+            { action: HomeAction ->
+                if (action is HomeAction.SelectLanguage) languagePref.set(action.language.prefValue)
+                viewModel.onAction(action)
+            }
+        }
+
         ObserveEffect(viewModel.effect) { effect ->
             when (effect) {
                 is HomeEffect.NavigateToMainPage -> {
@@ -107,8 +130,54 @@ object SearchScreen : Screen {
             }
         }
 
-        SearchScreen(state, viewModel::onAction)
+        SearchScreen(state, onAction)
     }
+}
+
+private fun SearchLanguage.labelRes(): Int = when (this) {
+    SearchLanguage.ALL -> R.string.search_language_all
+    SearchLanguage.CHINESE -> R.string.search_language_zh
+    SearchLanguage.JAPANESE -> R.string.search_language_ja
+    SearchLanguage.KOREAN -> R.string.search_language_ko
+    SearchLanguage.ENGLISH -> R.string.search_language_en
+}
+
+/** All / Chinese / Japanese / Korean / English; scrolls sideways when the window is narrow. */
+@Composable
+fun SearchLanguageChips(
+    selected: SearchLanguage,
+    action: (HomeAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val description = stringResource(R.string.search_language)
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp),
+        modifier = modifier
+            .widthIn(max = MaxContentWidth)
+            .fillMaxWidth()
+            .semantics { contentDescription = description },
+    ) {
+        items(SearchLanguage.CHIPS, key = { it.prefValue }) { lang ->
+            FilterChip(
+                selected = selected == lang,
+                onClick = { action(HomeAction.SelectLanguage(lang)) },
+                label = { Text(stringResource(lang.labelRes())) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun NoSourcesNotice(modifier: Modifier = Modifier) {
+    Text(
+        text = stringResource(R.string.search_language_no_sources),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+    )
 }
 
 @Composable
@@ -120,6 +189,17 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(snapAnimationSpec = null)
     val listState = rememberLazyGridState()
+
+    // Result sections are re-sorted as sources answer (raw CJK first). A LazyColumn keeps the first
+    // visible section in place when one is inserted above it, so stay pinned to the top until the
+    // user drags the list.
+    val resultsState = rememberLazyListState()
+    val resultsDragged by resultsState.interactionSource.collectIsDraggedAsState()
+    var followTop by remember(state.lastQuery, state.searchLanguage) { mutableStateOf(true) }
+    LaunchedEffect(resultsDragged) { if (resultsDragged) followTop = false }
+    LaunchedEffect(state.searchRows, followTop) {
+        if (followTop && state.searchRows.isNotEmpty()) resultsState.requestScrollToItem(0)
+    }
 
 
     val searchAction = remember<(SearchResponseAction) -> Unit>(action) {
@@ -141,7 +221,8 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
         topBar = {
             BaseSearchBar(
                 content = {
-                    Spacer(modifier = Modifier.height(5.dp))
+                    SearchLanguageChips(state.searchLanguage, action)
+                    Spacer(modifier = Modifier.height(2.dp))
                 },
                 onQueryChange = { _ ->
                 },
@@ -191,6 +272,7 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
     ) { innerPadding ->
         if (state.isQueryOpen) {
             LazyColumn(
+                state = resultsState,
                 modifier = Modifier
                     .fillMaxSize()
                     // This fixes the double padding from the bottom nav bar
@@ -202,6 +284,11 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
             ) {
                 items(state.searchRows, key = { item -> item.name }) { row ->
                     SearchRow(row, action)
+                }
+                if (!state.isLoading && state.searchRows.isEmpty() &&
+                    state.searchLanguage != SearchLanguage.ALL
+                ) {
+                    item(key = "no_sources") { NoSourcesNotice() }
                 }
             }
         } else {
@@ -222,6 +309,13 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
             ) {
                 items(state.shownMainPageApis, key = { item -> item.name }) { api ->
                     MainAPIItem(api = api, action = action)
+                }
+                if (state.shownMainPageApis.isEmpty() && state.filterNames.isNotEmpty() &&
+                    state.searchLanguage != SearchLanguage.ALL
+                ) {
+                    item(key = "no_sources", span = { GridItemSpan(maxLineSpan) }) {
+                        NoSourcesNotice()
+                    }
                 }
             }
         }

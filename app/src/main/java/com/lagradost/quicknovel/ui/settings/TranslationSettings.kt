@@ -47,6 +47,7 @@ import com.lagradost.quicknovel.translator.ModelPresets
 import com.lagradost.quicknovel.translator.PowerPolicy
 import com.lagradost.quicknovel.translator.PresetTier
 import com.lagradost.quicknovel.translator.PromptProfiles
+import com.lagradost.quicknovel.translator.SearchQueryTranslator
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.SpendLedger
 import com.lagradost.quicknovel.translator.SpendPricing
@@ -462,6 +463,10 @@ object TranslationSettings {
                 title = stringResource(R.string.tr_search_ai),
                 subtitle = stringResource(R.string.tr_search_ai_desc),
                 preference = aiSearch,
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = stringResource(R.string.tr_title_lookup_model),
+                content = { TitleLookupModelPreference(context, configVersion) },
             ),
 
             // ---- Default translation style ----
@@ -938,6 +943,64 @@ object TranslationSettings {
             confirmButton = {
                 TextButton(onClick = {
                     SecurePrefs.setAnalysisPresetId(context, selected)
+                    version.value++
+                    dismiss()
+                }) { Text(stringResource(R.string.ok)) }
+            },
+            dismissButton = { DialogButtons(dismiss) },
+        )
+    }
+
+    /** Model for the AI title lookup of search queries (docs/search.md); default GPT-6 Sol. */
+    @Composable
+    private fun TitleLookupModelPreference(context: Context, version: MutableState<Int>) {
+        var showDialog by remember { mutableStateOf(false) }
+        val preset = remember(version.value) { ModelPresets.byId(SecurePrefs.getTitleLookupPresetId(context)) }
+        val summary = if (preset == null) {
+            stringResource(R.string.tr_same_as_translation_model)
+        } else {
+            val line = stringResource(R.string.tr_title_lookup_model_summary, preset.label, preset.provider.label)
+            if (SecurePrefs.getApiKey(context, preset.provider.id) == null) {
+                stringResource(R.string.tr_analysis_model_needs_key, line, preset.provider.label)
+            } else line
+        }
+
+        TextPreferenceWidget(
+            title = stringResource(R.string.tr_title_lookup_model),
+            subtitle = summary,
+            icon = painterResource(R.drawable.ic_model_24),
+            onPreferenceClick = { showDialog = true },
+        )
+        if (!showDialog) return
+
+        var selected by remember { mutableStateOf(SecurePrefs.getTitleLookupPresetId(context)) }
+        val dismiss = { showDialog = false }
+        AlertDialog(
+            onDismissRequest = dismiss,
+            title = { Text(stringResource(R.string.tr_title_lookup_model)) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(stringResource(R.string.tr_title_lookup_model_dialog_note), style = MaterialTheme.typography.bodySmall)
+                    ChoiceRow(
+                        selected = selected == null,
+                        label = stringResource(R.string.tr_same_as_translation_model),
+                        detail = null,
+                        notes = null,
+                    ) { selected = null }
+                    SecurePrefs.modelPresets.forEach { p ->
+                        ChoiceRow(
+                            selected = selected == p.id,
+                            label = p.label,
+                            detail = p.provider.label,
+                            notes = null,
+                        ) { selected = p.id }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    SecurePrefs.setTitleLookupPresetId(context, selected)
+                    SearchQueryTranslator.clearCache()
                     version.value++
                     dismiss()
                 }) { Text(stringResource(R.string.ok)) }

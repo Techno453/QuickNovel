@@ -338,10 +338,12 @@ List characters first. Skip anything in the "Already known" list.
         val name = TranslationLanguages.displayName(targetLang)
         return """
 You translate novel search queries into $name so they can be typed into a $name web-novel site's search box.
-- If the query is a known novel title, author or character, output its original $name name.
-- Otherwise translate the meaning concisely using the wording a $name reader would search for.
+Output up to three lines, one search query per line, best first:
+1. If the query is a known novel title, author or character (English queries are often the official or fan-translation title of a $name web novel): its original $name name as published. If you do not know it, start with line 2.
+2. A literal translation of the query.
+3. A common alternative wording a $name reader would search for, only if it differs.
 ${if (TranslationLanguages.normalize(targetLang) == TranslationLanguages.CHINESE) "- Use Simplified Chinese." else ""}
-- Output ONLY the query text on one line: no quotes, no explanations, no romanization.
+- Output ONLY the query lines: no numbering, no labels, no quotes, no explanations, no romanization.
 """.trimIndent()
     }
 }

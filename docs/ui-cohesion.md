@@ -31,7 +31,8 @@ the wizard, the dialogs, Spending, the glossary and the notifications).
 | **Background translation** | Translation jobs plus read ahead (charging / battery settings) | long jobs | Says what is affected. |
 | **Spending** | The screen; "spend cap" for limits ("Monthly spend cap", "Per-job spend cap") | Spend (alone), Per-job cap | The screen title was already Spending. |
 | **Source language** | Language of a novel | language of this book | Already the result page label. |
-| **Translation model / Fallback model / Analysis model** | The three model settings | LLM | "LLM" appeared once in a summary. |
+| **Translation model / Fallback model / Analysis model / Title lookup model** | The model settings (the last one resolves search queries to original titles, docs/search.md) | LLM | "LLM" appeared once in a summary. |
+| **All languages / Chinese / Japanese / Korean / English** | Language chips (Browse All sources, Search tab) | All, CN/JP/KR | Same words in both tabs. |
 | **API key**, **Test connection** | Key rows and the free key check (wizard and settings) | Verify, "API key is valid!" | The wizard already said Test connection. |
 | **Source changed** | Stale translations (chip, Translate dialog checkbox) | stale | The chip's wording. |
 

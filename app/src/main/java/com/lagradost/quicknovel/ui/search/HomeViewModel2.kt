@@ -1,5 +1,6 @@
 package com.lagradost.quicknovel.ui.search
 
+import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,6 +38,10 @@ data class HomeViewModelState(
     val shownMainPageApis: ImmutableList<MainAPI> = mainPageApis,
     val filterNames: ImmutableSet<String> = persistentSetOf(),
     val filterLanguages: ImmutableSet<String> = persistentSetOf(),
+    /** Language chip above the tiles / results (docs/search.md). */
+    val searchLanguage: SearchLanguage = SearchLanguage.DEFAULT,
+    /** Last submitted query, re-run when the language chip changes. */
+    val lastQuery: String? = null,
     val isConfigureShow: Boolean = false,
     val searchRows: PersistentList<SearchRow> = persistentListOf(),
     val isLoading: Boolean = false,
@@ -49,6 +54,8 @@ data class SearchRow(
     val name: String,
     val items: ImmutableList<ImmutableSearchResponse> = persistentListOf(),
     val error: Throwable? = null,
+    /** `MainAPI.lang` of the source: raw CJK sections are listed before English ones. */
+    val lang: String? = null,
 )
 
 @Immutable
@@ -59,6 +66,7 @@ sealed class HomeAction {
     data class Open(val item: MainAPI) : HomeAction()
     data class ConfigureApisNames(val names: ImmutableSet<String>) : HomeAction()
     data class ConfigureApisLanguages(val languages: ImmutableSet<String>) : HomeAction()
+    data class SelectLanguage(val language: SearchLanguage) : HomeAction()
     object CloseQuery : HomeAction()
     data class ResultAction(val action: SearchResponseAction) : HomeAction()
     data class OpenRow(val row: SearchRow) : HomeAction()
@@ -94,15 +102,17 @@ class HomeViewModel2 : ViewModel(),
     fun filterApis(
         apis: ImmutableList<MainAPI>,
         names: ImmutableSet<String>,
-        languages: ImmutableSet<String>
+        languages: ImmutableSet<String>,
+        searchLanguage: SearchLanguage,
     ): ImmutableList<MainAPI> {
         if (names.isEmpty() || languages.isEmpty()) return persistentListOf()
 
-        return apis.filter { api ->
+        // Settings (provider languages, Search providers) first, then the language chip.
+        return searchLanguage.filter(apis.filter { api ->
             languages.contains(api.lang) && names.contains(
                 api.name
             )
-        }.toPersistentList()
+        }) { it.lang }.toPersistentList()
     }
 
     override fun onAction(action: HomeAction) {
@@ -138,7 +148,8 @@ class HomeViewModel2 : ViewModel(),
                         shownMainPageApis = filterApis(
                             mainPageApis,
                             action.names,
-                            filterLanguages
+                            filterLanguages,
+                            searchLanguage,
                         )
                     )
                 }
@@ -151,10 +162,30 @@ class HomeViewModel2 : ViewModel(),
                         shownMainPageApis = filterApis(
                             mainPageApis,
                             filterNames,
-                            action.languages
+                            action.languages,
+                            searchLanguage,
                         )
                     )
                 }
+            }
+
+            is HomeAction.SelectLanguage -> {
+                val before = state.value
+                if (before.searchLanguage == action.language) return
+                updateState {
+                    copy(
+                        searchLanguage = action.language,
+                        shownMainPageApis = filterApis(
+                            mainPageApis,
+                            filterNames,
+                            filterLanguages,
+                            action.language,
+                        )
+                    )
+                }
+                // Re-run the open query against the new set of sources.
+                val query = before.lastQuery
+                if (before.isQueryOpen && query != null) search(query)
             }
 
             HomeAction.CloseQuery -> updateState {
@@ -187,13 +218,20 @@ class HomeViewModel2 : ViewModel(),
 
     private fun search(query: String) = viewModelScope.launch {
         searchQuery.launch {
+            updateState { copy(lastQuery = query) }
             val state = state.value
-            val searchApis = filterApis(state.allApis, state.filterNames, state.filterLanguages)
-            searchQuery(query, searchApis)
+            val searchApis = filterApis(
+                state.allApis, state.filterNames, state.filterLanguages, state.searchLanguage
+            )
+            searchQuery(query, searchApis, state.searchLanguage)
         }
     }
 
-    private suspend fun searchQuery(query: String, apis: ImmutableList<MainAPI>) {
+    private suspend fun searchQuery(
+        query: String,
+        apis: ImmutableList<MainAPI>,
+        language: SearchLanguage,
+    ) {
         updateState {
             copy(
                 isQueryOpen = true,
@@ -202,29 +240,44 @@ class HomeViewModel2 : ViewModel(),
             )
         }
         apis.cmap { api ->
-            // AI-translated search: zh/ja/ko providers get the query translated into their
-            // language ("Translate search queries" setting); falls back to the original query.
-            val providerQuery = SearchQueryTranslator.translateQuery(query, api.lang)
-            APIRepository(api).searchResult(providerQuery).onSuccess { value ->
-                val row = SearchRow(name = api.name, items = value.toImmutableList())
-                updateState {
-                    if (value.isEmpty()) {
-                        copy(searchRows = searchRows.adding(row))
-                    } else {
-                        val hasResults = searchRows.count { it.items.isNotEmpty() }
-                        copy(searchRows = searchRows.addingAt(hasResults, row))
-                    }
-                }
-            }.onFailure { error ->
-                if (error is CancellationException) return@onFailure
-                val row = SearchRow(name = api.name, error = error)
-                updateState {
-                    copy(searchRows = searchRows.adding(row))
-                }
+            // Translated search (docs/search.md): zh/ja/ko providers get candidate queries in their
+            // language (AI known title, NovelUpdates original names, literal translation), tried in
+            // order until one answers; English and other sources get the raw query. The language
+            // chip decides the target: All = each CJK source's own language, a CJK chip = that
+            // language only, English = no translation.
+            val target = language.queryLanguageFor(api.lang)
+            val candidates =
+                if (target == null) listOf(query)
+                else SearchQueryTranslator.candidatesFor(query, target).all.ifEmpty { listOf(query) }
+            val repo = APIRepository(api)
+            val outcome = CandidateSearch.run(
+                candidates,
+                urlOf = { it.url },
+                pauseMs = api.rateLimitTime,
+            ) { candidate -> repo.searchResult(candidate).getOrThrow() }
+            logOutcome(api, outcome)
+            val row = if (outcome.error != null) {
+                SearchRow(name = api.name, error = outcome.error, lang = api.lang)
+            } else {
+                SearchRow(name = api.name, items = outcome.items.toImmutableList(), lang = api.lang)
+            }
+            updateState {
+                copy(searchRows = (searchRows + row).sortedBy { r ->
+                    CandidateSearch.sectionRank(r.lang, r.items.isNotEmpty())
+                }.toPersistentList())
             }
         }
         updateState {
             copy(isLoading = false)
         }
+    }
+
+    private fun logOutcome(api: MainAPI, outcome: CandidateSearch.Outcome<*>) {
+        Log.i(
+            "SearchLanguage",
+            "${api.name} (${api.lang}): tried ${outcome.tried} → ${outcome.items.size} results" +
+                    (outcome.answeredBy?.let { " via '$it'" } ?: "") +
+                    (outcome.error?.let { " error ${it.javaClass.simpleName}" } ?: "")
+        )
     }
 }

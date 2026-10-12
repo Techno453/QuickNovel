@@ -871,6 +871,11 @@ class TranslationEngine(
             .orEmpty()
     }
 
+    /** Like [translateShort] but returns the whole cleaned reply (several lines: search candidates). */
+    suspend fun completeShort(text: String, systemPrompt: String): String = withContext(Dispatchers.IO) {
+        cleanModelOutput(chat(systemPrompt, text, temperature = 0.0, maxRetries = 1).content)
+    }
+
     /** Chat completion with retry/backoff on 429, 5xx and network errors. */
     internal suspend fun chat(
         system: String?,
