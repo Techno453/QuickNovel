@@ -55,12 +55,20 @@ data class TranslationResult(
     /** "源 → English" for each violated term (distinct), for logs and UI. */
     val violatedTerms: List<String> = emptyList(),
     val leakedFragments: List<String> = emptyList(),
-)
+    /** Chunks re-translated by the fallback model (content filter or refusal). */
+    val fallbackChunks: Int = 0,
+    /** Model that produced the text: the primary, the fallback, or "primary + fallback" when mixed. */
+    val modelUsed: String = "",
+) {
+    val usedFallback: Boolean get() = fallbackChunks > 0
+}
 
 class TranslationApiException(
     message: String,
     /** True for transient failures (rate limit, 5xx) that are worth retrying. */
-    val retryable: Boolean = false
+    val retryable: Boolean = false,
+    /** True when the provider's content filter blocked the request (never retryable with the same model). */
+    val contentFiltered: Boolean = false,
 ) : Exception(message)
 
 /**
@@ -71,6 +79,10 @@ class TranslationApiException(
  * @param extraBody extra top-level request fields merged into every request body (e.g.
  *   `reasoning_effort`, OpenRouter's `reasoning`); a null value removes that field (e.g.
  *   `"temperature" to null` for models that reject it). See [LlmConfig.parseExtraBody].
+ * @param sendTemperature false for models that must not get a `temperature` (Gemini 3, Claude).
+ * @param headers extra HTTP headers (e.g. OpenRouter attribution).
+ * @param fallback engine that re-translates a chunk blocked by a content filter or refused by
+ *   this model (once, no further fallback); null = no fallback.
  */
 class TranslationEngine(
     private val apiKey: String,
@@ -79,13 +91,44 @@ class TranslationEngine(
     private val sourceLang: String = TranslationLanguages.DEFAULT,
     private val client: OkHttpClient = defaultClient,
     private val extraBody: Map<String, Any?> = emptyMap(),
+    sendTemperature: Boolean = true,
+    private val headers: Map<String, String> = emptyMap(),
+    private val fallback: TranslationEngine? = null,
 ) {
+    /** Engine for [config], optionally with a [fallback] config for blocked or refused chunks. */
+    constructor(
+        config: EngineConfig,
+        sourceLang: String = TranslationLanguages.DEFAULT,
+        client: OkHttpClient = defaultClient,
+        fallback: EngineConfig? = null,
+    ) : this(
+        apiKey = config.apiKey,
+        model = config.model,
+        baseUrl = config.baseUrl,
+        sourceLang = sourceLang,
+        client = client,
+        extraBody = config.extraBody,
+        sendTemperature = config.sendTemperature,
+        headers = config.headers,
+        fallback = fallback?.takeUnless { it.sameModelAs(config) }?.let { TranslationEngine(it, sourceLang, client, null) },
+    )
+
     private val endpoint = LlmConfig.chatCompletionsUrl(baseUrl)
     private val mapper = jacksonObjectMapper()
+    private val isGemini = endpoint.contains("generativelanguage.googleapis.com", ignoreCase = true)
 
-    /** Some models (reasoning models) reject a non-default temperature; we drop it once seen. */
+    /** Model id requests are sent with. */
+    val modelId: String get() = model
+
+    /** Model id of the fallback engine, or null. */
+    val fallbackModelId: String? get() = fallback?.model
+
+    /**
+     * Whether `temperature` is sent. Off for models configured without it; also switched off
+     * once a model rejects a custom temperature (HTTP 400 mentioning temperature).
+     */
     @Volatile
-    private var sendTemperature = true
+    private var sendTemperature = sendTemperature
 
     internal data class ChatResult(val content: String, val finishReason: String?)
 
@@ -337,6 +380,50 @@ class TranslationEngine(
             return sb.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n\n")
         }
 
+        /** finish_reason values that mean the provider's safety filter cut the output. */
+        private val FILTER_FINISH_REASONS = setOf(
+            "content_filter", "sensitive", "safety", "prohibited_content", "blocklist", "spii", "recitation",
+        )
+
+        /** finish_reason values that mean the model finished normally (or ran out of tokens). */
+        private val NORMAL_FINISH_REASONS = setOf("stop", "length", "tool_calls", "function_call", "end_turn", "max_tokens")
+
+        /**
+         * True if [finishReason] means the output was blocked: OpenAI / Kimi `content_filter`,
+         * Z.ai `sensitive`, Gemini safety reasons. On Gemini ([gemini]) anything other than a
+         * normal stop or length limit counts as blocked.
+         */
+        internal fun isContentFilterFinish(finishReason: String?, gemini: Boolean = false): Boolean {
+            val reason = finishReason?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return false
+            if (reason in FILTER_FINISH_REASONS) return true
+            return gemini && reason !in NORMAL_FINISH_REASONS
+        }
+
+        /** Substrings (lower case) of provider error bodies that mean a content-filter block. */
+        private val FILTER_ERROR_MARKERS = listOf(
+            "content exists risk", // DeepSeek
+            "data_inspection_failed", // Qwen (OpenAI-compatible mode)
+            "datainspectionfailed", // Qwen (native error code)
+            "content_filter", // Kimi, Azure OpenAI
+            "content filter",
+            "prohibited_content", // Gemini
+            "content_policy_violation", // OpenAI
+            "\"finish_reason\":\"sensitive\"", // Z.ai
+        )
+
+        private val ZAI_FILTER_CODE = Regex(""""code"\s*:\s*"?1301"?(?![0-9])""")
+
+        /**
+         * True if an HTTP error response is a provider content-filter block (DeepSeek "Content
+         * Exists Risk", Qwen data_inspection_failed, Kimi content_filter, Z.ai code 1301, Gemini
+         * PROHIBITED_CONTENT, OpenAI content_policy_violation). Retrying with the same model never helps.
+         */
+        internal fun isContentFilterError(code: Int, body: String): Boolean {
+            if (code !in 400..499 || code == 401 || code == 404 || code == 429) return false
+            val lower = body.lowercase()
+            return FILTER_ERROR_MARKERS.any { it in lower } || ZAI_FILTER_CODE.containsMatchIn(body)
+        }
+
         /** Await an OkHttp call, cancelling it if the coroutine is cancelled. */
         private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
             cont.invokeOnCancellation { runCatching { cancel() } }
@@ -365,6 +452,8 @@ class TranslationEngine(
         /** Issue score of the kept attempt (lower is better). */
         val issueCount: Int,
         val outputParagraphs: Int,
+        /** Source chunks re-translated by the fallback model. */
+        val fallbackChunks: Int = 0,
     ) {
         operator fun plus(other: ChunkOutput) = ChunkOutput(
             translation = listOf(translation, other.translation).filter { it.isNotBlank() }.joinToString("\n\n"),
@@ -377,6 +466,7 @@ class TranslationEngine(
             retries = retries + other.retries,
             issueCount = issueCount + other.issueCount,
             outputParagraphs = outputParagraphs + other.outputParagraphs,
+            fallbackChunks = fallbackChunks + other.fallbackChunks,
         )
     }
 
@@ -420,6 +510,8 @@ class TranslationEngine(
         val leaks = mutableListOf<String>()
         var paragraphWarnings = 0
         var retries = 0
+        var fallbackChunks = 0
+        var chunksWithFallback = 0
 
         chunks.forEachIndexed { index, chunk ->
             coroutineContext.ensureActive()
@@ -453,6 +545,8 @@ class TranslationEngine(
             leaks += out.leakedFragments
             paragraphWarnings += out.paragraphWarnings
             retries += out.retries
+            fallbackChunks += out.fallbackChunks
+            if (out.fallbackChunks > 0) chunksWithFallback++
         }
 
         val summary = buildChapterSummary(summaries, options)
@@ -475,6 +569,12 @@ class TranslationEngine(
             retries = retries,
             violatedTerms = violated.map { "${it.source} → ${it.english}" }.distinct(),
             leakedFragments = leaks.distinct(),
+            fallbackChunks = fallbackChunks,
+            modelUsed = when {
+                chunksWithFallback == 0 || fallback == null -> model
+                chunksWithFallback >= chunks.size -> fallback?.model ?: model
+                else -> "$model + ${fallback?.model}"
+            },
         )
     }
 
@@ -523,7 +623,17 @@ class TranslationEngine(
         depth: Int
     ): ChunkOutput {
         val system = PromptTemplates.systemPrompt(sourceLang)
-        val result = chat(system, PromptTemplates.buildUserPrompt(chunk, promptTerms, sourceLang, context, preceding))
+        val result = try {
+            chat(system, PromptTemplates.buildUserPrompt(chunk, promptTerms, sourceLang, context, preceding))
+        } catch (e: TranslationApiException) {
+            if (e.contentFiltered && fallback != null) {
+                return runFallback(chunk, promptTerms, checkTerms, context, preceding, options, depth) ?: throw e
+            }
+            throw e
+        }
+        if (fallback != null && isContentFilterFinish(result.finishReason, isGemini)) {
+            runFallback(chunk, promptTerms, checkTerms, context, preceding, options, depth)?.let { return it }
+        }
         if (result.finishReason == "length" && depth < MAX_LENGTH_SPLIT_DEPTH && chunk.length >= MIN_SPLIT_CHARS) {
             val (first, second) = splitInHalf(chunk)
             if (first.isNotBlank() && second.isNotBlank()) {
@@ -539,6 +649,9 @@ class TranslationEngine(
         }
 
         var best = evaluate(chunk, result.content, checkTerms)
+        if (fallback != null && QualityChecks.looksLikeRefusal(chunk, best.translation)) {
+            runFallback(chunk, promptTerms, checkTerms, context, preceding, options, depth)?.let { return it }
+        }
         if (!options.strictMode || best.issueCount == 0) return best
 
         val reminder = PromptTemplates.buildReminder(
@@ -560,6 +673,31 @@ class TranslationEngine(
             // Keep the first attempt; a failed retry must not fail the chapter.
         }
         return best.copy(retries = 1)
+    }
+
+    /**
+     * Re-translates a chunk with the fallback engine (which has no fallback of its own). Returns
+     * null when there is no fallback or it failed too, so the caller keeps its own outcome.
+     */
+    private suspend fun runFallback(
+        chunk: String,
+        promptTerms: List<GlossaryTerm>,
+        checkTerms: List<GlossaryTerm>,
+        context: StoryContext,
+        preceding: String,
+        options: TranslationOptions,
+        depth: Int,
+    ): ChunkOutput? {
+        val engine = fallback ?: return null
+        return try {
+            engine.translateChunk(chunk, promptTerms, checkTerms, context, preceding, options, depth)
+                .takeIf { it.translation.isNotBlank() }
+                ?.copy(fallbackChunks = 1)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun evaluate(chunk: String, raw: String, checkTerms: List<GlossaryTerm>): ChunkOutput {
@@ -664,6 +802,7 @@ class TranslationEngine(
         return Request.Builder()
             .url(endpoint)
             .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey") }
+            .apply { headers.forEach { (name, value) -> header(name, value) } }
             .header("Content-Type", "application/json")
             .post(mapper.writeValueAsString(body).toRequestBody(JSON))
             .build()
@@ -677,6 +816,9 @@ class TranslationEngine(
         if (code in 200..299) return parseChatResponse(body)
 
         val message = errorMessage(body) ?: "HTTP $code"
+        if (isContentFilterError(code, body)) {
+            throw TranslationApiException("Blocked by the provider's content filter (HTTP $code): $message", contentFiltered = true)
+        }
         if (code == 400 && sendTemperature && message.contains("temperature", ignoreCase = true)) {
             // Model doesn't support custom temperature; retry immediately without it.
             sendTemperature = false

@@ -95,6 +95,29 @@ object QualityChecks {
     fun isParagraphShortfall(input: Int, output: Int): Boolean =
         input > 0 && output < input * MIN_PARAGRAPH_RATIO
 
+    /** Below this output/input paragraph ratio, refusal phrases mark the output as a refusal. */
+    const val REFUSAL_MAX_FIDELITY = 0.5
+
+    /** How far into the output refusal phrases are looked for. */
+    const val REFUSAL_SCAN_CHARS = 300
+
+    private val REFUSAL_PHRASES = listOf(
+        "i can't", "i can’t", "i cannot", "unable to", "copyright", "i won't", "i won’t",
+    )
+
+    /**
+     * True if [translation] looks like a refusal or an abridgement rather than a translation of
+     * [sourceChunk]: paragraph fidelity (output / input paragraphs) below 0.5 AND a refusal phrase
+     * ("I can't", "I cannot", "unable to", "copyright", "I won't") within the first 300 characters.
+     */
+    fun looksLikeRefusal(sourceChunk: String, translation: String): Boolean {
+        val input = countParagraphs(sourceChunk)
+        if (input == 0) return false
+        if (countParagraphs(translation).toDouble() / input >= REFUSAL_MAX_FIDELITY) return false
+        val head = translation.take(REFUSAL_SCAN_CHARS).lowercase()
+        return REFUSAL_PHRASES.any { it in head }
+    }
+
     fun check(sourceChunk: String, translation: String, terms: List<GlossaryTerm>): ChunkQuality =
         ChunkQuality(
             violatedTerms = findViolations(sourceChunk, translation, terms),
