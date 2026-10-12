@@ -2,81 +2,91 @@ package com.lagradost.quicknovel.ui.result
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.indication
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ripple
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.fromHtml
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -85,18 +95,13 @@ import com.lagradost.cloudstream4.compose.RoundedShape
 import com.lagradost.cloudstream4.compose.SingleSelectDialog
 import com.lagradost.cloudstream4.compose.circle
 import com.lagradost.cloudstream4.compose.rounded
-import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
-import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.CommonActivity.activity
-import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.compose.MaxContentWidth
 import com.lagradost.quicknovel.mvvm.safe
-import com.lagradost.quicknovel.providers.RoyalRoadProvider
+import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.ui.ReadType
-import com.lagradost.quicknovel.ui.common.DownloadStateAction
-import com.lagradost.quicknovel.ui.common.HorizontalTab
 import com.lagradost.quicknovel.ui.common.ImmutableChapterData
-import com.lagradost.quicknovel.ui.common.ImmutableChapterList
 import com.lagradost.quicknovel.ui.common.ImmutableDownloadState
 import com.lagradost.quicknovel.ui.common.ImmutableReview
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
@@ -106,519 +111,917 @@ import com.lagradost.quicknovel.ui.common.LoadingPoster
 import com.lagradost.quicknovel.ui.common.LoadingWeight
 import com.lagradost.quicknovel.ui.common.LoadingWidth
 import com.lagradost.quicknovel.ui.common.SearchList
-import com.lagradost.quicknovel.ui.common.SearchResponseAction
-import com.lagradost.quicknovel.ui.common.SearchResponseOperation
-import com.lagradost.quicknovel.ui.common.html
 import com.lagradost.quicknovel.ui.common.loading
 import com.lagradost.quicknovel.ui.common.loadingLineMargin
+import com.lagradost.quicknovel.ui.download.CHAPTER_SORT
+import com.lagradost.quicknovel.ui.download.LAST_ACCES_SORT
+import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
+import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.util.AppUtils.openInBrowser
+import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SettingsHelper.getRatingReview
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
-import com.lagradost.quicknovel.util.toPx
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.PersistentList
-import kotlinx.collections.immutable.mutate
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.persistentMapOf
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
-/*
-object ResultScreen : Screen {
-    @Composable
-    override fun Content() {
-        val viewModel: ResultViewModel2 =
-            viewModel(factory = ResultViewModel2.provideFactory(requireArguments()))
-        val state by viewModel.state.collectAsStateWithLifecycle()
+/**
+ * Scroll positions of the page, created above the layout switch so that fold / unfold (one pane
+ * ↔ two panes, same composition) and tab switches keep them. All of them are saveable.
+ */
+@Stable
+class ResultListStates(
+    val details: LazyListState,
+    val chapters: LazyListState,
+    val reviews: LazyListState,
+    val related: LazyGridState,
+)
 
-        ObserveEffect(viewModel.effect) { _ ->
-            // Not yet implemented
-        }
-        ResultScreen(state,viewModel::onAction)
-    }
-}*/
+@Composable
+fun rememberResultListStates(): ResultListStates {
+    val details = rememberLazyListState()
+    val chapters = rememberLazyListState()
+    val reviews = rememberLazyListState()
+    val related = rememberLazyGridState()
+    return remember(details, chapters, reviews, related) { ResultListStates(details, chapters, reviews, related) }
+}
 
+/** Html → text, re-parsed when the text changes (translated ↔ original). */
+@Composable
+private fun rememberHtml(text: String): AnnotatedString = remember(text) {
+    val parsed = AnnotatedString.fromHtml(text.replace("</p>", "<br/><br/>"))
+    val start = parsed.indexOfFirst { !it.isWhitespace() }.coerceAtLeast(0)
+    val end = parsed.indexOfLast { !it.isWhitespace() } + 1
+    if (end <= start) AnnotatedString("") else parsed.subSequence(start, end)
+}
 
+/** Caps an item at [MaxContentWidth], centred (single column on wide-ish windows). */
+private fun Modifier.capped(max: Dp = MaxContentWidth): Modifier =
+    this.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = max).fillMaxWidth()
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultScreen(state: ResultState, action: (ResultPageAction) -> Unit) {
-    Scaffold { innerPadding ->
-        if (state.loadingResponse) {
-            LoadingScreen(Modifier.padding(innerPadding))
-        } else {
-            ResultScreenImpl(innerPadding, state, action)
+    val lists = rememberResultListStates()
+    var posterShown by rememberSaveable { mutableStateOf(false) }
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    val response = state.response
+    val display = response?.let { metadataDisplayOf(state, it) }
+
+    val showTitleInBar by remember(state) {
+        derivedStateOf {
+            state.selectedTab != ResultTab.Novel || lists.details.firstVisibleItemIndex > 0
         }
     }
-}
 
-@Composable
-fun ResultScreenDialog(dialog: ResultDialog, action: (ResultPageAction) -> Unit) {
-    when (dialog) {
-        is ResultDialog.Bookmark -> {
-            SingleSelectDialog(
-                entries = ReadType.entries.associateWith { item -> stringResource(item.stringRes) },
-                dismiss = {
-                    action(ResultPageAction.DismissDialog)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = { backDispatcher?.onBackPressed() }) {
+                        Icon(
+                            painterResource(R.drawable.ic_baseline_arrow_back_24),
+                            contentDescription = stringResource(R.string.result_back)
+                        )
+                    }
                 },
-                title = stringResource(R.string.bookmark),
-                selectedKey = dialog.selected,
-                confirm = { selected ->
-                    action(ResultPageAction.SetBookmark(selected))
-                    action(ResultPageAction.DismissDialog)
-                })
+                title = {
+                    if (display != null && showTitleInBar) {
+                        Text(display.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        Box(
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+        ) {
+            when {
+                response == null && state.loadingResponse -> LoadingScreen(Modifier.capped())
+                response == null || display == null -> ErrorScreen(state, action)
+                else -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val widthDp = maxWidth.value.toInt()
+                    if (ResultPageLogic.isTwoPane(widthDp)) {
+                        TwoPaneLayout(widthDp, state, response, display, lists, action) { posterShown = true }
+                    } else {
+                        SinglePaneLayout(state, response, display, lists, action) { posterShown = true }
+                    }
+                }
+            }
         }
     }
+
+    state.dialog?.let { ResultScreenDialog(it, state, action) }
+
+    if (response != null) PosterOverlay(response, posterShown) { posterShown = false }
 }
 
-@Composable
-fun ResultScreenImpl(
-    padding: PaddingValues, state: ResultState, action: (ResultPageAction) -> Unit
-) {
-    if (state.dialog != null) {
-        ResultScreenDialog(state.dialog, action)
-    }
-
-    val response = state.response ?: return
-    // val scrollState = rememberScrollState()
-    val posterInteractionSource = remember { MutableInteractionSource() }
-    val posterBigInteractionSource = remember { MutableInteractionSource() }
-
-    val isPosterShown = remember { mutableStateOf(false) }
-
-    val tabNames = persistentListOf(
-        R.string.novel
-    ).mutate { list ->
-        if (!state.loadingResponse && state.api.hasReviews) {
-            list.add(R.string.reviews)
-        }
-        if (!response.loadData?.related.isNullOrEmpty()) {
-            list.add(R.string.related)
-        }
-        if (state.chapters != null) {
-            list.add(R.string.chapters)
-        }
-    }
-    val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { tabNames.size }
+private fun metadataDisplayOf(state: ResultState, response: ImmutableSearchResponse): MetadataDisplay =
+    ResultPageLogic.metadataDisplay(
+        name = response.name,
+        synopsis = response.synopsis,
+        latest = state.latestChapterName,
+        tags = response.tags.orEmpty(),
+        translatedTitle = state.translatedTitle,
+        translatedSynopsis = state.translatedSynopsis,
+        labels = state.labels,
+        showOriginal = state.showOriginal,
     )
 
-    val outerListState = rememberLazyListState()
-    val novelScroll = rememberLazyListState()
-    val reviewScroll = rememberLazyListState()
-    val relatedScroll = rememberLazyGridState()
-    val chapterScroll = rememberLazyListState()
-
-    val scope = rememberCoroutineScope()
-
-    // The back button is overridden to scroll up, or scroll to novel
-    val backEnabled = remember {
-        derivedStateOf(policy = structuralEqualityPolicy()) {
-            pagerState.currentPage != 0 || outerListState.firstVisibleItemIndex > 0
+@Composable
+private fun SinglePaneLayout(
+    state: ResultState,
+    response: ImmutableSearchResponse,
+    display: MetadataDisplay,
+    lists: ResultListStates,
+    action: (ResultPageAction) -> Unit,
+    showPoster: () -> Unit,
+) {
+    val tabs = ResultPageLogic.tabs(state.hasReviews, state.hasRelated, state.hasChapters, twoPane = false)
+    val shown = ResultPageLogic.shownTab(state.selectedTab, tabs)
+    Column(Modifier.fillMaxSize()) {
+        if (ResultPageLogic.showTabRow(tabs)) {
+            ResultTabRow(tabs, shown, state.allChapters?.size, action)
         }
-    }
-    BackHandler(enabled = backEnabled.value) {
-        scope.launch {
-            // If we are on the wrong page, but full scrolled up, then scroll to the first page
-            if (outerListState.firstVisibleItemIndex <= 0) {
-                pagerState.animateScrollToPage(0)
-                return@launch
-            }
-            // Otherwise scroll up
-            outerListState.animateScrollToItem(0)
-            // This is needed as otherwise you get weird nested scroll behavior
-            when (tabNames.getOrNull(pagerState.currentPage)) {
-                R.string.novel -> {
-                    novelScroll.animateScrollToItem(0)
-                }
-
-                R.string.reviews -> {
-                    reviewScroll.animateScrollToItem(0)
-                }
-
-                R.string.related -> {
-                    relatedScroll.animateScrollToItem(0)
-                }
-
-                R.string.chapters -> {
-                    chapterScroll.animateScrollToItem(0)
-                }
-            }
-        }
-    }
-
-    val scrollAlpha = remember {
-        derivedStateOf {
-            if (outerListState.firstVisibleItemIndex != 0) {
-                1.0f
-            } else {
-                (outerListState.firstVisibleItemScrollOffset.toFloat() / 200.toPx.toFloat()).coerceIn(
-                    0.0f,
-                    1.0f
-                )
-            }
-        } // (outerListState.value.toFloat() / 200.toPx.toFloat()).coerceIn(0.0f, 1.0f)
-    }
-
-    Box {
         Box(
-            modifier = Modifier
-                .padding(
-                    start = padding.calculateStartPadding(LocalLayoutDirection.current),
-                    end = padding.calculateEndPadding(LocalLayoutDirection.current),
-                    bottom = padding.calculateBottomPadding()
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            when (shown) {
+                ResultTab.Novel -> DetailsList(state, response, display, lists.details, action, showPoster, capWidth = true)
+                ResultTab.Reviews -> ReviewsPage(state.reviews, lists.reviews, action)
+                ResultTab.Related -> RelatedPage(response, lists.related, action)
+                ResultTab.Chapters -> ChapterPane(state, response, lists.chapters, action, Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+@Composable
+private fun TwoPaneLayout(
+    widthDp: Int,
+    state: ResultState,
+    response: ImmutableSearchResponse,
+    display: MetadataDisplay,
+    lists: ResultListStates,
+    action: (ResultPageAction) -> Unit,
+    showPoster: () -> Unit,
+) {
+    val (detailsWidth, _) = ResultPageLogic.twoPaneWidths(widthDp)
+    val tabs = ResultPageLogic.tabs(state.hasReviews, state.hasRelated, state.hasChapters, twoPane = true)
+    val shown = ResultPageLogic.shownTab(state.selectedTab, tabs)
+    Row(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .width(detailsWidth.dp)
+                .fillMaxHeight()
+        ) {
+            if (ResultPageLogic.showTabRow(tabs)) ResultTabRow(tabs, shown, null, action)
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                when (shown) {
+                    ResultTab.Reviews -> ReviewsPage(state.reviews, lists.reviews, action)
+                    ResultTab.Related -> RelatedPage(response, lists.related, action)
+                    else -> DetailsList(state, response, display, lists.details, action, showPoster, capWidth = false)
+                }
+            }
+        }
+        VerticalDivider()
+        if (state.hasChapters) {
+            ChapterPane(state, response, lists.chapters, action, Modifier.weight(1f).fillMaxHeight())
+        } else {
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.no_chapters), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResultTabRow(
+    tabs: List<ResultTab>,
+    shown: ResultTab,
+    chapterCount: Int?,
+    action: (ResultPageAction) -> Unit,
+) {
+    PrimaryScrollableTabRow(
+        selectedTabIndex = tabs.indexOf(shown).coerceAtLeast(0),
+        edgePadding = 8.dp,
+        containerColor = MaterialTheme.colorScheme.background,
+        divider = { HorizontalDivider() },
+    ) {
+        tabs.forEach { tab ->
+            Tab(
+                selected = tab == shown,
+                onClick = { action(ResultPageAction.SelectTab(tab)) },
+                text = {
+                    val title = stringResource(tab.title)
+                    Text(
+                        if (tab == ResultTab.Chapters && chapterCount != null) "$title · $chapterCount" else title,
+                        maxLines = 1,
+                    )
+                },
+            )
+        }
+    }
+}
+
+// ================================== details ==================================
+
+@Composable
+private fun DetailsList(
+    state: ResultState,
+    response: ImmutableSearchResponse,
+    display: MetadataDisplay,
+    listState: LazyListState,
+    action: (ResultPageAction) -> Unit,
+    showPoster: () -> Unit,
+    capWidth: Boolean,
+) {
+    val itemModifier = if (capWidth) Modifier.capped() else Modifier.fillMaxWidth()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        item(key = "header") { Header(response, display, state, showPoster) }
+        item(key = "actions") { ActionRow(state, response, itemModifier, action) }
+
+        val cells = ResultPageLogic.statCells(
+            views = response.loadData?.views,
+            rating = response.rating,
+            peopleVoted = response.loadData?.peopleVoted,
+            chapterCount = (state.allChapters?.size).takeIf { response.loadData?.chapters != null },
+        )
+        if (cells.isNotEmpty()) item(key = "stats") { StatsRow(cells, itemModifier) }
+
+        state.languageLabel?.let { label ->
+            item(key = "language") { LanguageRow(label, itemModifier) { action(ResultPageAction.ChooseSourceLanguage) } }
+        }
+
+        if (state.slowSource && !state.isImported) {
+            item(key = "slow") {
+                Text(
+                    stringResource(R.string.long_download_time),
+                    color = colorResource(R.color.colorPrimaryRed),
+                    fontSize = 14.sp,
+                    modifier = itemModifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
-                .height(height = 190.dp + padding.calculateTopPadding())
-                .alpha(1.0f - scrollAlpha.value * 0.5f)
+            }
+        }
+
+        val downloadState = response.downloadState
+        if (downloadState != null) {
+            item(key = "download") { DownloadSection(state, response, downloadState, itemModifier, action) }
+        }
+
+        if (state.showTranslate) {
+            item(key = "translate") { TranslateRow(state, itemModifier, action) }
+        }
+
+        if (!display.synopsis.isNullOrBlank() || display.canToggle) {
+            item(key = "synopsis") { Synopsis(display, state.showOriginal, itemModifier, action) }
+        }
+
+        if (display.tags.isNotEmpty()) {
+            item(key = "tags") { Tags(response, display, state, itemModifier, action) }
+        }
+        item(key = "bottom") { Spacer(Modifier.height(40.dp)) }
+    }
+}
+
+@Composable
+private fun Header(
+    response: ImmutableSearchResponse,
+    display: MetadataDisplay,
+    state: ResultState,
+    showPoster: () -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 190.dp)
+    ) {
+        AsyncImage(
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.matchParentSize(),
+            model = response.blurImageRequest(),
+            contentDescription = null,
+            alpha = 0.3f
+        )
+        Row(
+            Modifier
+                .capped()
+                .padding(horizontal = 12.dp, vertical = 16.dp)
         ) {
             AsyncImage(
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                model = response.blurImageRequest(),
-                contentDescription = stringResource(R.string.poster_descript),
-                alpha = 0.3f
-            )
-            Row(
                 modifier = Modifier
-                    .padding(top = padding.calculateTopPadding())
-                    .padding(10.dp)
-                    .scale(1.0f - scrollAlpha.value * 0.05f)
-            ) {
-                AsyncImage(
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(width = 100.dp, height = 150.dp)
-                        .indication(
-                            interactionSource = posterInteractionSource,
-                            indication = ripple()
-                        )
-                        .rounded(),
-                    model = response.imageRequest(),
-                    contentDescription = stringResource(R.string.poster_descript),
-                )
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text(
-                        response.name,
-                        fontSize = 20.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (response.author != null) {
-                        Text(response.author, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
-                    }
-                    response.loadData?.status?.let { status ->
-                        Text(
-                            stringResource(status.resource),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                    }
-                    response.loadData?.chapters?.lastOrNull()?.let { chapter ->
-                        Text(stringResource(R.string.latest_format, chapter.name), fontSize = 14.sp)
-                    }
-                }
-            }
-        }
-
-        val parentFirstScrollConnection = remember {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    val delta = available.y
-                    return if (delta < 0 && outerListState.canScrollForward) {
-                        val consumed = outerListState.dispatchRawDelta(-delta)
-                        Offset(0f, -consumed)
-                    } else {
-                        Offset.Zero
-                    }
-                }
-            }
-        }
-
-        LazyColumn(modifier = Modifier.fillMaxSize(), state = outerListState) {
-            item(key = "top spacer") {
-                Spacer(
-                    Modifier
-                        .height(170.dp + padding.calculateTopPadding())
-                        .fillMaxWidth()
-                        .clickable(
-                            interactionSource = posterInteractionSource,
-                            indication = null,
-                            onClick = {
-                                isPosterShown.value = !isPosterShown.value
-                            })
-                )
-            }
-            item(key = "bookmark holder") {
-                Column(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(15.dp, 15.dp))
-                        .background(color = MaterialTheme.colorScheme.background)
-                        .padding(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(5.dp)
-                            .fillMaxWidth()
-                            .height(75.dp)
-                            .clip(RoundedCornerShape(15.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
-                    ) {
-                        TextIcon(
-                            stringResource(if (state.bookmark == ReadType.NONE) R.string.bookmark else state.bookmark.stringRes),
-                            icon = if (state.bookmark == ReadType.NONE) R.drawable.ic_baseline_add_24 else R.drawable.ic_baseline_bookmark_24,
-                        ) {
-                            action(ResultPageAction.OpenBookmark)
-                        }
-                        TextIcon(
-                            stringResource(R.string.download_open_action),
-                            R.drawable.ic_baseline_public_24,
-                        ) {
-                            openInBrowser(response.url)
-                        }
-                        TextIcon(
-                            stringResource(R.string.result_share),
-                            R.drawable.ic_outline_share_24,
-                        ) {
-                            safe {
-                                val i = Intent(Intent.ACTION_SEND)
-                                i.type = "text/plain"
-                                i.putExtra(Intent.EXTRA_SUBJECT, response.name)
-                                i.putExtra(Intent.EXTRA_TEXT, response.url)
-                                activity?.startActivity(Intent.createChooser(i, response.name))
-                            }
-                        }
-                    }
-                }
-            }
-            if (tabNames.size > 1) {
-                item(key = "tab layout") {
-                    HorizontalTab(
-                        edgePadding = 15.dp,
-                        pagerState = pagerState,
-                        names = tabNames,
-                        containerColor = MaterialTheme.colorScheme.background
-                    )
-                }
-            }
-
-            item(key = "content") {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier
-                        .fillParentMaxHeight()
-                        .background(MaterialTheme.colorScheme.background),
-                    verticalAlignment = Alignment.Top
-                ) { page ->
-                    when (tabNames[page]) {
-                        R.string.novel -> {
-                            NovelPage(state, action, novelScroll)
-                        }
-
-                        R.string.reviews -> {
-                            ReviewsPage(
-                                loadingReviews = state.reviews.loading,
-                                reviews = state.reviews.items,
-                                nestedScrollConnection = parentFirstScrollConnection,
-                                action = action,
-                                innerListState = reviewScroll,
-                            )
-                        }
-
-                        R.string.related -> {
-                            RelatedPage(
-                                nestedScrollConnection = parentFirstScrollConnection,
-                                related = response.loadData?.related ?: persistentListOf(),
-                                action = action,
-                                innerListState = relatedScroll
-                            )
-                        }
-
-                        R.string.chapters -> {
-                            val chapters = state.chapters
-                            if (chapters != null) {
-                                ChapterPage(
-                                    response = response,
-                                    chapters = chapters,
-                                    action = action,
-                                    nestedScrollConnection = parentFirstScrollConnection,
-                                    innerListState = chapterScroll
-                                )
-                            }
-                        }
-
-                        else -> {
-
-                        }
-                    }
-                }
-            }
-        }
-
-        val animatedAlpha: Float by animateFloatAsState(
-            if (isPosterShown.value) {
-                1f
-            } else {
-                0f
-            },
-            label = "alpha",
-            animationSpec = tween(durationMillis = 200),
-        )
-
-        BackHandler(enabled = isPosterShown.value) {
-            isPosterShown.value = false
-        }
-
-        if (animatedAlpha > 0.0f) {
-            AsyncImage(
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(color = MaterialTheme.colorScheme.background.copy(alpha = 0.8f * animatedAlpha))
-                    .clickable(
-                        onClick = {
-                            isPosterShown.value = !isPosterShown.value
-                        })
-                    .alpha(animatedAlpha),
+                    .size(width = 100.dp, height = 150.dp)
+                    .rounded()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable(onClick = showPoster),
                 model = response.imageRequest(),
                 contentDescription = stringResource(R.string.poster_descript),
             )
+            Column(
+                Modifier
+                    .padding(start = 12.dp)
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(display.title, fontSize = 20.sp, lineHeight = 24.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                display.originalTitle?.let {
+                    Text(
+                        it, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    response.author ?: stringResource(R.string.no_author),
+                    color = MaterialTheme.colorScheme.primary, fontSize = 14.sp
+                )
+                response.loadData?.status?.let { status ->
+                    Text(stringResource(status.resource), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 14.sp)
+                }
+                if (state.allChapters != null) {
+                    Text(
+                        display.latest?.let { stringResource(R.string.latest_format, it) } ?: stringResource(R.string.no_chapters),
+                        fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-fun BoxScope.FloatingStreamRead(
+private fun ActionRow(
+    state: ResultState,
     response: ImmutableSearchResponse,
+    modifier: Modifier,
     action: (ResultPageAction) -> Unit
 ) {
-    ExtendedFloatingActionButton(
-        modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .padding(16.dp),
-        onClick = {
-            action(
-                ResultPageAction.ResultAction(
-                    SearchResponseAction(response, SearchResponseOperation.Stream)
+    Row(
+        modifier
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .height(64.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        TextIcon(
+            stringResource(if (state.bookmark == ReadType.NONE) R.string.bookmark else state.bookmark.stringRes),
+            icon = if (state.bookmark == ReadType.NONE) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24,
+        ) { action(ResultPageAction.OpenBookmark) }
+        if (!state.isImported) {
+            TextIcon(stringResource(R.string.open_in_browser), R.drawable.ic_baseline_public_24) {
+                openInBrowser(response.url)
+            }
+            TextIcon(stringResource(R.string.result_share), R.drawable.ic_outline_share_24) {
+                safe {
+                    val i = Intent(Intent.ACTION_SEND)
+                    i.type = "text/plain"
+                    i.putExtra(Intent.EXTRA_SUBJECT, response.name)
+                    i.putExtra(Intent.EXTRA_TEXT, response.url)
+                    activity?.startActivity(Intent.createChooser(i, response.name))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsRow(cells: List<StatCell>, modifier: Modifier) {
+    val context = LocalContext.current
+    Row(
+        modifier
+            .padding(horizontal = 5.dp)
+            .height(56.dp)
+    ) {
+        cells.forEach { cell ->
+            when (cell) {
+                is StatCell.Views -> TextInfo(humanReadableByteCountSI(cell.views), stringResource(R.string.views))
+                is StatCell.Rating -> TextInfo(
+                    context.getRating(cell.rating),
+                    cell.votes?.let { stringResource(R.string.votes_format, it) } ?: stringResource(R.string.result_rating)
                 )
+
+                is StatCell.Votes -> TextInfo(cell.votes.toString(), stringResource(R.string.votes_format, cell.votes).substringAfter(' '))
+                is StatCell.Chapters -> TextInfo(
+                    cell.count.toString(),
+                    stringResource(if (cell.count == 1) R.string.chapter else R.string.chapters)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguageRow(label: SourceLanguageLabel, modifier: Modifier, onClick: () -> Unit) {
+    val name = label.code?.let { TranslationLanguages.displayName(it) }
+    Row(
+        modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(painterResource(R.drawable.ic_baseline_language_24), contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(stringResource(R.string.result_source_language) + ": ", fontSize = 14.sp)
+        Text(
+            when {
+                name == null -> stringResource(R.string.result_language_unknown)
+                label.manual -> stringResource(R.string.result_language_chosen, name)
+                else -> stringResource(R.string.result_language_detected, name)
+            },
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+private fun DownloadSection(
+    state: ResultState,
+    response: ImmutableSearchResponse,
+    downloadState: ImmutableDownloadState,
+    modifier: Modifier,
+    action: (ResultPageAction) -> Unit,
+) {
+    val actions = remember(downloadState, state.isImported) {
+        ResultPageLogic.downloadActions(downloadState.status, downloadState.progress, downloadState.downloaded, downloadState.total)
+            .filter { !state.isImported || it == DownloadMenuAction.Delete }
+    }
+    val look = ResultPageLogic.downloadButton(downloadState.status, downloadState.progress, downloadState.total)
+    var menuOpen by remember { mutableStateOf(false) }
+
+    Column(modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
+        Row {
+            TextButton(
+                shape = RoundedShape(),
+                colors = Colors.whiteButton,
+                enabled = downloadState.progress > 0,
+                modifier = Modifier
+                    .padding(2.dp)
+                    .height(44.dp)
+                    .weight(1f),
+                onClick = { action(ResultPageAction.ReadEpub) }
+            ) {
+                if (response.generating) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.size(22.dp), strokeWidth = 3.dp
+                    )
+                } else {
+                    Icon(painterResource(R.drawable.book_2_24px), contentDescription = null, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.read_epub), maxLines = 1)
+                }
+            }
+            Box(
+                Modifier
+                    .padding(2.dp)
+                    .height(44.dp)
+                    .weight(1f)
+            ) {
+                DownloadButton(look, enabled = look.enabled && (!state.isImported || actions.isNotEmpty()),
+                    onClick = {
+                        if (state.isImported) {
+                            menuOpen = actions.isNotEmpty()
+                            return@DownloadButton
+                        }
+                        when (val click = ResultPageLogic.downloadClick(actions)) {
+                            DownloadClick.Toggle -> action(ResultPageAction.DownloadOrPause)
+                            is DownloadClick.Run -> action(ResultPageAction.Download(click.action))
+                            is DownloadClick.Menu -> menuOpen = true
+                        }
+                    },
+                    onLongClick = { if (actions.isNotEmpty()) menuOpen = true })
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    actions.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(item.label)) },
+                            onClick = {
+                                menuOpen = false
+                                action(ResultPageAction.Download(item))
+                            })
+                    }
+                }
+            }
+        }
+        if (!state.isImported && state.hasChapters) {
+            TextButton(
+                shape = RoundedShape(),
+                colors = Colors.blackButton,
+                modifier = Modifier
+                    .padding(2.dp)
+                    .fillMaxWidth(),
+                onClick = { action(ResultPageAction.StreamRead) }
+            ) {
+                Icon(painterResource(R.drawable.netflix_play), contentDescription = null, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.stream_read))
+            }
+        }
+
+        val animatedProgress by animateFloatAsState(
+            downloadState.progressPercentage, label = "progress", animationSpec = tween(durationMillis = 500),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)) {
+            LinearProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onBackground,
             )
-        },
-        // Elevation actually changes the color, because who wanted a sane framework
-        elevation = FloatingActionButtonDefaults.elevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            focusedElevation = 0.dp,
-            hoveredElevation = 0.dp
-        ),
-        containerColor = MaterialTheme.colorScheme.onBackground,
-        contentColor = MaterialTheme.colorScheme.surfaceVariant,
-        text = {
-            Text(stringResource(R.string.stream_read))
-        },
-        icon = {
-            Icon(
-                modifier = Modifier.size(24.dp),
-                painter = painterResource(R.drawable.netflix_play),
-                contentDescription = stringResource(R.string.stream_read)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "${downloadState.progress}/${downloadState.total}",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        },
-        expanded = false
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DownloadButton(look: DownloadButtonLook, enabled: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val colors = Colors.blackButton
+    Row(
+        Modifier
+            .fillMaxSize()
+            .clip(RoundedShape())
+            .background(colors.containerColor)
+            .alpha(if (enabled) 1f else 0.5f)
+            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(look.icon), contentDescription = null, modifier = Modifier.size(22.dp), tint = colors.contentColor)
+        Spacer(Modifier.width(6.dp))
+        Text(stringResource(look.label), color = colors.contentColor, maxLines = 1, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun TranslateRow(state: ResultState, modifier: Modifier, action: (ResultPageAction) -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val button = state.translateButton
+    Row(
+        modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            shape = RoundedShape(),
+            colors = Colors.whiteButton,
+            enabled = button.enabled,
+            modifier = Modifier
+                .padding(2.dp)
+                .weight(1f),
+            onClick = { action(ResultPageAction.Translate()) }
+        ) {
+            Icon(painterResource(R.drawable.ic_baseline_translate_24), contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                when (val label = button.progressLabel) {
+                    null -> stringResource(R.string.result_translate)
+                    ResultPageLogic.STARTING -> stringResource(R.string.result_translate_starting)
+                    else -> label
+                },
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        TextButton(
+            shape = RoundedShape(),
+            colors = Colors.whiteButton,
+            modifier = Modifier
+                .padding(2.dp)
+                .weight(1f),
+            onClick = { action(ResultPageAction.OpenGlossary) }
+        ) {
+            Icon(painterResource(R.drawable.ic_baseline_menu_book_24), contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.result_glossary), maxLines = 1)
+        }
+        // The analysis and language actions used to hide behind a long press: a visible menu now.
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(
+                    painterResource(R.drawable.ic_baseline_more_vert_24),
+                    contentDescription = stringResource(R.string.result_more_actions)
+                )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.glossary_menu_analyze)) },
+                    onClick = {
+                        menuOpen = false
+                        action(ResultPageAction.Analyze)
+                    })
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.result_glossary)) },
+                    onClick = {
+                        menuOpen = false
+                        action(ResultPageAction.OpenGlossary)
+                    })
+                if (state.isImported) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.imported_menu_language)) },
+                        onClick = {
+                            menuOpen = false
+                            action(ResultPageAction.ChooseSourceLanguage)
+                        })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Synopsis(display: MetadataDisplay, showOriginal: Boolean, modifier: Modifier, action: (ResultPageAction) -> Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Column(modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
+        if (display.canToggle) {
+            Text(
+                stringResource(if (showOriginal) R.string.browse_show_translation else R.string.browse_show_original),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedShape())
+                    .clickable { action(ResultPageAction.ToggleOriginal) }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            )
+        }
+        val synopsis = display.synopsis
+        Text(
+            text = if (synopsis.isNullOrBlank()) AnnotatedString("…") else rememberHtml(synopsis),
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 14.sp,
+            lineHeight = 19.sp,
+            maxLines = if (expanded) Int.MAX_VALUE else 6,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedShape())
+                .clickable { expanded = !expanded }
+                .padding(6.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Tags(
+    response: ImmutableSearchResponse,
+    display: MetadataDisplay,
+    state: ResultState,
+    modifier: Modifier,
+    action: (ResultPageAction) -> Unit,
+) {
+    val originals = response.tags.orEmpty()
+    FlowRow(modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+        display.tags.forEachIndexed { i, tag ->
+            val index = originals.getOrNull(i)?.let { state.tagIndex[it] }
+            Text(
+                text = tag,
+                fontSize = 13.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier
+                    .padding(3.dp)
+                    .clip(RoundedShape())
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .then(if (index != null) Modifier.clickable { action(ResultPageAction.OpenTag(index)) } else Modifier)
+                    .padding(horizontal = 9.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+// ================================== chapters ==================================
+
+@Composable
+private fun ChapterPane(
+    state: ResultState,
+    response: ImmutableSearchResponse,
+    listState: LazyListState,
+    action: (ResultPageAction) -> Unit,
+    modifier: Modifier,
+) {
+    val chapters = state.chapters
+    var searching by rememberSaveable { mutableStateOf(state.chapterQuery.isNotEmpty()) }
+    Column(modifier) {
+        Row(
+            Modifier
+                .capped()
+                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val total = state.allChapters?.size ?: 0
+            val listed = chapters?.size ?: 0
+            Text(
+                if (listed == total) pluralStringResource(R.plurals.result_chapter_count, total, total)
+                else "$listed / " + pluralStringResource(R.plurals.result_chapter_count, total, total),
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = {
+                searching = !searching
+                if (!searching) action(ResultPageAction.SetChapterQuery(""))
+            }) {
+                Icon(painterResource(R.drawable.search_icon), contentDescription = stringResource(R.string.result_search_chapters))
+            }
+            IconButton(onClick = { action(ResultPageAction.OpenChapterFilter) }) {
+                Icon(
+                    painterResource(R.drawable.ic_baseline_filter_list_24),
+                    contentDescription = stringResource(R.string.result_filter_sort)
+                )
+            }
+        }
+        if (searching) {
+            OutlinedTextField(
+                value = state.chapterQuery,
+                onValueChange = { action(ResultPageAction.SetChapterQuery(it)) },
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.result_search_chapters)) },
+                modifier = Modifier
+                    .capped()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
+        HorizontalDivider()
+        if (chapters.isNullOrEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(if (state.hasChapters) R.string.result_no_matching_chapters else R.string.no_chapters),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 40.dp)
+            ) {
+                items(chapters, key = { it.url + "#" + it.index }) { chapter ->
+                    ChapterRow(
+                        state = state,
+                        response = response,
+                        chapter = chapter,
+                        read = state.readAt.containsKey(chapter.index),
+                        status = ResultPageLogic.chipFor(chapter.index, state.chapterStatuses),
+                        action = action,
+                        modifier = Modifier.capped()
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Machine-translated chapter names (the Google option), kept for the session. */
+private object ChapterNameTranslations {
+    private val cache = ConcurrentHashMap<String, String>()
+    fun cached(name: String): String? = cache[name]
+    suspend fun translate(name: String): String? = cache[name] ?: withContext(Dispatchers.IO) {
+        try {
+            GoogleTranslate.translate(name).takeIf { it.isNotBlank() }?.also { cache[name] = it }
+        } catch (t: Throwable) {
+            null
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChapterRow(
+    state: ResultState,
+    response: ImmutableSearchResponse,
+    chapter: ImmutableChapterData,
+    read: Boolean,
+    status: ChapterTranslationStatus,
+    action: (ResultPageAction) -> Unit,
+    modifier: Modifier,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val translateNames = state.translateChapterNames && !state.showOriginal
+    val name by produceState(
+        initialValue = if (translateNames) ChapterNameTranslations.cached(chapter.name) ?: chapter.name else chapter.name,
+        chapter.name, translateNames
+    ) {
+        value = if (translateNames) ChapterNameTranslations.translate(chapter.name) ?: chapter.name else chapter.name
+    }
+    Box(modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = { action(ResultPageAction.ChapterAction(response, chapter, ChapterOperation.Stream)) },
+                    onLongClick = { menuOpen = true },
+                )
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .alpha(if (read) 0.5f else 1f)
+            ) {
+                Text(name, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!chapter.dateOfRelease.isNullOrBlank()) {
+                    Text(
+                        chapter.dateOfRelease, fontSize = 12.sp, lineHeight = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (status != ChapterTranslationStatus.NONE) {
+                Spacer(Modifier.width(8.dp))
+                StatusChip(status)
+            }
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            if (response.loadData?.chapters != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(if (read) R.string.result_mark_unread else R.string.result_mark_read)) },
+                    onClick = {
+                        menuOpen = false
+                        action(ResultPageAction.ChapterAction(response, chapter, ChapterOperation.ToggleRead))
+                    })
+            }
+            if (state.showTranslate) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.result_translate_chapter)) },
+                    onClick = {
+                        menuOpen = false
+                        action(ResultPageAction.Translate(startChapter = chapter.index))
+                    })
+            }
+            if (!state.isImported && response.loadData?.chapters != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.result_download_from_here)) },
+                    onClick = {
+                        menuOpen = false
+                        action(ResultPageAction.DownloadFrom(chapter.index))
+                    })
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(status: ChapterTranslationStatus) {
+    val (text, color) = when (status) {
+        ChapterTranslationStatus.TRANSLATED -> R.string.chapter_status_translated to MaterialTheme.colorScheme.primary
+        ChapterTranslationStatus.STALE -> R.string.chapter_status_stale to colorResource(R.color.ratingColorBg)
+        ChapterTranslationStatus.QUEUED -> R.string.chapter_status_queued to MaterialTheme.colorScheme.onSurfaceVariant
+        ChapterTranslationStatus.NONE -> return
+    }
+    Text(
+        stringResource(text),
+        color = color,
+        fontSize = 11.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
     )
 }
 
-@Composable
-fun ChapterPage(
-    response: ImmutableSearchResponse,
-    chapters: ImmutableChapterList,
-    action: (ResultPageAction) -> Unit,
-    nestedScrollConnection: NestedScrollConnection,
-    innerListState: LazyListState,
-) {
-    LazyColumn(
-        state = innerListState,
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(nestedScrollConnection)
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        items(chapters.sorted, key = { item ->
-            item.randomUuid
-        }) { chapter ->
-            ChapterItem(response, chapter, action = action, modifier = Modifier.animateItem())
-        }
-    }
-}
+// ================================== reviews / related ==================================
 
 @Composable
-fun ChapterItem(
-    response: ImmutableSearchResponse,
-    chapter: ImmutableChapterData,
+private fun ReviewsPage(
+    reviews: ResultReviewState,
+    listState: LazyListState,
     action: (ResultPageAction) -> Unit,
-    modifier: Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = {
-                action(
-                    ResultPageAction.ChapterAction(
-                        response,
-                        chapter,
-                        ChapterOperation.Stream
-                    )
-                )
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        items(reviews.items, key = { it.randomUuid }) { review ->
+            ReviewItem(review, modifier = Modifier.capped(), action = action)
+        }
+        if (reviews.loading) {
+            item(key = "loading") {
+                Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
-            )
-            .padding(10.dp)
-    ) {
-        Text(chapter.name, fontSize = 14.sp, lineHeight = 13.sp)
-        if (chapter.dateOfRelease != null) {
-            Text(
-                chapter.dateOfRelease,
-                fontSize = 12.sp,
-                lineHeight = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
-}
-
-@Composable
-fun ReviewsPage(
-    loadingReviews: Boolean,
-    reviews: PersistentList<ImmutableReview>,
-    nestedScrollConnection: NestedScrollConnection,
-    action: (ResultPageAction) -> Unit,
-    innerListState: LazyListState,
-) {
-    LazyColumn(
-        state = innerListState,
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(nestedScrollConnection)
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        items(reviews, key = { item ->
-            item.randomUuid
-        }) { review ->
-            ReviewItem(review, modifier = Modifier.animateItem(), action = action)
-        }
-    }
-
-    val shouldLoadMore = remember {
+    val shouldLoadMore by remember {
         derivedStateOf {
-            val lastVisibleIndex =
-                innerListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val totalItems = innerListState.layoutInfo.totalItemsCount
-            lastVisibleIndex >= totalItems - 5
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last >= listState.layoutInfo.totalItemsCount - 5
         }
     }
-
-    LaunchedEffect(shouldLoadMore.value) {
-        if (shouldLoadMore.value && !loadingReviews) {
-            action(ResultPageAction.ExpandReviews)
-        }
+    LaunchedEffect(shouldLoadMore, reviews.items.size) {
+        if (shouldLoadMore && !reviews.loading && reviews.error == null) action(ResultPageAction.ExpandReviews)
     }
 }
-
 
 @Composable
 fun ReviewItem(
@@ -626,13 +1029,10 @@ fun ReviewItem(
     modifier: Modifier,
     action: (ResultPageAction) -> Unit,
 ) {
-    val expanded = rememberSaveable { mutableStateOf(false) }
-    val showSpoiler = rememberSaveable { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var showSpoiler by rememberSaveable { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .padding(bottom = 10.dp)
-    ) {
+    Column(modifier = modifier.padding(bottom = 10.dp)) {
         Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (review.avatarUrl != null) {
                 AsyncImage(
@@ -642,45 +1042,21 @@ fun ReviewItem(
                     modifier = Modifier
                         .size(40.dp)
                         .circle()
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
-                            shape = CircleShape
-                        )
+                        .border(1.dp, MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), CircleShape)
                 )
             }
-
-            Column(
-                modifier = Modifier.padding(horizontal = 10.dp),
-            ) {
-                Text(
-                    text = review.title ?: stringResource(R.string.no_data),
-                    fontSize = 14.sp,
-                    lineHeight = 13.sp,
-                )
-
+            Column(modifier = Modifier.padding(horizontal = 10.dp)) {
+                Text(text = review.title ?: stringResource(R.string.no_data), fontSize = 14.sp)
                 Row {
-                    if (review.username != null) {
-                        Text(
-                            text = review.username,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            lineHeight = 11.sp,
-                            modifier = Modifier.padding(end = 5.dp)
-                        )
+                    review.username?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(end = 5.dp))
                     }
-                    if (review.date != null) {
-                        Text(
-                            text = review.date,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            lineHeight = 11.sp
-                        )
-                    }
+                    review.date?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
                 }
             }
         }
 
+        @OptIn(ExperimentalLayoutApi::class)
         FlowRow(modifier = Modifier.padding(horizontal = 6.dp)) {
             review.rating?.let {
                 Text(
@@ -689,9 +1065,7 @@ fun ReviewItem(
                         .background(color = MaterialTheme.colorScheme.onBackground, shape = RoundedShape())
                         .padding(horizontal = 6.dp),
                     color = MaterialTheme.colorScheme.background,
-                    text = stringResource(R.string.overall) + " " + LocalContext.current.getRatingReview(
-                        it
-                    ),
+                    text = stringResource(R.string.overall) + " " + LocalContext.current.getRatingReview(it),
                     fontSize = 13.sp
                 )
             }
@@ -702,340 +1076,230 @@ fun ReviewItem(
                         .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedShape())
                         .padding(horizontal = 6.dp),
                     color = MaterialTheme.colorScheme.onBackground,
-                    text = "$name " + LocalContext.current.getRatingReview(
-                        rating
-                    ),
+                    text = "$name " + LocalContext.current.getRatingReview(rating),
                     fontSize = 13.sp
                 )
             }
         }
 
-        val isSpoilerActive = review.containsSpoilers && !showSpoiler.value
-
+        val isSpoilerActive = review.containsSpoilers && !showSpoiler
         Text(
             modifier = Modifier
                 .padding(5.dp)
                 .fillMaxWidth()
-                .clickable(onClick = {
-                    if (isSpoilerActive) {
-                        showSpoiler.value = true
-                    } else {
-                        expanded.value = !expanded.value
-                    }
-                })
-                .rounded()
-                .padding(5.dp)
-                .background(
-                    if (isSpoilerActive) {
-                        MaterialTheme.colorScheme.onBackground
-                    } else {
-                        Color.Transparent
-                    }, shape = RoundedShape()
-                ),
-            text = review.content.html(),
-            color = if (isSpoilerActive) {
-                Color.Transparent
-            } else {
-                MaterialTheme.colorScheme.onBackground
-            },
+                .clip(RoundedShape())
+                .clickable {
+                    if (isSpoilerActive) showSpoiler = true else expanded = !expanded
+                }
+                .background(if (isSpoilerActive) MaterialTheme.colorScheme.onBackground else Color.Transparent, RoundedShape())
+                .padding(5.dp),
+            text = rememberHtml(review.content),
+            color = if (isSpoilerActive) Color.Transparent else MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
-            lineHeight = 15.sp,
-            maxLines = if (expanded.value) Int.MAX_VALUE else 8,
+            lineHeight = 17.sp,
+            maxLines = if (expanded) Int.MAX_VALUE else 8,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun NovelPage(
-    state: ResultState,
-    action: (ResultPageAction) -> Unit,
-    innerListState: LazyListState,
-) {
-    val expanded = rememberSaveable { mutableStateOf(false) }
-    val response = state.response ?: return
-
-    LazyColumn(state = innerListState) {
-        item(key = "infobar") {
-            Row(
-                modifier = Modifier
-                    .padding(5.dp)
-                    .fillMaxWidth()
-                    .height(60.dp)
-            ) {
-                TextInfo(
-                    response.loadData?.views?.let(::humanReadableByteCountSI)
-                        ?: stringResource(R.string.no_data), stringResource(R.string.views)
-                )
-                TextInfo(response.rating?.let {
-                    LocalContext.current.getRating(it)
-                } ?: stringResource(R.string.no_data),
-                    response.loadData?.peopleVoted?.let {
-                        stringResource(
-                            R.string.votes_format,
-                            it
-                        )
-                    }
-                        ?: stringResource(R.string.no_data))
-                TextInfo(
-                    response.loadData?.chapters?.size?.toString()
-                        ?: stringResource(R.string.no_data),
-                    stringResource(R.string.chapters)
-                )
-            }
-        }
-
-        item(key = "spacer") {
-            Box(
-                modifier = Modifier
-                    .height(1.dp)
-                    .padding(horizontal = 15.dp)
-                    .fillMaxWidth()
-                    .background(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
-            )
-        }
-
-        if (!response.synopsis.isNullOrBlank()) {
-            item(key = "synopsis") {
-                Text(
-                    modifier = Modifier
-                        .padding(5.dp)
-                        .clickable(
-                            onClick = {
-                                expanded.value = !expanded.value
-                            })
-                        .rounded()
-                        .padding(5.dp),
-                    text = response.synopsis.html(),
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 14.sp,
-                    lineHeight = 15.sp,
-                    maxLines = if (expanded.value) Int.MAX_VALUE else 8,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        val tags = response.tags
-        if (tags != null) {
-            item(key = "tags") {
-                Tags(tags)
-            }
-        }
-
-        if (response.downloadState != null) {
-            item(key = "downloads") {
-                DownloadButtons(response, response.downloadState, action)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun DownloadButtons(
+private fun RelatedPage(
     response: ImmutableSearchResponse,
-    downloadState: ImmutableDownloadState,
-    action: (ResultPageAction) -> Unit
-) {
-    Row(Modifier.padding(horizontal = 10.dp)) {
-        TextButton(
-            shape = RoundedShape(),
-            colors = Colors.whiteButton,
-            enabled = downloadState.downloaded > 0,
-            modifier = Modifier
-                .padding(2.dp)
-                .weight(1.0f),
-            onClick = {
-                action(
-                    ResultPageAction.ResultAction(
-                        SearchResponseAction(
-                            response, SearchResponseOperation.Read
-                        )
-                    )
-                )
-            }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (response.generating) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp), strokeWidth = 3.0.dp
-                    )
-                } else {
-                    Icon(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp),
-                        painter = painterResource(R.drawable.book_2_24px),
-                        contentDescription = null
-                    )
-                    Text(stringResource(R.string.read_epub))
-                }
-            }
-        }
-        Spacer(Modifier.width(5.dp))
-
-        // Overwrite nothing to done when we are finished
-        val action =
-            DownloadStateAction(if (downloadState.downloaded >= downloadState.total && downloadState.status == DownloadState.Nothing) DownloadState.IsDone else downloadState.status)
-        TextButton(
-            shape = RoundedShape(),
-            colors = Colors.blackButton,
-            modifier = Modifier
-                .padding(2.dp)
-                .weight(1.0f),
-            onClick = {
-                action(
-                    ResultPageAction.ResultAction(
-                        SearchResponseAction(
-                            response, action.operation
-                        )
-                    )
-                )
-            }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (downloadState.status == DownloadState.IsPending) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp),
-                        color = MaterialTheme.colorScheme.onBackground,
-                        strokeWidth = 3.0.dp
-                    )
-                } else {
-                    Icon(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp),
-                        contentDescription = null,
-                        painter = painterResource(action.iconBig)
-                    )
-                    Text(stringResource(action.operationName))
-                }
-            }
-        }
-
-        /*TextButton(
-            colors = whiteButtonColors,
-            modifier = Modifier
-                .padding(2.dp)
-                .weight(1.0f),
-            onClick = {
-                action(
-                    ResultPageAction.ResultAction(
-                        SearchResponseAction(
-                            response, SearchResponseOperation.Read
-                        )
-                    )
-                )
-            }) {
-            Text(stringResource(R.string.read_epub))
-        }*/
-    }
-
-    val animatedProgress: Float by animateFloatAsState(
-        downloadState.progressPercentage,
-        label = "alpha",
-        animationSpec = tween(durationMillis = 1000),
-    )
-
-    val animatedWavy: Float by animateFloatAsState(
-        if (downloadState.status != DownloadState.IsDownloading) {
-            0f
-        } else {
-            1f
-        },
-        label = "alpha",
-        animationSpec = tween(durationMillis = 500),
-    )
-
-    LinearWavyProgressIndicator(
-        progress = { animatedProgress },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(10.dp),
-        amplitude = { animatedWavy },
-        color = MaterialTheme.colorScheme.onBackground
-    )
-    Spacer(Modifier.height(60.dp))
-}
-
-
-@Composable
-fun Tags(tags: ImmutableList<String>) {
-    val tagInteractionSource = remember { MutableInteractionSource() }
-
-    val expandedTags = rememberSaveable { mutableStateOf(false) }
-    FlowRow(
-        Modifier
-            .fillMaxWidth()
-            .padding(5.dp)
-            .rounded()
-            .clickable(
-                onClick = {
-                    expandedTags.value = !expandedTags.value
-                }, interactionSource = tagInteractionSource
-            ), maxLines = if (expandedTags.value) {
-            Int.MAX_VALUE
-        } else {
-            3
-        }
-    ) {
-        tags.forEach { tag ->
-            Text(
-                text = tag,
-                fontSize = 14.sp,
-                lineHeight = 14.sp,
-                modifier = Modifier
-                    .padding(4.dp)
-                    .rounded()
-                    .background(color = MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(7.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun RelatedPage(
-    nestedScrollConnection: NestedScrollConnection,
-    related: ImmutableList<ImmutableSearchResponse>,
+    gridState: LazyGridState,
     action: (ResultPageAction) -> Unit,
-    innerListState: LazyGridState
 ) {
     SearchList(
-        lazyGridState = innerListState,
+        lazyGridState = gridState,
         isRow = false,
-        items = related,
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(nestedScrollConnection)
-            .background(MaterialTheme.colorScheme.background),
-        searchAction = { value: SearchResponseAction ->
-            action(ResultPageAction.ResultAction(value))
-        })
+        items = response.loadData?.related ?: kotlinx.collections.immutable.persistentListOf(),
+        modifier = Modifier.fillMaxSize(),
+        searchAction = { value -> action(ResultPageAction.ResultAction(value)) }
+    )
 }
 
+// ================================== dialogs ==================================
 
 @Composable
-fun RowScope.TextInfo(
-    text: String, subText: String
-) {
+private fun ResultScreenDialog(dialog: ResultDialog, state: ResultState, action: (ResultPageAction) -> Unit) {
+    val dismiss = { action(ResultPageAction.DismissDialog) }
+    when (dialog) {
+        is ResultDialog.Bookmark -> SingleSelectDialog(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            entries = ReadType.entries.associateWith { item -> stringResource(item.stringRes) },
+            dismiss = dismiss,
+            title = stringResource(R.string.bookmark),
+            selectedKey = dialog.selected,
+            confirm = { selected ->
+                action(ResultPageAction.SetBookmark(selected))
+                action(ResultPageAction.DismissDialog)
+            })
+
+        is ResultDialog.SourceLanguage -> {
+            val languages = TranslationLanguages.all
+            SingleSelectDialog(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                entries = languages.associate { it.code to it.displayName },
+                dismiss = dismiss,
+                title = if (dialog.detected == null) stringResource(R.string.imported_language_unknown)
+                else stringResource(R.string.imported_language_title, TranslationLanguages.displayName(dialog.detected)),
+                selectedKey = dialog.current ?: "",
+                confirm = { code -> if (code.isNotEmpty()) action(ResultPageAction.SetSourceLanguage(code)) else dismiss() },
+            )
+        }
+
+        ResultDialog.ConfirmDelete -> AlertDialog(
+            onDismissRequest = dismiss,
+            title = { Text(stringResource(R.string.delete)) },
+            text = { Text(stringResource(R.string.permanently_delete_format).format(state.response?.name ?: "")) },
+            confirmButton = { TextButton(onClick = { action(ResultPageAction.ConfirmDelete) }) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } },
+        )
+
+        is ResultDialog.DownloadFrom -> DownloadFromDialog(dialog.chapterCount, action, dismiss)
+        ResultDialog.ChapterFilter -> ChapterFilterDialog(state, action, dismiss)
+    }
+}
+
+@Composable
+private fun DownloadFromDialog(chapterCount: Int, action: (ResultPageAction) -> Unit, dismiss: () -> Unit) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val value = text.toIntOrNull()
+    val valid = value != null && value >= 0 && value < chapterCount
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text(stringResource(R.string.download_from_chapter)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit) },
+                singleLine = true,
+                isError = text.isNotEmpty() && !valid,
+                supportingText = { if (text.isNotEmpty() && !valid) Text(stringResource(R.string.error_outside_chapter)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = valid, onClick = { action(ResultPageAction.DownloadFrom(value)) }) {
+                Text(stringResource(R.string.download))
+            }
+        },
+        dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun ChapterFilterDialog(state: ResultState, action: (ResultPageAction) -> Unit, dismiss: () -> Unit) {
+    val filter = state.chapterFilter
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text(stringResource(R.string.result_filter_sort)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.mainpage_filter), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                CheckRow(stringResource(R.string.downloaded), filter.downloaded) {
+                    action(ResultPageAction.SetChapterFilter(filter.copy(downloaded = it)))
+                }
+                CheckRow(stringResource(R.string.read), filter.read) {
+                    action(ResultPageAction.SetChapterFilter(filter.copy(read = it)))
+                }
+                CheckRow(stringResource(R.string.unread), filter.unread) {
+                    action(ResultPageAction.SetChapterFilter(filter.copy(unread = it)))
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.mainpage_sort_by_button_text), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                val ascending = stringResource(R.string.result_sort_ascending)
+                val descending = stringResource(R.string.result_sort_descending)
+                listOf(
+                    CHAPTER_SORT to "${stringResource(R.string.chapter_sort)} ($ascending)",
+                    REVERSE_CHAPTER_SORT to "${stringResource(R.string.chapter_sort)} ($descending)",
+                    LAST_ACCES_SORT to "${stringResource(R.string.recently_sort)} ($ascending)",
+                    REVERSE_LAST_ACCES_SORT to "${stringResource(R.string.recently_sort)} ($descending)",
+                ).forEach { (sort, label) ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { action(ResultPageAction.SetChapterSort(sort)) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = state.chapterSort == sort, onClick = { action(ResultPageAction.SetChapterSort(sort)) })
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.ok)) } },
+    )
+}
+
+@Composable
+private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Text(label)
+    }
+}
+
+// ================================== misc ==================================
+
+@Composable
+private fun PosterOverlay(response: ImmutableSearchResponse, shown: Boolean, close: () -> Unit) {
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, label = "poster", animationSpec = tween(durationMillis = 200))
+    BackHandler(enabled = shown, onBack = close)
+    if (alpha > 0f) {
+        AsyncImage(
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f * alpha))
+                .clickable(onClick = close)
+                .alpha(alpha),
+            model = response.imageRequest(),
+            contentDescription = stringResource(R.string.poster_descript),
+        )
+    }
+}
+
+@Composable
+private fun ErrorScreen(state: ResultState, action: (ResultPageAction) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            state.errorText ?: state.responseError?.message ?: stringResource(R.string.error_loading_novel),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(16.dp))
+        Row {
+            TextButton(onClick = { action(ResultPageAction.Retry) }) { Text(stringResource(R.string.result_retry)) }
+            if (!state.isImported) {
+                TextButton(onClick = { openInBrowser(state.url) }) { Text(stringResource(R.string.open_in_browser)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.TextInfo(text: String, subText: String) {
     Column(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .weight(1.0f)
+            .weight(1f)
             .fillMaxHeight()
     ) {
-        Text(text, fontSize = 17.sp, lineHeight = 16.sp)
+        Text(text, fontSize = 17.sp, lineHeight = 18.sp, maxLines = 1)
         Text(
-            subText,
-            fontSize = 12.sp,
-            lineHeight = 11.sp,
+            subText, fontSize = 12.sp, lineHeight = 13.sp, maxLines = 1,
             modifier = Modifier.padding(2.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1043,26 +1307,17 @@ fun RowScope.TextInfo(
 }
 
 @Composable
-fun RowScope.TextIcon(text: String, icon: Int, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
+private fun RowScope.TextIcon(text: String, icon: Int, onClick: () -> Unit) {
     Column(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .weight(1.0f)
+            .weight(1f)
             .fillMaxHeight()
-            .clickable(interactionSource = interactionSource, onClick = onClick)
-            .circle()
+            .clickable(onClick = onClick)
     ) {
-        Text(
-            text,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(2.dp),
-            textAlign = TextAlign.Center
-        )
-        Icon(
-            painter = painterResource(icon), contentDescription = text
-        )
+        Icon(painter = painterResource(icon), contentDescription = null, modifier = Modifier.size(22.dp))
+        Text(text, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp), textAlign = TextAlign.Center, maxLines = 1)
     }
 }
 
@@ -1094,17 +1349,11 @@ fun LoadingScreen(modifier: Modifier) {
         LoadingLine()
         LoadingLine(0.4f)
         Spacer(Modifier.height(20.dp))
-        LoadingLine(0.3f)
-        LoadingLine()
-        LoadingLine()
-        LoadingLine(0.4f)
-        Spacer(Modifier.height(20.dp))
         LoadingLine()
         Row {
             LoadingButton()
             LoadingButton()
         }
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1112,46 +1361,5 @@ fun LoadingScreen(modifier: Modifier) {
                 .height(35.dp)
                 .loading()
         )
-    }
-}
-
-
-@PreviewLightDark
-@Composable
-fun LoadingPreview() {
-    CloudStreamPreviewTheme {
-        Surface {
-            ResultScreen(
-                state = ResultState(
-                    loadingResponse = false,
-                    responseError = null,
-                    response = ImmutableSearchResponse.preview(),
-                    api = APIRepository(RoyalRoadProvider())
-                )
-            ) { }
-        }
-    }
-}
-
-@PreviewLightDark
-@Composable
-fun ReviewPreview() {
-    CloudStreamPreviewTheme {
-        Surface {
-            ReviewItem(
-                review = ImmutableReview(
-                    content = "hello world",
-                    title = "title",
-                    username = "username",
-                    date = "today",
-                    avatarUrl = "https://www.royalroad.com/dist/img/anon.jpg",
-                    avatarHeaders = persistentMapOf(),
-                    rating = 1337,
-                    ratings = persistentListOf()
-                ),
-                modifier = Modifier.fillMaxSize(),
-                action = {}
-            )
-        }
     }
 }

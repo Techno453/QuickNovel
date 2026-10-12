@@ -43,7 +43,9 @@ class TranslateRangeDialogFragment : DialogFragment() {
             apiName: String,
             chapters: List<ChapterData>,
             novelAuthor: String? = null,
-            novelName: String? = null
+            novelName: String? = null,
+            /** 0-based chapter to prefill as a one-chapter range (the result page's chapter menu). */
+            startChapter: Int? = null,
         ): TranslateRangeDialogFragment {
             pendingChapters = chapters
             return TranslateRangeDialogFragment().apply {
@@ -53,6 +55,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
                     putInt("chapter_count", chapters.size)
                     putString("novel_author", novelAuthor)
                     putString("novel_name", novelName)
+                    if (startChapter != null) putInt("start_chapter", startChapter)
                 }
             }
         }
@@ -122,8 +125,14 @@ class TranslateRangeDialogFragment : DialogFragment() {
             dismiss() // translate after the bible is built (only one job runs at a time)
         }
 
-        binding.rangeFrom.setText("1")
-        binding.rangeTo.setText(minOf(50, total).toString())
+        val startChapter = arguments?.getInt("start_chapter", -1)?.takeIf { it in 0 until total }
+        if (startChapter != null) {
+            binding.rangeFrom.setText((startChapter + 1).toString())
+            binding.rangeTo.setText((startChapter + 1).toString())
+        } else {
+            binding.rangeFrom.setText("1")
+            binding.rangeTo.setText(minOf(50, total).toString())
+        }
         binding.rangeAvailable.text = "Available: 1–$total"
 
         updateEstimates = {
