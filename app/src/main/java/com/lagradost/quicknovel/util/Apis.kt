@@ -11,6 +11,11 @@ import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.providers.AllNovelProvider
 import com.lagradost.quicknovel.providers.chinese.BiqugeProvider
+import com.lagradost.quicknovel.providers.chinese.IxdzsProvider
+import com.lagradost.quicknovel.providers.chinese.PiaotiaProvider
+import com.lagradost.quicknovel.providers.japanese.AlphapolisProvider
+import com.lagradost.quicknovel.providers.japanese.PixivNovelProvider
+import com.lagradost.quicknovel.providers.korean.NaverWebNovelProvider
 import com.lagradost.quicknovel.providers.japanese.KakuyomuProvider
 import com.lagradost.quicknovel.providers.korean.NovelpiaProvider
 import com.lagradost.quicknovel.providers.AnnasArchive
@@ -155,6 +160,12 @@ class Apis {
             BiqugeProvider(),
             KakuyomuProvider(),
             NovelpiaProvider(),
+            // Raw CJK sources (docs/sources.md)
+            IxdzsProvider(),
+            PiaotiaProvider(),
+            AlphapolisProvider(),
+            PixivNovelProvider(),
+            NaverWebNovelProvider(),
         ).sortedBy { it.name }
 
         fun getApiFromName(name: String): APIRepository {
