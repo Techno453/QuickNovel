@@ -33,6 +33,7 @@ import com.lagradost.quicknovel.ReadActivityViewModel
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
 import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
 import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
+import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.ui.ReadingType
 import com.lagradost.quicknovel.READING_MODE_PAGES
 import com.lagradost.quicknovel.READING_MODE_SCROLL
@@ -485,10 +486,23 @@ class ReaderSettingsSheet(
         val mlSettings = viewModel.mlSettings
 
         if (mlSettings.isInvalid()) {
-            binding.readMlTitle.setText(R.string.google_translate)
+            binding.readMlTitle.setText(R.string.reader_ml_translation_title)
         } else {
             binding.readMlTitle.text =
-                "${binding.readMlTitle.context.getString(R.string.google_translate)} (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
+                "${binding.readMlTitle.context.getString(R.string.reader_ml_translation_title)} (${mlSettings.fromDisplay} → ${mlSettings.toDisplay})"
+        }
+
+        // AI translation: the "Translate chapters when opened" preference itself (Settings and
+        // the wizard read and write the same value), for books that translate on demand.
+        binding.readAiOnDemandSwitch.isChecked = SecurePrefs.isTranslateOnDemandEnabled(activity)
+        binding.readAiOnDemandSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked == SecurePrefs.isTranslateOnDemandEnabled(activity)) return@setOnCheckedChangeListener
+            SecurePrefs.setTranslateOnDemandEnabled(activity, isChecked)
+            viewModel.onTranslateOnDemandChanged()
+        }
+        ioSafe {
+            val show = viewModel.translatesOnDemand()
+            activity.runOnUiThread { binding.readAiTranslationSection.isVisible = show }
         }
 
         binding.readLanguage.setOnClickListener { _ ->

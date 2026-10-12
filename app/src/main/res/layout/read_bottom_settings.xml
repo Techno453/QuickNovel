@@ -139,12 +139,54 @@
                 android:paddingBottom="20dp"
                 android:visibility="gone">
 
+                <!-- AI translation: the same "Translate chapters when opened" setting as Settings
+                     and the setup wizard; only for zh / ja / ko sources and imported books with a
+                     known language (ReaderSettingsSheet) -->
+                <LinearLayout
+                    android:id="@+id/read_ai_translation_section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="15dp"
+                        android:drawablePadding="8dp"
+                        android:gravity="center_vertical"
+                        android:text="@string/tr_settings_group"
+                        android:textColor="?attr/textColor"
+                        android:textSize="16sp"
+                        app:drawableStartCompat="@drawable/ic_baseline_translate_24"
+                        app:drawableTint="?attr/textColor" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/read_ai_on_demand_switch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/tr_on_demand"
+                        android:textColor="?attr/textColor"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginEnd="56dp"
+                        android:text="@string/tr_on_demand_desc"
+                        android:textColor="?attr/grayTextColor"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
                 <TextView
                     android:id="@+id/read_ml_title"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="15dp"
-                    android:text="@string/google_translate"
+                    android:text="@string/reader_ml_translation_title"
                     android:textSize="16sp" />
 
                 <LinearLayout
@@ -185,7 +227,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/sort_apply"
-                        app:icon="@drawable/translate_24px" />
+                        app:icon="@drawable/ic_baseline_translate_24" />
                 </LinearLayout>
 
                 <com.google.android.material.checkbox.MaterialCheckBox

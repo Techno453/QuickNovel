@@ -207,6 +207,14 @@ class ResultPageLogicTest {
     }
 
     @Test
+    fun displayedTitleFollowsShowOriginal() {
+        assertEquals("Star River Traveller", logic.displayedTitle("星河旅人", "Star River Traveller", showOriginal = false))
+        assertEquals("星河旅人", logic.displayedTitle("星河旅人", "Star River Traveller", showOriginal = true))
+        assertEquals("星河旅人", logic.displayedTitle("星河旅人", null, showOriginal = false))
+        assertEquals("星河旅人", logic.displayedTitle("星河旅人", " ", showOriginal = false))
+    }
+
+    @Test
     fun onlyLabelsTranslatedStillOffersTheToggle() {
         val d = logic.metadataDisplay("Name", null, "第三章", emptyList(), null, null, mapOf("第三章" to "Chapter 3"), false)
         assertEquals("Name", d.title)

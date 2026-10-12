@@ -1010,7 +1010,9 @@ class ResultViewModel2(
                 val s = state.value
                 val novelId = s.novelId ?: return
                 val name = s.response?.name ?: return
-                viewModelScope.launch { postEffect { ResultPageEffect.OpenGlossary(novelId, name) } }
+                // The glossary subtitle shows the title as the page shows it.
+                val shown = ResultPageLogic.displayedTitle(name, s.translatedTitle, s.showOriginal)
+                viewModelScope.launch { postEffect { ResultPageEffect.OpenGlossary(novelId, shown) } }
             }
 
             ResultPageAction.ChooseSourceLanguage -> askLanguage(AfterLanguage.Nothing, null)

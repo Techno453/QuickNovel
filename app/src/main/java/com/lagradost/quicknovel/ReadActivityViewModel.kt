@@ -445,6 +445,29 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
         }
     }
 
+    /** Title block of chapter [idx], with the original notice once the chapter has loaded. */
+    private fun chapterStart(idx: Int, title: UiText, canReload: Boolean) = ChapterStartSpanned(
+        idx, 0, title, canReload,
+        notice = if (chapterData[idx] is Resource.Success) book.originalNotice(idx)?.let { txt(it.text) } else null,
+        translated = idx in book.aiTranslatedChapters,
+    )
+
+    /** True when the open book translates chapters when opened (reader Translate tab switch). May read disk. */
+    fun translatesOnDemand(): Boolean = this::book.isInitialized && book.translatesOnDemand()
+
+    /**
+     * "Translate chapters when opened" changed in the reader: load again the loaded chapters that
+     * show the original because of it (translated now, or a new notice).
+     */
+    fun onTranslateOnDemandChanged() = ioSafe {
+        if (!this@ReadActivityViewModel::book.isInitialized) return@ioSafe
+        val targets = chapterMutex.withLock { chapterData.keys.toList() }
+            .filter { it >= 0 && book.originalNotice(it) != null }
+            .sortedBy { kotlin.math.abs(it - currentIndex) }
+        for (index in targets) loadIndividualChapter(index, reload = false, reTranslate = true, notify = true)
+        if (targets.isNotEmpty()) updateReadArea(seekToDesired = false)
+    }
+
     private fun updateReadArea(seekToDesired: Boolean = false) {
         val cIndex = currentIndex
         val chapters = ArrayList<SpanDisplay>()
@@ -454,14 +477,7 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
             ReadingType.DEFAULT, ReadingType.INF_SCROLL -> {
                 for (idx in cIndex - chapterPaddingBottom..cIndex + chapterPaddingTop) {
                     if (idx < chaptersTitlesInternal.size && idx >= 0)
-                        chapters.add(
-                            ChapterStartSpanned(
-                                idx,
-                                0,
-                                chaptersTitlesInternal[idx],
-                                canReload
-                            )
-                        )
+                        chapters.add(chapterStart(idx, chaptersTitlesInternal[idx], canReload))
                     chapters.addAll(chapterIdxToSpanDisplay(idx))
                 }
             }
@@ -472,7 +488,7 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(chapterStart(cIndex, text, canReload))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))
@@ -488,7 +504,7 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
                 }
 
                 chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
+                    chapters.add(chapterStart(cIndex, text, canReload))
                 }
 
                 chapters.addAll(chapterIdxToSpanDisplay(cIndex))

@@ -43,7 +43,9 @@ Effects the fragment handles:
   chapter / range / whole novel, analysis hint, overnight batch). A chapter's "Translate this
   chapter…" prefills a one-chapter range (`startChapter`).
 - `OpenAnalyze` → `NovelChapterSource.remember` + `AnalyzeNovelDialogFragment`.
-- `OpenGlossary` → `GlossaryFragment`; `OpenTag` → the source's listing for that genre.
+- `OpenGlossary` → `GlossaryFragment`, with the title as the page shows it
+  (`ResultPageLogic.displayedTitle`: the translation unless Show original is on) for its subtitle
+  and export file name; `OpenTag` → the source's listing for that genre.
 - `Toast` / `Error`.
 
 Opening a page does what the XML page did: last-access time, bookmark data refresh for bookmarked
@@ -72,8 +74,8 @@ with the original underneath; author; status; latest chapter), Bookmark / Open i
 (the last two not for imported books), stats (views, rating with votes, chapters; cells without
 data are left out), the imported book's source language (tap to choose), the slow-source warning,
 Read epub / download button (tap or long press for its menu) / Stream read and the progress bar,
-Translate / Glossary / ⋮ (Analyze novel…, Glossary, Source language… for imports), Show original
-toggle and synopsis (tap to expand), tags (clickable when the provider lists them as a genre).
+Translate / Glossary / ⋮ (Analyze novel…, and Source language… for imports), Show original
+toggle (with the `ic_original_24` icon) and synopsis (tap to expand), tags (clickable when the provider lists them as a genre).
 
 Chapter pane: count, search, filter and sort; rows with name (translated, with the original and
 the date on a small second line), read rows dimmed, and a Translated / Source changed / Queued
@@ -113,7 +115,7 @@ Translated through the same batched, cached title path, only for what is on scre
 - Cache ids are `MetadataLabels.labelId` (`label:<lang>/<name>`), so a chapter name and the
   "Latest:" label share one row in `novel_metadata_translations`; rows are kept forever.
 - Same switch and engines as titles: when `MetadataTranslations.anyEnabled` (AI with a key and
-  "Translate titles and synopses with AI" on, else the "Auto-translate titles & synopses" Google
+  "Translate titles and synopses with AI" on, else the "Translate titles with Google (free)"
   option). The original stays visible until the translation arrives, then moves to the small
   second line.
 - The reader's chapter picker (`ReadActivity2.showChapterDialog`) uses the same driver on its

@@ -26,6 +26,9 @@
     <string name="reader_glossary_dismiss">Dismiss</string>
     <string name="reader_glossary_unavailable">The glossary is only available for translated (Chinese, Japanese, Korean) novels</string>
 
+    <!-- Translate tab of the reader settings: upstream's ML Kit section (google_translate stays for its other uses) -->
+    <string name="reader_ml_translation_title">On-device translation (ML Kit)</string>
+
     <!-- Paged mode -->
     <string name="reading_mode">Reading mode</string>
     <string name="reading_mode_scroll">Scroll</string>

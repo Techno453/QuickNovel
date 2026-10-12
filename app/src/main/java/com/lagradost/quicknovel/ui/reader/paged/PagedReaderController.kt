@@ -53,6 +53,7 @@ import com.lagradost.quicknovel.ui.ScrollIndex
 import com.lagradost.quicknovel.ui.TextConfig
 import com.lagradost.quicknovel.ui.TextInteraction
 import com.lagradost.quicknovel.ui.reader.GlossaryLookup
+import com.lagradost.quicknovel.ui.reader.OriginalNotice
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.UIHelper
 import io.noties.markwon.image.AsyncDrawableSpan
@@ -634,7 +635,10 @@ class PagedReaderController(
                     child.setPadding(inset.left, inset.top, inset.right, inset.bottom)
                     cfg.setArgs(child, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
                     child.setTextSize(TypedValue.COMPLEX_UNIT_SP, cfg.textSize * 1.5f)
-                    child.text = (page as? ReaderPage.Title)?.name?.asString(child.context) ?: ""
+                    val title = page as? ReaderPage.Title
+                    child.text = if (title == null) "" else OriginalNotice.titleWithNotice(
+                        title.name.asString(child.context), title.notice?.asString(child.context), sizeFactor = 0.5f
+                    )
                 }
             }
         }

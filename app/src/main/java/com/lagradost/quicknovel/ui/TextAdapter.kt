@@ -42,6 +42,7 @@ import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
 import com.lagradost.quicknovel.databinding.SingleSeparatorBinding
 import com.lagradost.quicknovel.databinding.SingleTextBinding
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.ui.reader.OriginalNotice
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
@@ -862,7 +863,8 @@ class TextAdapter(
     private fun bindChapter(binding: ViewBinding, obj: ChapterStartSpanned) {
         if (binding !is SingleFinishedChapterBinding) return
 
-        binding.root.setText(obj.name)
+        val ctx = binding.root.context
+        binding.root.text = OriginalNotice.titleWithNotice(obj.name.asString(ctx), obj.notice?.asString(ctx))
         binding.root.setOnClickListener {
             viewModel.switchVisibility()
         }
@@ -870,12 +872,13 @@ class TextAdapter(
             if (!obj.canReload) {
                 return@setOnLongClickListener true
             }
+            // A translated chapter: Reload shows the original, so call it that.
             it?.popupMenu(
-                items = listOf(1 to R.string.reload_chapter),
+                items = listOf(1 to if (obj.translated) R.string.browse_show_original else R.string.reload_chapter),
                 selectedItemId = -1
             ) {
                 if (itemId == 1) {
-                    showToast(
+                    if (!obj.translated) showToast(
                         txt(R.string.reload_chapter_format, (obj.index + 1).toString())
                     )
                     viewModel.reloadChapter(obj.index)
@@ -912,7 +915,7 @@ class TextAdapter(
                 is ChapterStartSpanned -> {
                     if (newItem !is ChapterStartSpanned) return false
 
-                    newItem.id == oldItem.id && oldItem.name == newItem.name
+                    newItem.id == oldItem.id && oldItem == newItem
                 }
 
                 is ChapterLoadSpanned -> {

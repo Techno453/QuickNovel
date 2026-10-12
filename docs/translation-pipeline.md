@@ -414,7 +414,7 @@ same pipeline as online novels: translate chapter / range, overnight batch, read
   `checkSourceHash` (changed → `stale`, chip "Source changed"); chapters missing from the new
   file are marked stale.
 - **Reader:** imported chapters are translated on demand like online ones; long-press on the
-  chapter title → Reload shows the original.
+  chapter title → Show original shows the original.
 - **Library card:** the download entry of an import always counts one "chapter" (the file), so
   the card takes the chapter count from the import record (`ImportedLibraryCard.chapterCount`:
   the record's count when it is above 0, else the download total). The record is written before

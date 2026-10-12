@@ -358,6 +358,10 @@ data class ChapterStartSpanned(
     override val innerIndex: Int,
     val name: UiText,
     val canReload: Boolean,
+    /** One line under the title saying why the original is shown (ui/reader/OriginalNotice). */
+    val notice: UiText? = null,
+    /** The chapter text is the AI translation (the title menu offers Show original). */
+    val translated: Boolean = false,
 ) : SpanDisplay() {
     override fun id(): Long {
         return generateId(1, index, 0, 0)

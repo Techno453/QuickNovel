@@ -474,6 +474,7 @@ class TranslationForegroundService : Service() {
                     listener = analysisListener(novelId) { detail, current, total ->
                         postNotification(buildNotification(detail, current, total, title = title, plainText = true))
                     },
+                    noKeyMessage = getString(R.string.translator_no_api_key),
                 )
             } catch (e: CancellationException) {
                 throw e

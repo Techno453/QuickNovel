@@ -94,14 +94,15 @@ class ResultFragment2 : Fragment() {
             viewModel.onAction(ResultPageAction.TranslationProgressChanged(progress, translateViewModel.currentNovelId))
             val s = viewModel.state.value
             val novelId = s.novelId ?: return@observe
-            val name = s.response?.name ?: return@observe
+            val name = s.response?.name?.let { ResultPageLogic.displayedTitle(it, s.translatedTitle, s.showOriginal) }
+                ?: return@observe
             if (novelId != translateViewModel.currentNovelId || progress == null) return@observe
             if (progress.completed && announcedCompletion !== progress) {
                 announcedCompletion = progress
                 announceTranslationFinished(progress, novelId, name)
             } else if (progress.error != null && announcedCompletion !== progress) {
                 announcedCompletion = progress
-                Toast.makeText(requireContext(), "Translation error: ${progress.error}", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), getString(R.string.tr_job_failed, progress.error), Toast.LENGTH_LONG).show()
             }
         }
 

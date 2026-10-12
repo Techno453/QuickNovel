@@ -256,7 +256,7 @@ object CostEstimator {
     fun formatCost(cost: Double): String = when {
         cost <= 0.0 -> "\$0"
         cost < 0.01 -> "< \$0.01"
-        else -> "~\$" + String.format(Locale.US, "%.2f", cost)
+        else -> "≈ \$" + String.format(Locale.US, "%.2f", cost)
     }
 
     fun formatTokens(tokens: Int): String = when {
@@ -265,9 +265,9 @@ object CostEstimator {
         else -> tokens.toString()
     }
 
-    /** "~$0.12 (~45k tokens)" or, for unknown models, "~45k tokens (unknown price)". */
+    /** "≈ $0.12 (≈ 45k tokens)" or, for unknown models, "≈ 45k tokens (unknown price)". */
     fun formatEstimate(e: Estimate): String {
-        val tokens = "~${formatTokens(e.totalTokens)} tokens"
+        val tokens = "≈ ${formatTokens(e.totalTokens)} tokens"
         return e.usd?.let { "${formatCost(it)} ($tokens)" } ?: "$tokens (unknown price)"
     }
 

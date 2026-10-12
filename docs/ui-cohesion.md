@@ -2,9 +2,9 @@
 
 Audit of every surface that touches AI translation, the vocabulary they now share, what was
 changed in pass one (settings, setup wizard, Translate / Analyze dialogs, Spending, glossary,
-notifications, shared strings, icons and styles) and an exact change list for pass two in the
-areas pass one could not edit (`ui/result/`, `ui/reader/`, `ui/browse/`, the reader core in the
-root package, `translator/`).
+notifications, shared strings, icons and styles) and the change list for pass two in the areas
+pass one could not edit (`ui/result/`, `ui/reader/`, `ui/browse/`, the reader core in the root
+package, `translator/`). Pass two is done; see [Part 2](#part-2-done-in-pass-two).
 
 Screenshots are from the `Fold` AVD (emulator-5556) with size overrides: phone 1080x2400 @420,
 Fold 8 cover 1248x1972 @420, Fold 8 inner 2448x1848 @400. They live in
@@ -64,7 +64,7 @@ live under the glossary's "Translation style…".
 
 ### Terminology
 
-Deviations found (all fixed in pass one unless marked **P2**):
+Deviations found (all fixed in pass one unless marked **P2**, which pass two fixed):
 
 | Text | Where | Now |
 |---|---|---|
@@ -88,10 +88,13 @@ Deviations found (all fixed in pass one unless marked **P2**):
 | "Overnight translation queued / ready / failed" | batch notifications | "Overnight batch …" |
 | "Translation Progress" | notification channel | "AI translation" |
 | "Auto-translate titles & synopses" | `docs/result-page.md`, `docs/browse.md` | "Translate titles with Google (free)" (docs updated) |
-| "Google translate" + "Online translation" (ML Kit) on the reader tab named "Translate" | `ReaderSettingsSheet`, `read_bottom_settings.xml` | **P2** (see R4) |
-| "Translation error: …" | `ResultFragment2` toast (hard-coded) | **P2** (R3) |
-| "raise the cap in Settings → AI Translation" | `translator/SpendCaps.kt` | **P2** (T1) |
-| SpendKind label "Read-ahead" | `translator/Spend.kt` (Spending, latest calls) | **P2** (T2) |
+| "Google translate" + "Online translation" (ML Kit) on the reader tab named "Translate" | `ReaderSettingsSheet`, `read_bottom_settings.xml` | **P2**: "AI translation" section on top, ML Kit section "On-device translation (ML Kit)" (R4) |
+| "Translation error: …" | `ResultFragment2` toast (hard-coded) | **P2**: "Translation failed: …" (R3) |
+| "raise the cap in Settings → AI Translation" | `translator/SpendCaps.kt` | **P2**: "AI translation" (T1) |
+| "over the per-job cap" | `translator/SpendCaps.kt` | **P2**: "per-job spend cap" (sweep) |
+| SpendKind label "Read-ahead" | `translator/Spend.kt` (Spending, latest calls) | **P2**: "Read ahead" (T2) |
+| "Analysis failed: No API key" | `translator/NovelAnalyzer.kt` | **P2**: the `translator_no_api_key` text (T4) |
+| "Expected … a Story Bible export" (glossary import error toast) | `translator/StoryBibleJson.kt` | **P2**: "a glossary export" (sweep) |
 
 ### Placement
 
@@ -110,15 +113,16 @@ Deviations found (all fixed in pass one unless marked **P2**):
 - **First-run gap, fixed:** "Translate chapters when opened" is off by default and the wizard never
   showed it, so after setup the reader silently showed the original (and the wizard's Read ahead
   toggle had nothing to follow). The Done page now has the same switch.
-- **Duplicates (P2):** the result page ⋮ menu repeats "Glossary" next to the Glossary button (R1).
+- **Duplicates (P2, fixed):** the result page ⋮ menu repeated "Glossary" next to the Glossary
+  button (R1).
   "Analyze novel…" is in three places (glossary ⋮, result ⋮, Translate dialog); that is fine, the
   name is the same everywhere now.
-- **Silent fallback (P2):** with no key, or with "Translate chapters when opened" off, the reader
-  shows the original without saying why (`ChapterTranslationRepository.getOrTranslate` returns
-  null). See R5.
-- **Two translations in the reader (P2):** the reader settings sheet's "Translate" tab is
-  upstream's ML Kit "Google translate" (defaulting to English → English for a Korean novel) and has
-  no AI translation control at all. See R4.
+- **Silent fallback (P2, fixed):** with no key, or with "Translate chapters when opened" off, the
+  reader showed the original without saying why (`ChapterTranslationRepository.getOrTranslate`
+  returns null). A notice line under the chapter title says why now (R5).
+- **Two translations in the reader (P2, fixed):** the reader settings sheet's "Translate" tab was
+  upstream's ML Kit "Google translate" (defaulting to English → English for a Korean novel) with
+  no AI translation control. It now starts with the AI translation switch (R4).
 - Spending is reachable from settings and the wizard; the Translate dialog shows "Spent this
   month" but does not link to it (acceptable; optional later).
 
@@ -132,12 +136,12 @@ Deviations found (all fixed in pass one unless marked **P2**):
   `ic_titles_24`, search `ic_search_translate_24`, name style `ic_name_style_24`, fallback
   `ic_fallback_24`, strict `ic_strict_24`, story context `ic_story_context_24`, setup
   `ic_setup_24`. Notifications used the download arrow (`netflix_download`); they use the
-  translate icon now. The result page's Glossary button still uses `ic_baseline_menu_book_24`
-  (the reader / library icon) — R1.
+  translate icon now. The result page's Glossary button used `ic_baseline_menu_book_24`
+  (the reader / library icon) — R1, now `ic_glossary_24`.
 - **Buttons, fixed in the XML dialogs:** MaterialComponents buttons were ALL CAPS with wide letter
   spacing ("ANALYZE FIRST CHAPTERS…") next to sentence-case Compose buttons. `styles_translate.xml`
   adds `TranslateOutlinedButton` / `TranslateTextButton` (sentence case, no letter spacing).
-  Remaining: the reader lookup sheet's filled white "Add to glossary" button (R6).
+  Remaining: the reader lookup sheet's filled white "Add to glossary" button (R6, outlined since pass two).
 - **Dialog layout, fixed:** content padding was 16 dp while the platform dialog title sits at
   24 dp; Translate, Analyze, Add term and Translation style now use 24 dp. Section labels in the
   XML dialogs are primary-coloured and bold (`TranslateSectionLabel`), like the Compose section
@@ -194,13 +198,13 @@ First run → key → first translation → glossary → spend, as a new user:
 | Rate limited | "Connected, but the provider is rate-limiting this key right now. It should work in a moment." | `setup_test_ok_rate_limited` |
 | Provider error | "%s answered with an error unrelated to the key. Try again later." | `setup_test_provider_error` |
 | Refused passage | fallback model wording: "passages that the translation model's provider blocks or refuses" | `tr_fallback_*` |
-| Cap reached | `SpendCaps` message ("$4.50 spent this month + about $0.60 for this job = $5.10, cap $5.00. Translate fewer chapters or raise the cap in Settings → AI Translation.") in a "Spend cap" dialog | `translator/SpendCaps.kt` (T1: "AI translation") |
+| Cap reached | `SpendCaps` message ("$4.50 spent this month + about $0.60 for this job = $5.10, cap $5.00. Translate fewer chapters or raise the cap in Settings → AI translation.") in a "Spend cap" dialog | `translator/SpendCaps.kt` (T1: "AI translation") |
 | Charging policy | "Paused: waiting for charger", "Paused: battery low" | `translator/PowerPolicy.kt` (fine) |
 | Stale | "Source changed" chip; "Also re-translate N chapters whose source changed" | `chapter_status_stale`, `translate_retranslate_stale` |
 | Browse source failure / Cloudflare | "Unavailable right now" + Retry | `browse_unavailable` (fine) |
 
-- **Number formats:** cost estimates use "~$0.13" (`CostEstimator.formatCost`) but per-100 figures
-  use "≈ $0.29 / 100 ch" (`formatPer100`) — T3.
+- **Number formats:** cost estimates used "~$0.13" (`CostEstimator.formatCost`) but per-100
+  figures "≈ $0.29 / 100 ch" (`formatPer100`). All use "≈" now ("≈ $0.13 (≈ 45k tokens)", T3).
 
 ## Change list
 
@@ -222,7 +226,50 @@ First run → key → first translation → glossary → spend, as a new user:
 Behaviour is unchanged except: the glossary menu is now reachable, the empty "Review new terms"
 button is hidden, and the wizard offers one more existing switch (default untouched).
 
-### Part 2: for pass two (read-only areas in this pass)
+### Part 2: done in pass two
+
+| Commit | Items | Change |
+|---|---|---|
+| 5c8e2b1 | R1, R3b | Glossary button icon `ic_glossary_24`; ⋮ menu without the duplicate Glossary; 16 dp `ic_original_24` on Show original / Show translation |
+| 4a2cf3c | R2, R3 | Glossary subtitle and export name use the displayed title (`ResultPageLogic.displayedTitle`, tested), also from the "Review new terms" snackbar; failure toast from `tr_job_failed` |
+| 80c713f, 353bdf8 | R6 | Lookup sheet: `TranslateOutlinedButton` for Edit / Lock / Add to glossary (icons next to the text), `ic_glossary_24` on the title and on Add to glossary, sentence-case Approve / Dismiss |
+| 111caab, 12d2256 | R4, R5, R6b | Reader Translate tab: AI translation section with the on-demand switch (same `SecurePrefs` value as Settings and the wizard; shown when `AbstractBook.translatesOnDemand`; a change reloads the loaded chapters that carry a notice); ML Kit heading "On-device translation (ML Kit)" (`reader_ml_translation_title`); Apply uses `ic_baseline_translate_24` and `translate_24px` is deleted. Original notice under the chapter title in scroll mode and on the paged title page (`ui/reader/OriginalNotice`, `OriginalNoticeTest`; new string `tr_reader_original_notice`). Title long-press on a translated chapter says "Show original" |
+| cad4f2d | R7 | Preview sheet: "1431 chapters" via `result_chapter_count` |
+| 439ec92 | T1, T2 | "Settings → AI translation", "per-job spend cap", SpendKind "Read ahead" |
+| 2cba12d | T3 | "≈" for every estimate (`CostEstimatorTest` updated) |
+| e734733 | T4 | `NovelAnalyzer.analyze(noKeyMessage = …)`; the service passes `translator_no_api_key` |
+| f337778 | sweep | Glossary import error says "glossary export" |
+| docs commit | R9 | `reader.md` (AI translation in the reader, lookup buttons, glossary wording), `result-page.md`, `browse.md`, `translation-pipeline.md` on the vocabulary |
+
+Notes and deliberate skips:
+
+- **R3c:** nothing to do; the XML result page was already deleted.
+- **R5:** the notice follows the order of the checks in `getOrTranslate`: with the switch off it
+  asks to turn it on (even without a key), with the switch on and no key it names the key. A
+  failed translation (switch on, key set) gets no notice; that case was out of scope. Offline
+  EPUBs of a source (stored translations only) get no notice, they never translate on demand.
+- **R6b:** one menu item, not two: on a translated chapter "Show original" replaces "Reload
+  Chapter" (same action, no "Reloading chapter" toast); on an original chapter it stays "Reload
+  Chapter" (upstream string, Title Case kept). Paged mode has no title long-press (unchanged).
+- **R7:** the preview sheet has no Show original toggle (the list assumed one); nothing to add.
+  Library and search cards already pick "Chapter" / "Chapters" by count with upstream's Title Case
+  strings and were left alone.
+- **R8:** the only XML chip in these areas is the glossary filter chip, already on
+  `TranslateFilterChip`.
+- **L1:** kept (`LibraryUpdateNotifier` keeps the book icon).
+- **Sweep:** no "AI Translation", "character sheet", "Verify" or "Read-ahead" left in user-facing
+  text of these areas; "Story Bible" stays in code, prompts, the export file name and the JSON
+  format. Title Case labels that remain ("Reload Chapter", "Open In Browser", "Stream Read", reader
+  settings) are upstream strings, left as in pass one. The Translate dialog's AlertDialog buttons
+  keep the platform letter spacing (pass one area, unchanged).
+- **Verified** on emulators (phone 1080x2400 and Fold 8 inner 2448x1848, screenshots not
+  committed): result page row and ⋮ menu, Show original icon, glossary subtitle from a translated
+  title, reader Translate tab, both notices in scroll mode and the paged title page, Reload
+  removing the notice, the lookup sheet (no match and a term), the preview sheet count, Spending,
+  the "≈" estimate. Imported books open in the app's reader only with Settings → External reader
+  off (the external path drops the translator id; unchanged).
+
+### Part 2: the original list
 
 Strings referenced below already exist (pass one added them or kept the keys). Old keys were not
 renamed.
@@ -306,3 +353,4 @@ renamed.
 - `res/drawable/ic_*_24.xml` — concept icons (Material Symbols Outlined, Apache 2.0).
 - `ui/common/ConnectionMessages.kt` — one wording for connection-test results (tested).
 - `ui/settings/TranslationSettings.kt` — sections (`SectionHeader`), rows.
+- `ui/reader/OriginalNotice.kt` — why the reader shows the original, and the notice line (tested).

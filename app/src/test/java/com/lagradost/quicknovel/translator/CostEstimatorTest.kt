@@ -143,9 +143,9 @@ class CostEstimatorTest {
     fun formatting() {
         assertEquals("< \$0.01", CostEstimator.formatCost(0.001))
         assertEquals("\$0", CostEstimator.formatCost(0.0))
-        assertEquals("~\$1.23", CostEstimator.formatCost(1.234))
+        assertEquals("≈ \$1.23", CostEstimator.formatCost(1.234))
         assertEquals("~45k", "~" + CostEstimator.formatTokens(45_200))
-        assertTrue(CostEstimator.formatEstimate(CostEstimator.estimate(4500, "gpt-4o")).startsWith("~$"))
+        assertTrue(CostEstimator.formatEstimate(CostEstimator.estimate(4500, "gpt-4o")).startsWith("≈ $"))
         assertEquals("≈ \$0.25 / 100 ch", CostEstimator.formatPer100(CostEstimator.estimateCostForChapters(100, "gpt-6-luna", "zh")))
     }
 }

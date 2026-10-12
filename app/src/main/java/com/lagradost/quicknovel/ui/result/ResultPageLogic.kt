@@ -282,6 +282,10 @@ object ResultPageLogic {
         else -> SourceLanguageLabel(detected, manual = false)
     }
 
+    /** The title the page shows: the translation unless [showOriginal] or there is none. */
+    fun displayedTitle(name: String, translatedTitle: String?, showOriginal: Boolean): String =
+        if (showOriginal) name else translatedTitle?.takeIf { it.isNotBlank() } ?: name
+
     /**
      * What to show for title, synopsis, latest chapter and tags. With [showOriginal] (or nothing
      * translated yet) the originals; otherwise each part that has a translation is replaced.
