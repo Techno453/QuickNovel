@@ -323,6 +323,8 @@ private fun ResultTabRow(
             Tab(
                 selected = tab == shown,
                 onClick = { action(ResultPageAction.SelectTab(tab)) },
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 text = {
                     val title = stringResource(tab.title)
                     Text(
@@ -602,7 +604,11 @@ private fun DownloadSection(
                         }
                     },
                     onLongClick = { if (actions.isNotEmpty()) menuOpen = true })
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
                     actions.forEach { item ->
                         DropdownMenuItem(
                             text = { Text(stringResource(item.label)) },
@@ -715,7 +721,11 @@ private fun TranslateRow(state: ResultState, modifier: Modifier, action: (Result
                     contentDescription = stringResource(R.string.result_more_actions)
                 )
             }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.glossary_menu_analyze)) },
                     onClick = {
@@ -757,8 +767,9 @@ private fun Synopsis(display: MetadataDisplay, showOriginal: Boolean, modifier: 
             )
         }
         val synopsis = display.synopsis
+        if (synopsis.isNullOrBlank()) return@Column
         Text(
-            text = if (synopsis.isNullOrBlank()) AnnotatedString("…") else rememberHtml(synopsis),
+            text = rememberHtml(synopsis),
             color = MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
             lineHeight = 19.sp,
@@ -944,7 +955,11 @@ private fun ChapterRow(
                 StatusChip(status)
             }
         }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
             if (response.loadData?.chapters != null) {
                 DropdownMenuItem(
                     text = { Text(stringResource(if (read) R.string.result_mark_unread else R.string.result_mark_read)) },
@@ -1046,7 +1061,7 @@ fun ReviewItem(
                 )
             }
             Column(modifier = Modifier.padding(horizontal = 10.dp)) {
-                Text(text = review.title ?: stringResource(R.string.no_data), fontSize = 14.sp)
+                review.title?.takeIf { it.isNotBlank() }?.let { Text(text = it, fontSize = 14.sp) }
                 Row {
                     review.username?.let {
                         Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(end = 5.dp))
