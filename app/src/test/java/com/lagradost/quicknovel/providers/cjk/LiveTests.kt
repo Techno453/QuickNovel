@@ -38,6 +38,17 @@ object LiveTests {
         val paragraphs = Jsoup.parseBodyFragment(html!!).select("p").map { it.text() }.filter { it.isNotBlank() }
         println("[live] ${api.name}: chapter '${chapter.name}' → ${paragraphs.size} paragraphs, ${html.length} chars")
         assertTrue("${api.name}: chapter text too short", paragraphs.size >= 3)
+
+        if (api.hasMainPage) {
+            val main = api.loadMainPage(
+                1,
+                api.mainCategories.firstOrNull()?.second,
+                api.orderBys.firstOrNull()?.second,
+                api.tags.firstOrNull()?.second,
+            )
+            println("[live] ${api.name}: main page ${main.url} → ${main.list.size} entries")
+            assertTrue("${api.name}: empty main page", main.list.isNotEmpty())
+        }
         return html
     }
 }
