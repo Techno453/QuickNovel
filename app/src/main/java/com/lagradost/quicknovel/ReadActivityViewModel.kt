@@ -782,10 +782,13 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
                 val book = EpubReader().readEpubLazy(zipFile, "utf-8")
                 val epubApiName = intent.getStringExtra("apiName")
                 val epubNovelName = intent.getStringExtra("novelName")
-                val novelId = if (epubApiName != null && epubNovelName != null) {
+                // Imported EPUB/TXT books carry their translator id (see ImportedBooks).
+                val importedNovelId = intent.getStringExtra(BookDownloader2.EXTRA_IMPORTED_NOVEL_ID)
+                    ?.takeIf { com.lagradost.quicknovel.imported.ImportedBooks.isImported(it) }
+                val novelId = importedNovelId ?: if (epubApiName != null && epubNovelName != null) {
                     com.lagradost.quicknovel.translator.TranslatorNovelId.from(epubApiName, epubNovelName)
                 } else null
-                RegularBook(book, novelId)
+                RegularBook(book, novelId, imported = importedNovelId != null)
             } else {
                 val input = context.contentResolver.openInputStream(data)
                     ?: throw ErrorLoadingException("Empty data")

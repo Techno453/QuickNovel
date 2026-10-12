@@ -68,7 +68,7 @@ class TranslateRangeDialogFragment : DialogFragment() {
         val novelAuthor = arguments?.getString("novel_author")
         val novelName = arguments?.getString("novel_name")
         val chapters = pendingChapters ?: emptyList()
-        val sourceLang = TranslationLanguages.langOfApi(apiName) ?: TranslationLanguages.DEFAULT
+        val sourceLang = NovelChapterSource.langOf(novelId, apiName) ?: TranslationLanguages.DEFAULT
 
         val config = SecurePrefs.engineConfig(ctx)
         val strictMode = SecurePrefs.isStrictModeEnabled(ctx)

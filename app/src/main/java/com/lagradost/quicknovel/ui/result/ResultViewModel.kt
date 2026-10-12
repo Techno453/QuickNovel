@@ -54,6 +54,9 @@ import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.SortingMethod
 import com.lagradost.quicknovel.translator.TranslatorNovelId
+import com.lagradost.quicknovel.translator.TranslationLanguages
+import com.lagradost.quicknovel.imported.ImportedBookId
+import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
@@ -316,6 +319,30 @@ class ResultViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Opens an imported book in the reader (its stored EPUB, with translation), at [chapter] if
+     * given. The reader keys its position by the EPUB's own title.
+     */
+    private suspend fun readImported(novelId: String, chapter: ChapterData?) {
+        val record = ImportedBooks.record(novelId)
+        val index = chapter?.let { chapterIndex(it) }
+        if (chapter != null && index != null && index >= 0) {
+            setReadChapter(chapter, true)
+            val key = record?.epubTitle ?: load.name
+            setKey(EPUB_CURRENT_POSITION, key, index)
+            setKey(EPUB_CURRENT_POSITION_CHAPTER, key, chapter.name)
+            setKey(EPUB_CURRENT_POSITION_SCROLL_CHAR, key, 0)
+        }
+        BookDownloader2.readEpub(
+            loadId,
+            downloadState.value?.progress?.toInt() ?: 1,
+            load.author,
+            load.name,
+            apiName,
+            load.synopsis
+        )
+    }
+
     private var cachedChapters: HashMap<ChapterData, Int> = hashMapOf()
 
     private fun chapterIndex(chapter: ChapterData): Int? {
@@ -339,6 +366,11 @@ class ResultViewModel : ViewModel() {
         loadMutex.withLock {
             if (!hasLoaded) return@ioSafe
             addToHistory()
+
+            ImportedBookId.fromResultUrl(load.url)?.let { novelId ->
+                readImported(novelId, chapter)
+                return@ioSafe
+            }
 
             chapter?.let {
                 when (val l = load) {
@@ -563,10 +595,11 @@ class ResultViewModel : ViewModel() {
         loadMutex.withLock {
             if (!hasLoaded) return@launch
             BookDownloader2.deleteNovel(load.author, load.name, apiName)
-            val novelId = TranslatorNovelId.from(apiName, load.name)
+            val novelId = translatorNovelId(load)
             val ctx = context ?: return@launch
             withContext(Dispatchers.IO) {
                 try {
+                    if (ImportedBooks.isImported(novelId)) ImportedBooks.remove(novelId)
                     TranslatorDatabase.getInstance(ctx).deleteAllForNovel(novelId)
                 } catch (t: Throwable) {
                     logError(t)
@@ -821,6 +854,43 @@ class ResultViewModel : ViewModel() {
         }
     }
 
+    /** An imported EPUB/TXT book: chapters from its stored EPUB, no provider. */
+    private suspend fun initImported(novelId: String) {
+        val ctx = context
+        val data = withContext(Dispatchers.IO) {
+            val record = ImportedBooks.record(novelId) ?: return@withContext null
+            ctx?.let { ImportedBooks.loadResponse(it, record) }
+        }
+        loadMutex.withLock {
+            if (data == null) {
+                loadResponse.postValue(Resource.Failure(null, "This imported book is no longer in the library"))
+                return
+            }
+            load = data
+            loadUrl = data.url
+            setState(generateId(data, apiName))
+            loadResponse.postValue(Resource.Success(data))
+        }
+    }
+
+    /** Translator novel id of the shown book (imported books have their own id scheme). */
+    fun translatorNovelId(response: LoadResponse): String =
+        ImportedBookId.fromResultUrl(response.url) ?: TranslatorNovelId.from(apiName, response.name)
+
+    /** True when the shown book is an imported EPUB/TXT book. */
+    fun isImportedBook(): Boolean =
+        ImportedBookId.fromResultUrl((loadResponse.value as? Resource.Success)?.value?.url) != null
+
+    /**
+     * Normalised source language (zh / ja / ko) of the shown book: the provider's language, or the
+     * imported book's detected / chosen language; null if not translatable (or not decided yet).
+     */
+    fun sourceLang(): String? {
+        val response = (loadResponse.value as? Resource.Success)?.value
+        ImportedBookId.fromResultUrl(response?.url)?.let { return ImportedBooks.lang(it) }
+        return TranslationLanguages.normalize(repo?.api?.lang)
+    }
+
     fun initState(apiName: String, url: String) = viewModelScope.launch {
         isGetLoaded = true
         // Only show loading state if we don't already have cached data displayed
@@ -832,6 +902,11 @@ class ResultViewModel : ViewModel() {
             this@ResultViewModel.apiName = apiName
             repo = Apis.getApiFromNameOrNull(apiName)
             loadUrl = url
+        }
+
+        ImportedBookId.fromResultUrl(url)?.let { novelId ->
+            initImported(novelId)
+            return@launch
         }
 
         val data = repo?.load(url)

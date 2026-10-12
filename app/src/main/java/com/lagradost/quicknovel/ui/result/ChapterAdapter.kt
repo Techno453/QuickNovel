@@ -90,7 +90,7 @@ class ChapterAdapter(
     private fun novelId(): String? {
         if (!isTranslatableSource) return null
         val stream = stream() ?: return null
-        return TranslatorNovelId.from(stream.apiName, stream.name)
+        return viewModel.translatorNovelId(stream)
     }
 
     /**

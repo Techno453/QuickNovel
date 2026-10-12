@@ -34,8 +34,7 @@ class AnalyzeNovelDialogFragment : DialogFragment() {
         val appCtx = ctx.applicationContext
         val binding = DialogAnalyzeNovelBinding.inflate(layoutInflater)
         val novelId = arguments?.getString(ARG_NOVEL_ID).orEmpty()
-        val apiName = NovelChapterSource.apiNameOf(novelId)
-        val lang = TranslationLanguages.langOfApi(apiName) ?: TranslationLanguages.DEFAULT
+        val lang = NovelChapterSource.langOf(novelId) ?: TranslationLanguages.DEFAULT
         // The "Analysis model" setting (default: the translation model).
         val analysisConfig = SecurePrefs.analysisEngineConfig(ctx)
         val model = analysisConfig.model

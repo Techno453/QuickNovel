@@ -66,6 +66,8 @@ import com.lagradost.quicknovel.ui.toUiText
 import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.translator.ChapterTranslationRepository
+import com.lagradost.quicknovel.imported.EpubChapters
+import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.translator.NovelAnalyzer
 import com.lagradost.quicknovel.ui.translate.NovelChapterSource
 import com.lagradost.quicknovel.ui.translate.ReadAheadScheduler
@@ -300,43 +302,40 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     }
 }
 
-class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBook() {
-    private val allTocReferences: List<TOCReference>
-    init {
-        val flatTOC = mutableListOf<TOCReference>()
-        fun flatten(refs: List<TOCReference>) {
-            refs.forEach { ref ->
-                //this variable is to corrupted epubs
-                val isValid = data.spine.getResourceIndex(ref.resource) != -1
-                if(isValid){
-                    flatTOC.add(ref)
-                    if (ref.children != null && ref.children.isNotEmpty()) {
-                        flatten(ref.children)
-                    }
-                }
-            }
-        }
-        flatten(data.tableOfContents.tocReferences)
+/**
+ * An EPUB in the reader. [novelId] is set for books in the translation pipeline:
+ * - an offline EPUB generated from a zh/ja/ko source: stored translations are served;
+ * - an imported book ([imported] = true, id from [ImportedBooks]): stored translations are served
+ *   and, like a streamed online novel, missing ones are translated on demand (analysis first,
+ *   read-ahead, glossary), with the language detected on import or chosen on the result page.
+ */
+class RegularBook(
+    val data: EpubBook,
+    val novelId: String? = null,
+    private val imported: Boolean = false,
+) : AbstractBook() {
+    /** Chapter split shared with the result page and the translation pipeline. */
+    private val chapters = EpubChapters(data)
 
-        //this is to corrupted epubs
-        allTocReferences = if (flatTOC.size <= 1) {
-            data.spine.spineReferences
-                .filter { it.isLinear }
-                .mapIndexed { index, spineRef ->
-                    val res = spineRef.resource
-                    TOCReference(res.title ?: "Chapter ${index + 1}", res)
-                }
-        } else {
-            flatTOC
-        }
-    }
+    /** Reload re-reads the original chapter text (without the translation), as for online novels. */
+    override val canReload = imported && novelId != null
 
-    override val canReload = false
-
-    // novelId is only set when opened from the translation pipeline (zh/ja/ko source)
+    // novelId is only set when opened from the translation pipeline (zh/ja/ko source or imported book)
     override fun isTranslatableSource(): Boolean = novelId != null
 
     override fun translatorNovelId(): String? = novelId
+
+    /** Toast once when the on-demand path runs the automatic analysis. */
+    private val analysisListener = object : NovelAnalyzer.Listener {
+        @Volatile
+        private var announced = false
+        override fun onProgress(stage: NovelAnalyzer.Stage, current: Int, total: Int) {
+            if (!announced) {
+                announced = true
+                showToast(R.string.analysis_reader_started)
+            }
+        }
+    }
 
     override fun author(): String? {
         val author = data.metadata.authors.firstOrNull() ?: return null
@@ -350,96 +349,39 @@ class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBoo
         return res?.inputStream
     }
 
-    override fun size(): Int = allTocReferences.size
+    override fun size(): Int = chapters.size
 
     override fun title(): String = data.title ?: "Unknown Book"
 
     override fun getChapterTitle(index: Int): UiText {
-        return allTocReferences.getOrNull(index)?.title?.toUiText()
+        return chapters.title(index)?.toUiText()
             ?: txt(R.string.chapter_format, (index + 1).toString())
     }
 
     override fun getLoadingStatus(index: Int): String? = null
 
     override suspend fun getChapterData(index: Int, reload: Boolean): String {
-        // Check if a translation exists in the Room DB for this chapter
-        if (novelId != null && !reload) {
-            val ctx = context
-            if (ctx != null) {
-                ChapterTranslationRepository.getCached(ctx, novelId, index)?.let { aiTranslatedChapters += index; return it }
+        val id = novelId
+        val ctx = context
+        if (id != null && ctx != null && !reload) {
+            val translated = if (imported) {
+                ChapterTranslationRepository.getOrTranslate(
+                    ctx, id, index, ImportedBooks.lang(id),
+                    chapterCount = chapters.size,
+                    // Before the book's first translation, the first chapters are analyzed (once).
+                    fetchChapter = { i -> chapters.html(i).ifBlank { null } },
+                    analysisListener = analysisListener,
+                ) { chapters.html(index) }
+            } else {
+                ChapterTranslationRepository.getCached(ctx, id, index)
+            }
+            if (translated != null) {
+                aiTranslatedChapters += index
+                return translated
             }
         }
         aiTranslatedChapters -= index
-
-        val start = allTocReferences[index].resource
-        val startIdx = data.spine.getResourceIndex(start)
-
-        val end = allTocReferences.getOrNull(index + 1)?.resource
-        var endIdx = data.spine.getResourceIndex(end)
-        if (endIdx == -1) {
-            endIdx = data.spine.spineReferences.size
-        }
-        val builder = StringBuilder()
-
-        for (i in startIdx until endIdx) {
-            try {
-                val ref = data.spine.spineReferences[i]
-
-                // I have no idea, but nonlinear = stop?
-                if (!ref.isLinear && i != startIdx) continue
-
-                val html = ref.resource.reader.readText()
-                val doc = Jsoup.parse(html)
-                val basePath = ref.resource.href.substringBeforeLast("/", "")
-
-                doc.select("img, image").forEach { img ->
-                    val attrName = if (img.tagName() == "image") "xlink:href" else "src"
-                    var src = img.attr(attrName)
-                    if (src.isNotEmpty() && !src.startsWith("http") && !src.startsWith("data:")) {
-                        try {
-                            val decodedSrc = URLDecoder.decode(src, "UTF-8")
-                            src = resolveRelativePath(basePath, decodedSrc)
-                        } catch (e: Throwable) {
-                            logError(e)
-                        }
-                    }
-                    if (img.tagName() == "image") {
-                        val newImg = doc.createElement("img")
-                        newImg.attr("src", src)
-                        img.replaceWith(newImg)
-                    } else {
-                        img.attr("src", src)
-                    }
-                }
-
-                builder.append(doc.body().html())
-            } catch (t: Throwable) {
-                logError(t)
-            }
-        }
-        return builder.toString()
-    }
-
-    private fun resolveRelativePath(basePath: String, relativePath: String): String {
-        val cleanRelative = relativePath.substringBefore("?").substringBefore("#")
-
-        val fullPath = if (cleanRelative.startsWith("/") || basePath.isEmpty()) {
-            cleanRelative
-        } else {
-            "$basePath/$cleanRelative"
-        }
-
-        val parts = fullPath.split("/")
-        val resolvedParts = ArrayDeque<String>()
-
-        for (part in parts) {
-            when (part) {
-                "", "." -> continue
-                ".." -> if (resolvedParts.isNotEmpty()) resolvedParts.removeLast()
-                else -> resolvedParts.addLast(part)
-            }
-        }
-        return resolvedParts.joinToString("/")
+        return chapters.html(index)
     }
 
     override fun expand(last: String): Boolean = false

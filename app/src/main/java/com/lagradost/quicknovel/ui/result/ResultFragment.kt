@@ -50,6 +50,7 @@ import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.translator.TranslatorNovelId
+import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.ui.glossary.AnalyzeNovelDialogFragment
 import com.lagradost.quicknovel.ui.glossary.GlossaryFragment
 import com.lagradost.quicknovel.ui.translate.NovelChapterSource
@@ -264,7 +265,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     resultAuthor.text = res.author ?: getString(R.string.no_author)
 
                     // Translate title if this is a translatable (zh/ja/ko) source and the toggle is on
-                    val isTranslatableForTitle = TranslationLanguages.isTranslatable(repo?.api?.lang)
+                    val isTranslatableForTitle = viewModel.sourceLang() != null
                     if (isTranslatableForTitle && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
                         viewLifecycleOwner.lifecycleScope.launch {
                             val translated = withContext(Dispatchers.IO) { GoogleTranslate.translate(res.name) }
@@ -294,11 +295,15 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     val hasChapters =
                         (res is StreamResponse && res.data.isNotEmpty()) || res is EpubResponse
                     val api = repo
+                    // Imported EPUB/TXT books have no provider but a chapter list.
+                    val imported = viewModel.isImportedBook()
+                    resultOpeninbrower.isVisible = !imported
+                    resultShare.isVisible = !imported
 
-                    if (api != null && (api.hasReviews || hasRelated || hasChapters)) {
+                    if ((api != null || imported) && (api?.hasReviews == true || hasRelated || hasChapters)) {
                         resultTabs.isVisible = true
                         resultTabs.addTab(resultTabs.newTab().setText(R.string.novel).setId(0))
-                        if (api.hasReviews) {
+                        if (api?.hasReviews == true) {
                             resultTabs.addTab(
                                 resultTabs.newTab().setText(R.string.reviews).setId(1)
                             )
@@ -397,7 +402,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                         resultSynopsisText.text = syno.html()
 
                         // Translate synopsis if this is a translatable (zh/ja/ko) source and the toggle is on
-                        val isTranslatableForSynopsis = TranslationLanguages.isTranslatable(repo?.api?.lang)
+                        val isTranslatableForSynopsis = viewModel.sourceLang() != null
                         if (isTranslatableForSynopsis && SecurePrefs.isGoogleTranslateTitlesEnabled(requireContext())) {
                             viewLifecycleOwner.lifecycleScope.launch {
                                 val translatedFull = withContext(Dispatchers.IO) {
@@ -425,9 +430,12 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                         resultChapters.text = res.data.size.toString()
                         resultChaptersInfo.text =
                             if (res.data.size == 1) getString(R.string.chapter) else getString(R.string.chapters)
-                        resultQuickstream.isVisible = true
+                        // An imported book reads its stored EPUB ("Read"); there is nothing to stream.
+                        resultQuickstream.isVisible = !imported
                         resultTotalChapters.isVisible = true
-                        val showTranslate = TranslationLanguages.isTranslatable(repo?.api?.lang) && SecurePrefs.isTranslationEnabled(requireContext())
+                        // Imported books always offer it: an undetected language is chosen on the first tap.
+                        val showTranslate = (viewModel.sourceLang() != null || imported) &&
+                            SecurePrefs.isTranslationEnabled(requireContext())
                         resultTranslateHolder.isVisible = showTranslate
                         if (res.data.isNotEmpty()) {
                             resultTotalChapters.text =
@@ -460,6 +468,34 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 }
             }
         }
+    }
+
+    /**
+     * Source language of an imported book, chosen by hand (detection found too little CJK text,
+     * or picked the wrong language). Stored as the book's override; [then] runs after a choice.
+     */
+    private fun chooseImportedLanguage(novelId: String, then: () -> Unit) {
+        val ctx = context ?: return
+        val languages = TranslationLanguages.all
+        val current = ImportedBooks.lang(novelId)
+        val detected = ImportedBooks.record(novelId)?.detectedLang
+        AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
+            .setTitle(
+                if (detected == null) getString(R.string.imported_language_unknown)
+                else getString(R.string.imported_language_title, TranslationLanguages.displayName(detected))
+            )
+            .setSingleChoiceItems(
+                languages.map { it.displayName }.toTypedArray(),
+                languages.indexOfFirst { it.code == current },
+            ) { dialog, which ->
+                ImportedBooks.setLangOverride(novelId, languages[which].code)
+                dialog.dismiss()
+                // Chapter chips and title translation follow the new language.
+                (binding?.chapterList?.adapter as? ChapterAdapter)?.setIsTranslatableSource(true)
+                then()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun doAction(action: Int) {
@@ -743,28 +779,48 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 val response = (viewModel.loadResponse.value as? Resource.Success)?.value as? StreamResponse
                     ?: return@setOnClickListener
                 val apiName = viewModel.apiName
-                val novelId = TranslatorNovelId.from(apiName, response.name)
+                val novelId = viewModel.translatorNovelId(response)
                 val chapters = ArrayList(response.data)
 
-                TranslateRangeDialogFragment.newInstance(
+                fun openDialog() = TranslateRangeDialogFragment.newInstance(
                     novelId = novelId,
                     apiName = apiName,
                     chapters = chapters,
                     novelAuthor = response.author,
                     novelName = response.name
                 ).show(childFragmentManager, "translate_range")
+
+                // An imported book whose language was not detected: ask once, then translate.
+                if (viewModel.isImportedBook() && viewModel.sourceLang() == null) {
+                    chooseImportedLanguage(novelId) { openDialog() }
+                } else {
+                    openDialog()
+                }
             }
 
-            // Long-press: "Analyze novel…" with the chapter list already loaded on this page.
+            // Long-press: "Analyze novel…" with the chapter list already loaded on this page
+            // (imported books also get "Source language…").
             resultTranslateBtn.setOnLongClickListener { v ->
                 val response = (viewModel.loadResponse.value as? Resource.Success)?.value as? StreamResponse
                     ?: return@setOnLongClickListener false
-                v.popupMenu(listOf(R.string.glossary_menu_analyze to R.string.glossary_menu_analyze), null) {
+                val imported = viewModel.isImportedBook()
+                val items = listOfNotNull(
+                    R.string.glossary_menu_analyze to R.string.glossary_menu_analyze,
+                    if (imported) R.string.imported_menu_language to R.string.imported_menu_language else null,
+                )
+                v.popupMenu(items, null) {
                     val apiName = viewModel.apiName
-                    val novelId = TranslatorNovelId.from(apiName, response.name)
-                    NovelChapterSource.remember(novelId, apiName, response.name, response.author, response.data)
-                    AnalyzeNovelDialogFragment.newInstance(novelId)
-                        .show(childFragmentManager, "analyze_novel")
+                    val novelId = viewModel.translatorNovelId(response)
+                    if (itemId == R.string.imported_menu_language) {
+                        chooseImportedLanguage(novelId) {}
+                        return@popupMenu
+                    }
+                    fun analyze() {
+                        NovelChapterSource.remember(novelId, apiName, response.name, response.author, response.data)
+                        AnalyzeNovelDialogFragment.newInstance(novelId)
+                            .show(childFragmentManager, "analyze_novel")
+                    }
+                    if (imported && viewModel.sourceLang() == null) chooseImportedLanguage(novelId) { analyze() } else analyze()
                 }
                 true
             }
@@ -772,7 +828,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             resultGlossaryBtn.setOnClickListener {
                 val response = (viewModel.loadResponse.value as? Resource.Success)?.value
                     ?: return@setOnClickListener
-                openGlossary(TranslatorNovelId.from(viewModel.apiName, response.name), response.name)
+                openGlossary(viewModel.translatorNovelId(response), response.name)
             }
 
             /*downloadDeleteTrashFromResult.setOnClickListener {
@@ -813,7 +869,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         observe(translateViewModel.progress) { progress ->
             // Compute the novelId for the book currently shown on this screen.
             val thisNovelId = (viewModel.loadResponse.value as? Resource.Success)
-                ?.value?.let { r -> TranslatorNovelId.from(viewModel.apiName, r.name) }
+                ?.value?.let { r -> viewModel.translatorNovelId(r) }
 
             // Only apply button state changes when the translation belongs to this book.
             val isForThisBook = thisNovelId != null &&
@@ -863,7 +919,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
 
         binding.chapterList.apply {
             setRecycledViewPool(ChapterAdapter.sharedPool)
-            val isTranslatableSource = TranslationLanguages.isTranslatable(repo?.api?.lang)
+            val isTranslatableSource = viewModel.sourceLang() != null
             val mainPageAdapter = ChapterAdapter(viewModel, isTranslatableSource = isTranslatableSource)
             adapter = mainPageAdapter
             setHasFixedSize(true)

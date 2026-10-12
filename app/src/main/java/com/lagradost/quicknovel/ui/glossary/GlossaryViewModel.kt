@@ -77,7 +77,7 @@ class GlossaryViewModel(application: Application) : AndroidViewModel(application
     fun init(novelId: String) {
         if (this.novelId == novelId && collectJob?.isActive == true) return
         this.novelId = novelId
-        sourceLang = TranslationLanguages.langOfApi(NovelChapterSource.apiNameOf(novelId))
+        sourceLang = NovelChapterSource.langOf(novelId)
         filter.value = GlossaryFilter()
         collectJob?.cancel()
         collectJob = viewModelScope.launch {
