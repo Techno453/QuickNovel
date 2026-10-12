@@ -40,7 +40,8 @@ open class QuanbenProvider : MainAPI() {
         return match?.groupValues?.get(3)?.trim('/')
     }
 
-    private fun parseNovels(document: Document): List<SearchResponse> {
+    /** Pure: search results and category listings. Covered by a JVM fixture test. */
+    internal fun parseNovels(document: Document): List<SearchResponse> {
         val novels = mutableListOf<SearchResponse>()
 
         // Type 1: list2 blocks
@@ -102,16 +103,32 @@ open class QuanbenProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
+        titleOf(document) // fail before fetching the chapter-list mirror
 
-        val name = document.selectFirst("meta[property=og:novel:book_name]")?.attr("content")
+        val slug = slugOf(url)
+        val mirrorUrl = "https://quanben5.com/n/$slug/xiaoshuo.html"
+        val mirrorDoc = runCatching { app.get(mirrorUrl).document }.getOrNull()
+        return parseLoad(url, document, mirrorDoc)
+    }
+
+    private fun titleOf(document: Document): String =
+        document.selectFirst("meta[property=og:novel:book_name]")?.attr("content")
             ?: document.selectFirst("div.list2 h3")?.text()?.trim()
             ?: throw ErrorLoadingException("Title not found")
 
-        val slug = Regex("""n/([^/]+)""").find(url)?.groupValues?.get(1) ?: throw ErrorLoadingException("Slug not found")
-        val mirrorUrl = "https://quanben5.com/n/$slug/xiaoshuo.html"
+    private fun slugOf(url: String): String =
+        Regex("""n/([^/]+)""").find(url)?.groupValues?.get(1) ?: throw ErrorLoadingException("Slug not found")
+
+    /**
+     * Pure half of [load]: [document] is the novel page and [mirrorDoc] the quanben5.com chapter
+     * list (null when that fetch failed). Covered by a JVM fixture test.
+     */
+    internal suspend fun parseLoad(url: String, document: Document, mirrorDoc: Document?): LoadResponse {
+        val name = titleOf(document)
+
+        val slug = slugOf(url)
         val chapters = mutableListOf<ChapterData>()
-        runCatching {
-            val mirrorDoc = app.get(mirrorUrl).document
+        if (mirrorDoc != null) runCatching {
             mirrorDoc.select("ul li a").forEachIndexed { index, el ->
                 val chName = el.text().trim()
                 if (chName.isNotEmpty()) {
@@ -142,8 +159,10 @@ open class QuanbenProvider : MainAPI() {
         }
     }
 
-    override suspend fun loadHtml(url: String): String? {
-        val document = app.get(url).document
+    override suspend fun loadHtml(url: String): String? = parseChapter(app.get(url).document)
+
+    /** Pure half of [loadHtml]. */
+    internal fun parseChapter(document: Document): String? {
         val content = document.selectFirst("#contentbody, #content, .content") ?: return null
         content.select("script, style, ins, iframe, [class*=ads], [id*=ads], [class*=google], [id*=google], [class*=recommend], div[align=center]").remove()
         return content.html().trim()
