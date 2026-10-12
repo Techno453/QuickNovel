@@ -1,4 +1,4 @@
-# Translation pipeline: analysis, read-ahead, spend, battery, stale sources, overnight batches, imported books
+# Translation pipeline: analysis, read-ahead, preview, spend, battery, stale sources, overnight batches, imported books
 
 How a novel goes from "never translated" to "chapters translated ahead of the reader", and what
 keeps it cheap: the spend ledger and caps, charging conditions for long jobs, source-hash cache
@@ -104,7 +104,7 @@ removed. The new prompt itself has not been benchmarked yet.
 | Manual Analyze novel (Glossary menu, result page ⋮ menu, translate dialog hint) | always runs, re-run allowed; sets the state | n/a | Glossary screen + notification |
 | Batch translation (Translate dialog → `TranslationForegroundService` `ACTION_START`) | novel never analyzed and the setting is on | yes (in-memory cache for the job) | notification "Analyzing novel before translating", result-page button "Analyzing novel… n/m", Glossary screen |
 | Read-ahead worker | same, before its first chapter of the novel | yes | read-ahead notification "Analyzing novel… n/m" |
-| Reader on-demand translation (`ChapterTranslationRepository.getOrTranslate`) | same | yes (the current chapter; others come from the reader's chapter file cache) | toast "Analyzing the novel before its first translation…" |
+| Reader on-demand translation (`ChapterTranslationRepository.getOrTranslate`) | same, except in a [Preview](#preview), which never analyzes | yes (the current chapter; others come from the reader's chapter file cache) | toast "Analyzing the novel before its first translation…" |
 
 - Single-flight per novel (`OncePerKey`): concurrent callers (reader preloading several
   chapters, the service) wait for the one running analysis and then continue with the fresh
@@ -151,6 +151,63 @@ service as batch jobs.
 - **Reader preload:** the reader itself already preloads a few chapters around the current one
   and, with on-demand on, translates them; read-ahead adds a queue that survives closing the
   reader and covers chapters the preloader has not reached. Both share the chapter lock.
+
+## Preview
+
+The result page's **Preview** (upstream's Stream Read, renamed; also a chapter row tap) opens the
+streamed reader on the online novel with the `preview` intent extra
+(`BookDownloader2.EXTRA_PREVIEW` → `QuickBook.isPreview`). It is for trying a novel cheaply: each
+chapter is translated on its own, without the glossary. Opening the same novel any other way
+(library, Downloads, history, Translate) runs the normal path, with the analysis and the glossary.
+Imported books are not previewed (their row tap opens the stored EPUB as before), and books from
+sources that are not translated read exactly as with the old Stream Read.
+
+- **One chapter at a time:** only the chapter the reader has open is translated
+  (`AbstractBook.previewOpenChapter`, set by `ReadActivityViewModel` before it loads chapters, on
+  seek, on scroll and when TTS moves on). The chapters the reader preloads around it are served
+  from a stored translation if there is one, otherwise as the original with "Preview · translated
+  when you reach this chapter", and loaded again (translated) when they become the open chapter
+  (`ReadActivityViewModel.openPreviewChapter`; rule `PreviewChapters.defers`). No read ahead
+  (`AbstractBook.onChapterOpened` does nothing) and no batch.
+- **No glossary:** `ChapterTranslationRepository.getOrTranslate(preview = true)` never runs the
+  analysis (`analyzesFirst`), and translates with `StoryBibleRepository.ChapterInputs.preview`:
+  an empty term list, no premise / previous summary / previous English tail, only the novel's
+  name style, and `TranslationOptions.preview()` (the user's strict mode and prompt profile; no
+  auto-add, no story context, `collectTerms = false` so the terms the model reports are dropped:
+  no auto-added, updated or pending terms). Same engine, model, fallback, spend tag, per-chapter
+  lock and quality checks (CJK leaks, paragraphs; glossary violations do not apply).
+- **A preview is a throwaway:** the chapter row goes to `translated_chapters` with
+  `preview = 1` (DB v9, `MIGRATION_8_9`; `glossary_violations` NULL, no summary, no terms). The
+  rule is `ChapterTranslationRepository.servable(row, preview)`: inside a preview any stored row
+  is served (a full translation, or the preview row, so a chapter previewed twice is paid once);
+  everywhere else a preview row counts as **not translated**. Concretely:
+  - the normal reader path (`getCached` / `getOrTranslate` / `translateIfMissing` and its core)
+    ignores it, translates the chapter normally (analysis first as usual, with the glossary) and
+    replaces the row with a normal one (`StoryBibleRepository.chapterRow`);
+  - the Translate dialog, translation jobs, overnight batches and read ahead count it as
+    untranslated and include it (`TranslationDao.getTranslatedChapterNums` leaves preview rows
+    out; the job's and the batch's "translated meanwhile" checks use `servable`);
+  - the result page chips show **Preview** for it instead of Translated
+    (`ChapterTranslationStatus.PREVIEW`, from `getPreviewChapterNums`); a normal translation or a
+    queue entry wins;
+  - continuity context (previous chapter's English tail), the stale checks and stale lists
+    (`checkSourceHash`, `isStale`, `getStaleChapterNums`, `observeStaleChapterNums`) and the
+    translated count ignore preview rows;
+  - chapter `.txt` files (`TranslatedChapterFiles`, used by Download / EPUB generation) are only
+    written by translation jobs and batches with normal results, never by a preview.
+  Inside a preview nothing differs: a stored full translation is served ("Preview"), a stored
+  preview row is served ("Preview · translated without the glossary"), a missing chapter is
+  previewed.
+- **Reader:** the line under the chapter title says "Preview · translated without the glossary"
+  for preview translations, "Preview" for stored translations made with the glossary, and
+  "Preview · <reason>" when the original is shown because the switch is off or there is no key
+  (`ui/reader/PreviewNotice`, `PreviewNoticeTest`). The reader's Translate tab adds a preview note,
+  and the glossary lookup (long-press / selection) is off in a preview.
+- Tests: `PreviewTranslationTest` (options preset, inputs, analysis rule, row marker, `servable`,
+  the normal path re-translating a preview row into a normal row, preview rows never stale),
+  `TranslatorDatabaseMigrationTest` (v9), `ChapterStatusSourceTest` (Preview chip),
+  `TranslationEngineStoryBibleTest.previewTranslatesWithoutGlossaryTermsOrContext`,
+  `PreviewNoticeTest`.
 
 ## Spend ledger, dashboard and caps
 
@@ -492,6 +549,8 @@ The details and the limits are in [search.md](search.md).
 - `ui/translate/SpendScreen.kt`; settings rows in `ui/settings/TranslationSettings.kt`.
 - DB v6 (`MIGRATION_5_6`, additive): `translated_chapters.source_hash` / `stale`,
   `spend_entries` (+ index on timestamp), `batch_jobs`, `batch_chapters`.
+- DB v9 (`MIGRATION_8_9`, additive): `translated_chapters.preview` INTEGER NOT NULL DEFAULT 0
+  (rows made by the result page's [Preview](#preview); existing rows are normal translations).
 - Tests: `SpendCapsTest`, `SpendLedgerTest`, `PowerPolicyTest`, `SourceHashTest`, `BatchTest`,
   `TranslatorDatabaseMigrationTest` (also compares the migration with Room's generated schema).
 - `translator/AuthorNotes.kt`, `AnalysisFilter.kt`, `AnalysisRunner.kt`: pure analysis logic.

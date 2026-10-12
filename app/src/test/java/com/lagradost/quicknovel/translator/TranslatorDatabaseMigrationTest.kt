@@ -37,7 +37,36 @@ class TranslatorDatabaseMigrationTest {
         val migrations = TranslatorDatabase.ALL_MIGRATIONS
         assertEquals(1, migrations.first().startVersion)
         migrations.toList().zipWithNext().forEach { (a, b) -> assertEquals(a.endVersion, b.startVersion) }
-        assertEquals(8, migrations.last().endVersion)
+        assertEquals(9, migrations.last().endVersion)
+    }
+
+    @Test
+    fun migration8To9OnlyAddsThePreviewFlag() {
+        val statements = mutableListOf<String>()
+        TranslatorDatabase.MIGRATION_8_9.migrate(recordingDb(statements))
+        assertEquals(TranslatorDatabase.MIGRATION_8_9_SQL, statements)
+        assertEquals(listOf("ALTER TABLE translated_chapters ADD COLUMN preview INTEGER NOT NULL DEFAULT 0"), statements)
+    }
+
+    @Test
+    fun translationsAreNotPreviewsByDefault() {
+        // Existing rows (DEFAULT 0) and every non-preview insert are normal translations.
+        assertFalse(com.lagradost.quicknovel.translator.db.TranslatedChapter("n", 1, "<p>x</p>").preview)
+    }
+
+    /** The v9 column, appended by ALTER TABLE after `stale`, is what Room creates for a fresh install. */
+    @Test
+    fun migration8To9MatchesRoomsGeneratedSchema() {
+        val generated = listOf(
+            "build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+            "app/build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+        ).map { java.io.File(it) }.firstOrNull { it.isFile }
+        org.junit.Assume.assumeTrue("KSP output not found", generated != null)
+        val impl = generated!!.readText()
+        assertTrue(
+            "Room creates a different translated_chapters table",
+            impl.contains("`stale` INTEGER NOT NULL DEFAULT 0, `preview` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`novel_id`, `chapter_num`))"),
+        )
     }
 
     @Test

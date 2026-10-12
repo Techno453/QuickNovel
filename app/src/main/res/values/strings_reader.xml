@@ -39,4 +39,13 @@
     <string name="chapter_status_translated">Translated</string>
     <string name="chapter_status_stale">Source changed</string>
     <string name="chapter_status_queued">Queued</string>
+    <!-- Only a Preview translation (no glossary); the chapter still counts as untranslated -->
+    <string name="chapter_status_preview">Preview</string>
+
+    <!-- Preview (result page): the line under the chapter title (ui/reader/PreviewNotice) and the Translate tab -->
+    <string name="reader_preview">Preview</string>
+    <string name="reader_preview_without_glossary">Preview · translated without the glossary</string>
+    <string name="reader_preview_reason">Preview · %s</string>
+    <string name="reader_preview_not_yet">Preview · translated when you reach this chapter</string>
+    <string name="reader_preview_note">Preview: each chapter is translated when you open it, one at a time, without the glossary and without read ahead.</string>
 </resources>

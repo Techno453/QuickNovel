@@ -29,8 +29,11 @@ class ReaderGlossaryController(
 
     private var observing = false
 
-    /** The translator novel id of the open book, or null (book not loaded / not translatable). */
-    val novelId: String? get() = viewModel.translatorNovelIdOrNull()
+    /**
+     * The translator novel id of the open book, or null (book not loaded / not translatable, or a
+     * Preview, which reads without the glossary).
+     */
+    val novelId: String? get() = if (viewModel.isPreview) null else viewModel.translatorNovelIdOrNull()
 
     val isAvailable: Boolean get() = novelId != null
 

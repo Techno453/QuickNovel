@@ -33,7 +33,8 @@ and labels, Show original, tag → provider-listing index, and the Translate but
 
 Actions cover bookmark, tabs, Show original, retry, filter / sort / search, download (download,
 pause, resume, stop, partial download with a chapter dialog, delete with confirmation), read epub,
-stream read, chapter tap (reader at that chapter) and long press (mark read / unread, translate
+Preview (`ResultPageAction.Preview`), chapter tap (`ChapterOperation.Preview`: the reader at that
+chapter as a preview; imported books open their stored EPUB) and long press (mark read / unread, translate
 this chapter, download from this chapter), Translate, Analyze novel, Glossary, Source language,
 tag chips, translation progress and resume.
 
@@ -73,7 +74,9 @@ Details pane, top to bottom: blurred poster header (poster, tap for full size; t
 with the original underneath; author; status; latest chapter), Bookmark / Open in browser / Share
 (the last two not for imported books), stats (views, rating with votes, chapters; cells without
 data are left out), the imported book's source language (tap to choose), the slow-source warning,
-Read epub / download button (tap or long press for its menu) / Stream read and the progress bar,
+Read epub / download button (tap or long press for its menu) / Preview (upstream's Stream Read:
+the online novel in the reader, translated one chapter at a time without the glossary, see
+[translation-pipeline.md](translation-pipeline.md#preview); long press for the tooltip) and the progress bar,
 Translate / Glossary / ⋮ (Analyze novel…, and Source language… for imports), Show original
 toggle (with the `ic_original_24` icon) and synopsis (tap to expand), tags (clickable when the provider lists them as a genre).
 

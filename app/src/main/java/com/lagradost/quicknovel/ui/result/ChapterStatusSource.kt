@@ -11,6 +11,9 @@ import kotlinx.coroutines.CancellationException
 enum class ChapterTranslationStatus {
     NONE,
 
+    /** Only a preview translation (no glossary) exists: the chapter counts as untranslated. */
+    PREVIEW,
+
     /** A stored translation exists. */
     TRANSLATED,
 
@@ -26,6 +29,9 @@ interface ChapterStatusSource {
     /** Chapter indices with a stored translation. */
     suspend fun translated(novelId: String): Set<Int>
 
+    /** Chapter indices with only a preview translation (result page Preview). */
+    suspend fun preview(novelId: String): Set<Int> = emptySet()
+
     /** Chapter indices whose stored translation is out of date ("source changed"). */
     suspend fun stale(novelId: String): Set<Int>
 
@@ -33,12 +39,18 @@ interface ChapterStatusSource {
     suspend fun queued(novelId: String): Set<Int>
 
     companion object {
-        /** Status of each chapter; queued wins over stale, stale over translated. */
+        /** Status of each chapter; queued wins over stale, stale over translated, translated over preview. */
         suspend fun statuses(source: ChapterStatusSource, novelId: String): Map<Int, ChapterTranslationStatus> =
-            merge(source.translated(novelId), source.stale(novelId), source.queued(novelId))
+            merge(source.translated(novelId), source.stale(novelId), source.queued(novelId), source.preview(novelId))
 
-        fun merge(translated: Set<Int>, stale: Set<Int>, queued: Set<Int>): Map<Int, ChapterTranslationStatus> {
+        fun merge(
+            translated: Set<Int>,
+            stale: Set<Int>,
+            queued: Set<Int>,
+            preview: Set<Int> = emptySet(),
+        ): Map<Int, ChapterTranslationStatus> {
             val map = HashMap<Int, ChapterTranslationStatus>()
+            for (i in preview) map[i] = ChapterTranslationStatus.PREVIEW
             for (i in translated) map[i] = ChapterTranslationStatus.TRANSLATED
             for (i in stale) map[i] = ChapterTranslationStatus.STALE
             for (i in queued) map[i] = ChapterTranslationStatus.QUEUED
@@ -49,8 +61,11 @@ interface ChapterStatusSource {
 
 /** The raw lookups behind [TranslatorChapterStatusSource] (a seam for tests; no Android types). */
 interface ChapterStatusQueries {
-    /** `translated_chapters` rows of the novel. */
+    /** `translated_chapters` rows of the novel (preview rows left out). */
     suspend fun translatedChapterNums(novelId: String): List<Int>
+
+    /** `translated_chapters` preview rows of the novel. */
+    suspend fun previewChapterNums(novelId: String): List<Int> = emptyList()
 
     /** `translated_chapters` rows flagged stale (source hash changed). */
     suspend fun staleChapterNums(novelId: String): List<Int>
@@ -76,6 +91,7 @@ class TranslatorChapterStatusSource(private val queries: ChapterStatusQueries) :
             return TranslatorChapterStatusSource(object : ChapterStatusQueries {
                 private val dao get() = TranslatorDatabase.getInstance(appCtx).translationDao()
                 override suspend fun translatedChapterNums(novelId: String) = dao.getTranslatedChapterNums(novelId)
+                override suspend fun previewChapterNums(novelId: String) = dao.getPreviewChapterNums(novelId)
                 override suspend fun staleChapterNums(novelId: String) = dao.getStaleChapterNums(novelId)
                 override suspend fun chaptersInUnfinishedBatches(novelId: String) =
                     BatchManager.chaptersInUnfinishedBatches(appCtx, novelId)
@@ -103,6 +119,9 @@ class TranslatorChapterStatusSource(private val queries: ChapterStatusQueries) :
 
     override suspend fun translated(novelId: String): Set<Int> =
         safely("translated chapters") { queries.translatedChapterNums(novelId) }
+
+    override suspend fun preview(novelId: String): Set<Int> =
+        safely("preview chapters") { queries.previewChapterNums(novelId) }
 
     override suspend fun stale(novelId: String): Set<Int> =
         safely("stale chapters") { queries.staleChapterNums(novelId) }

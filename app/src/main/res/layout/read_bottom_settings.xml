@@ -179,6 +179,18 @@
                         android:text="@string/tr_on_demand_desc"
                         android:textColor="?attr/grayTextColor"
                         android:textSize="13sp" />
+
+                    <!-- Preview from the result page: what it leaves out (ReaderSettingsSheet) -->
+                    <TextView
+                        android:id="@+id/read_ai_preview_note"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/reader_preview_note"
+                        android:textColor="?attr/grayTextColor"
+                        android:textSize="13sp"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
                 </LinearLayout>
 
                 <TextView

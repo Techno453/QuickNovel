@@ -150,6 +150,12 @@ known language; `AbstractBook.translatesOnDemand`):
   `ui/reader/OriginalNotice` (`OriginalNoticeTest`); `ChapterStartSpanned.notice` carries it.
 - **Show original:** long-press on a translated chapter's title offers "Show original" (on other
   chapters "Reload Chapter"); both reload the original text.
+- **Preview** (result page; `QuickBook.isPreview`): only the open chapter is translated, without
+  the glossary; preloaded chapters wait as the original until opened. The title line says
+  "Preview · translated without the glossary" (or "Preview · …" with the original notice's
+  reason, or "Preview · translated when you reach this chapter"), the Translate tab adds a preview
+  note, and the glossary lookup is off. Details:
+  [translation-pipeline.md](translation-pipeline.md#preview).
 
 ## Imported books
 
@@ -168,12 +174,14 @@ On the result page, chapters of translated novels (online zh/ja/ko sources and i
 with a known language) show a chip:
 
 - **Translated**: a stored translation exists.
+- **Preview**: only a [Preview](translation-pipeline.md#preview) translation exists
+  (`translated_chapters.preview`); the chapter still counts as untranslated everywhere else.
 - **Source changed**: the stored translation is stale (`translated_chapters.stale`, set by
   `ChapterTranslationRepository` when the `SourceHash` check says CHANGED).
 - **Queued**: the read-ahead queue holds the chapter, or it is in an overnight batch that has
   not finished (`BatchManager.chaptersInUnfinishedBatches`).
 
-Queued wins over stale, stale over translated. `ChapterStatusSource` / `TranslatorChapterStatusSource`
+Queued wins over stale, stale over translated, translated over preview. `ChapterStatusSource` / `TranslatorChapterStatusSource`
 provide the statuses; the lookups sit behind `ChapterStatusQueries` (translator DAO, batch jobs,
 read-ahead queue) so the merging is unit tested with fakes (`ChapterStatusSourceTest`). A failing
 lookup only drops its own chips. The adapter refreshes them every 4 s while the list is visible and

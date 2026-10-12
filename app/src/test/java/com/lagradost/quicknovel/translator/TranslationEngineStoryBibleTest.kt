@@ -124,4 +124,41 @@ class TranslationEngineStoryBibleTest {
         assertEquals("He laughed.", result.chapterSummary)
         assertEquals(1, fake.prompts.size)
     }
+
+    @Test
+    fun previewTranslatesWithoutGlossaryTermsOrContext() = runBlocking {
+        val p1 = "苏婉看着远方。" + "风很大。".repeat(400) // > one chunk
+        val p2 = "苏婉转身离开。" + "天很冷。".repeat(400)
+        val fake = FakeLlm(
+            listOf(
+                "Su Wan looked into the distance. The wind was strong.\n===TERMS===\n" +
+                    "[{\"source\":\"苏婉\",\"english\":\"Su Wan\",\"category\":\"character\",\"gender\":\"female\",\"confidence\":0.9}," +
+                    "{\"source\":\"远方\",\"english\":\"Afar\",\"category\":\"place\",\"confidence\":0.2}]\n" +
+                    "===SUMMARY===\nSu Wan watches.\nCharacters: 苏婉",
+                "Su Wan turned and left. It was cold.\n===TERMS===\n[]\n===SUMMARY===\nShe leaves.\nCharacters: 苏婉",
+            )
+        )
+        // Even if a caller passed a bible-less but context-rich input, preview options send no context.
+        val result = engine(fake).translateChapter(
+            "$p1\n$p2", "n", 4, emptyList(),
+            context = StoryContext(premise = "PREMISE", previousChapterSummary = "PREVIOUS", previousEnglishTail = "TAIL"),
+            options = TranslationOptions.preview(),
+        )
+        assertEquals(2, result.chunkCount)
+        // The term reported by chunk 1 is not folded into chunk 2's prompt, nor kept anywhere.
+        assertFalse(fake.prompts[1].contains("苏婉 → Su Wan"))
+        assertTrue(result.autoAddedTerms.isEmpty())
+        assertTrue(result.updatedTerms.isEmpty())
+        assertTrue(result.pendingTerms.isEmpty())
+        // No story context, and the previous chunk's English is not carried either.
+        for (prompt in fake.prompts) {
+            assertFalse(prompt.contains("PREMISE"))
+            assertFalse(prompt.contains("PREVIOUS"))
+            assertFalse(prompt.contains("TAIL"))
+        }
+        assertFalse(fake.prompts[1].contains("Su Wan looked into the distance."))
+        assertEquals(0, result.glossaryViolations)
+        assertTrue(result.englishText.contains("Su Wan looked into the distance."))
+        assertTrue(result.englishText.contains("Su Wan turned and left."))
+    }
 }

@@ -297,7 +297,11 @@ object BatchManager {
             var status = BatchChapterStatus.NEEDS_LIVE
             var note: String? = null
             ChapterTranslationRepository.withChapterLock(job.novelId, row.chapterNum) {
-                if (ChapterTranslationRepository.getCachedEntry(ctx, job.novelId, row.chapterNum) != null) {
+                // A preview row (no glossary) does not count: the batch result replaces it.
+                if (ChapterTranslationRepository.servable(
+                        ChapterTranslationRepository.getCachedEntry(ctx, job.novelId, row.chapterNum)
+                    ) != null
+                ) {
                     status = BatchChapterStatus.SKIPPED
                     note = "Already translated when the results arrived"
                     return@withChapterLock

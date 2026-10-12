@@ -30,4 +30,9 @@ data class TranslatedChapter(
     @ColumnInfo(name = "source_hash", defaultValue = "") val sourceHash: String = "",
     /** The source changed since this translation was made (still readable; never re-translated automatically). */
     @ColumnInfo(defaultValue = "0") val stale: Boolean = false,
+    /**
+     * Made by the result page's Preview (no glossary, DB v9). Served only inside a preview; for
+     * everything else the chapter counts as untranslated and the normal path overwrites the row.
+     */
+    @ColumnInfo(defaultValue = "0") val preview: Boolean = false,
 )

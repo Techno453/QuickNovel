@@ -26,11 +26,20 @@ object ChapterTranslationRepository {
     /** Prevents translating the same chapter twice when the reader preloads concurrently. */
     private val locks = ConcurrentHashMap<String, Mutex>()
 
-    /** Stored translation HTML for a chapter, or null. */
-    suspend fun getCached(ctx: Context, novelId: String, chapterIndex: Int): String? =
+    /**
+     * The stored row a caller may serve: any row inside a [preview]; outside one, only a normal
+     * translation (a preview row counts as untranslated and is overwritten by the normal path).
+     */
+    fun servable(entry: TranslatedChapter?, preview: Boolean = false): TranslatedChapter? =
+        entry?.takeIf { preview || !it.preview }
+
+    /** Stored translation HTML for a chapter, or null (preview rows only when [preview]). */
+    suspend fun getCached(ctx: Context, novelId: String, chapterIndex: Int, preview: Boolean = false): String? =
         try {
-            TranslatorDatabase.getInstance(ctx).translationDao()
-                .getTranslation(novelId, chapterIndex)?.englishText
+            servable(
+                TranslatorDatabase.getInstance(ctx).translationDao().getTranslation(novelId, chapterIndex),
+                preview,
+            )?.englishText
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -74,13 +83,22 @@ object ChapterTranslationRepository {
          * first: if it matches the stored hash again, the stored translation is kept (no paid call).
          */
         retranslateStale: Boolean = false,
+        /**
+         * Preview: translate without the glossary ([StoryBibleRepository.ChapterInputs.preview])
+         * and store only the chapter row (see [StoryBibleRepository.persistChapter]).
+         */
+        preview: Boolean = false,
     ): String? = withChapterLock(novelId, chapterIndex) {
         translateIfMissingCore(
-            dbStore(ctx), novelId, chapterIndex, retranslateStale, fetchSource, beforeTranslate,
+            dbStore(ctx), novelId, chapterIndex, retranslateStale, fetchSource, beforeTranslate, preview,
         ) { source, hash ->
             val engine = TranslationEngine(config, lang, fallback = SecurePrefs.fallbackEngineConfig(ctx))
             // Loaded after beforeTranslate so a fresh analysis is used.
-            val inputs = StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIndex, lang)
+            val inputs = if (preview) {
+                StoryBibleRepository.loadPreviewInputs(ctx, novelId, lang)
+            } else {
+                StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIndex, lang)
+            }
             val outer = coroutineContext[SpendTag]
             val tag = SpendTag(spendKind, novelId, chapterIndex, outer?.batchId, outer?.meter)
             val result = withContext(tag) {
@@ -96,7 +114,7 @@ object ChapterTranslationRepository {
             }
             if (result.englishText.isBlank()) return@translateIfMissingCore null
 
-            StoryBibleRepository.persistChapter(ctx, novelId, chapterIndex, result, config.model, lang, hash)
+            StoryBibleRepository.persistChapter(ctx, novelId, chapterIndex, result, config.model, lang, hash, preview)
             result.englishText
         }
     }
@@ -118,6 +136,8 @@ object ChapterTranslationRepository {
      * book; the chapter source only differs in [fetchSource]): serve the stored translation;
      * otherwise fetch the source, keep a stale translation whose source is back to the stored
      * hash, else run [beforeTranslate] and [translate] (which stores the result with the hash).
+     * Outside a [preview] a stored preview row is ignored ([servable]): the chapter is translated
+     * normally and the row replaced; inside one it is served like any stored translation.
      */
     internal suspend fun translateIfMissingCore(
         store: ChapterStore,
@@ -126,10 +146,11 @@ object ChapterTranslationRepository {
         retranslateStale: Boolean,
         fetchSource: suspend () -> String?,
         beforeTranslate: suspend (source: String) -> Unit,
+        preview: Boolean = false,
         translate: suspend (source: String, hash: String) -> String?,
     ): String? {
         // Another caller may have finished translating while we waited.
-        val cached = store.entry(novelId, chapterIndex)
+        val cached = servable(store.entry(novelId, chapterIndex), preview)
         if (cached != null && !(retranslateStale && cached.stale)) return cached.englishText
 
         val source = fetchSource()?.takeIf { it.isNotBlank() } ?: return null
@@ -180,7 +201,8 @@ object ChapterTranslationRepository {
 
     internal suspend fun checkSourceHashCore(store: ChapterStore, novelId: String, chapterIndex: Int, source: String): SourceHash.Check {
         if (source.isBlank()) return SourceHash.Check.NO_TRANSLATION
-        val stored = store.entry(novelId, chapterIndex) ?: return SourceHash.Check.NO_TRANSLATION
+        // Preview rows are throwaways: never checked or marked stale.
+        val stored = servable(store.entry(novelId, chapterIndex)) ?: return SourceHash.Check.NO_TRANSLATION
         val hash = SourceHash.of(source)
         val check = SourceHash.compare(stored.sourceHash, hash)
         when (check) {
@@ -201,7 +223,7 @@ object ChapterTranslationRepository {
 
     /** True if the stored translation of the chapter is marked stale (its source changed). */
     suspend fun isStale(ctx: Context, novelId: String, chapterIndex: Int): Boolean =
-        getCachedEntry(ctx, novelId, chapterIndex)?.stale == true
+        servable(getCachedEntry(ctx, novelId, chapterIndex))?.stale == true
 
     /** Chapter indices of [novelId] whose translation is stale. */
     suspend fun staleChapters(ctx: Context, novelId: String): List<Int> = try {
@@ -218,11 +240,24 @@ object ChapterTranslationRepository {
         TranslatorDatabase.getInstance(ctx).translationDao().observeStaleChapterNums(novelId)
 
     /**
+     * True when an on-demand translation runs the automatic analysis first: never in a preview,
+     * otherwise when the caller can fetch other chapters (the analysis reads the first ones).
+     */
+    internal fun analyzesFirst(preview: Boolean, canFetchChapters: Boolean): Boolean = !preview && canFetchChapters
+
+    /** True if a stored row was made by a preview (`translated_chapters.preview`, DB v9). */
+    fun isPreviewTranslation(entry: TranslatedChapter?): Boolean = entry?.preview == true
+
+    /**
      * @param sourceLang provider language (zh/ja/ko); untranslatable languages only get the cache.
      * @param fetchSource loads the original chapter text/HTML; only called if a translation is needed.
      * @param chapterCount size of the novel's chapter list; with [fetchChapter], enables the
      *   automatic analysis before the novel's first translation
      * @param fetchChapter loads any chapter's source (for that analysis)
+     * @param preview the result page's Preview: a stored translation is still served; a missing one
+     *   is translated alone, without the analysis, the glossary or story context
+     *   ([TranslationOptions.preview]), and stored as a preview row so it is never paid twice;
+     *   outside a preview such a row counts as untranslated
      * @return translated chapter HTML, or null to fall back to the original chapter.
      */
     suspend fun getOrTranslate(
@@ -233,9 +268,10 @@ object ChapterTranslationRepository {
         chapterCount: Int = 0,
         fetchChapter: (suspend (Int) -> String?)? = null,
         analysisListener: NovelAnalyzer.Listener? = null,
+        preview: Boolean = false,
         fetchSource: suspend () -> String?,
     ): String? {
-        getCached(ctx, novelId, chapterIndex)?.let { return it }
+        getCached(ctx, novelId, chapterIndex, preview)?.let { return it }
 
         val lang = TranslationLanguages.normalize(sourceLang) ?: return null
         if (!SecurePrefs.isTranslateOnDemandEnabled(ctx)) return null
@@ -245,8 +281,9 @@ object ChapterTranslationRepository {
             translateIfMissing(
                 ctx, novelId, chapterIndex, lang, config,
                 fetchSource = fetchSource,
+                preview = preview,
                 beforeTranslate = { source ->
-                    if (fetchChapter != null) {
+                    if (analyzesFirst(preview, canFetchChapters = fetchChapter != null) && fetchChapter != null) {
                         // Single-flight per novel: other chapters (and the service) wait for this one.
                         NovelAnalyzer.ensureAnalyzed(
                             ctx, novelId, lang, chapterCount,

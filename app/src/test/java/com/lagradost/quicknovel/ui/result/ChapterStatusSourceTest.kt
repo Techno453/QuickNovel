@@ -19,6 +19,18 @@ class ChapterStatusSourceTest {
     }
 
     @Test
+    fun previewRowsShowAsPreviewNotTranslated() {
+        val map = ChapterStatusSource.merge(
+            translated = setOf(0),
+            stale = emptySet(),
+            queued = setOf(2),
+            preview = setOf(1, 2),
+        )
+        // a preview chapter queued for a real translation shows Queued
+        assertEquals(mapOf(0 to TRANSLATED, 1 to ChapterTranslationStatus.PREVIEW, 2 to QUEUED), map)
+    }
+
+    @Test
     fun nothingKnown() {
         assertEquals(emptyMap<Int, ChapterTranslationStatus>(), ChapterStatusSource.merge(emptySet(), emptySet(), emptySet()))
     }

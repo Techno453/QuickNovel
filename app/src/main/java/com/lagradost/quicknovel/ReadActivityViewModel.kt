@@ -191,6 +191,9 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
     fun translatorNovelIdOrNull(): String? =
         if (this::book.isInitialized) book.translatorNovelId() else null
 
+    /** True when the open book is a Preview from the result page (no glossary, no read ahead). */
+    val isPreview: Boolean get() = this::book.isInitialized && book.isPreview
+
 
     var mlSettings
         get() = getKey<MLSettings>(EPUB_CURRENT_ML, book.title()) ?: MLSettings("en", "en", TranslatorAgents.OFFLINE)
@@ -445,10 +448,10 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
         }
     }
 
-    /** Title block of chapter [idx], with the original notice once the chapter has loaded. */
+    /** Title block of chapter [idx], with the original / preview notice once the chapter has loaded. */
     private fun chapterStart(idx: Int, title: UiText, canReload: Boolean) = ChapterStartSpanned(
         idx, 0, title, canReload,
-        notice = if (chapterData[idx] is Resource.Success) book.originalNotice(idx)?.let { txt(it.text) } else null,
+        notice = if (chapterData[idx] is Resource.Success) book.chapterNotice(idx) else null,
         translated = idx in book.aiTranslatedChapters,
     )
 
@@ -462,7 +465,7 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
     fun onTranslateOnDemandChanged() = ioSafe {
         if (!this@ReadActivityViewModel::book.isInitialized) return@ioSafe
         val targets = chapterMutex.withLock { chapterData.keys.toList() }
-            .filter { it >= 0 && book.originalNotice(it) != null }
+            .filter { it >= 0 && (book.originalNotice(it) != null || book.isPreviewDeferred(it)) }
             .sortedBy { kotlin.math.abs(it - currentIndex) }
         for (index in targets) loadIndividualChapter(index, reload = false, reTranslate = true, notify = true)
         if (targets.isNotEmpty()) updateReadArea(seekToDesired = false)
@@ -809,7 +812,10 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
             } else {
                 val input = context.contentResolver.openInputStream(data)
                     ?: throw ErrorLoadingException("Empty data")
-                QuickBook(DataStore.mapper.readValue(input.reader().readText()))
+                QuickBook(
+                    DataStore.mapper.readValue(input.reader().readText()),
+                    isPreview = intent.getBooleanExtra(BookDownloader2.EXTRA_PREVIEW, false),
+                )
             }
 
             if (epub.size() <= 0) {
@@ -847,6 +853,7 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
                 }
 
                 currentIndex = loadedChapterIndex
+                book.previewOpenChapter = loadedChapterIndex // preview: only this one is translated
                 updateIndexAsync(loadedChapterIndex, notify = false, postLoading = true)
 
                 if (book.size() <= 0) {
@@ -1068,6 +1075,8 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
 
                 loadIndividualChapter(index)
                 while (isActive && currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
+                    // Preview: the chapter read aloud is the open one (translated before it is read).
+                    if (book.isPreview && book.previewOpenChapter != index) openPreviewChapter(index)
                     val lines =
                         when (val currentData = chapterMutex.withLock { chapterData[index] }) {
                             null -> {
@@ -1293,6 +1302,19 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
         if (index == lastOpenedChapter || index < 0) return
         lastOpenedChapter = index
         book.onChapterOpened(index)
+        if (book.isPreview) ioSafe { openPreviewChapter(index) }
+    }
+
+    /**
+     * Preview: [index] is the open chapter now, the only one translated. A chapter that was
+     * preloaded as the original while it was not open is loaded again, which translates it.
+     */
+    private suspend fun openPreviewChapter(index: Int) {
+        if (!book.isPreview || index < 0) return
+        book.previewOpenChapter = index
+        if (!book.isPreviewDeferred(index)) return
+        loadIndividualChapter(index, reload = false, reTranslate = true, notify = true)
+        updateReadArea(seekToDesired = false)
     }
     private var lastScrollMs: Long = 0
     private fun changeIndex(scrollIndex: ScrollIndex, alsoTitle: Boolean = true) {
@@ -1353,7 +1375,8 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
         // set loading
         _loadingStatus.postValue(Resource.Loading())
 
-        // load the chapters
+        // load the chapters (a preview translates only the chapter sought to)
+        book.previewOpenChapter = index
         updateIndexAsync(index, notify = false, postLoading = true)
         // set the keys
         setKey(EPUB_CURRENT_POSITION, book.title(), index)
