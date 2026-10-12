@@ -151,15 +151,19 @@ dependencies {
     implementation(libs.security.crypto)
 }
 
-// Translation benchmark (app/src/test/.../bench/TranslationBench, docs/translation-bench.md):
-// forward -Dbench / -Dbench.* to the test JVM, never treat a bench run as up to date, and show
-// its console output. Without BENCH=1 / -Dbench=1 the bench test is skipped.
+// Translation benchmark (app/src/test/.../bench/TranslationBench, docs/translation-bench.md) and
+// the live provider smoke test (providers/CjkProvidersLiveSmokeTest, docs/ci.md): forward
+// -Dbench / -Dbench.* / -Dlive / -Dlive.* to the test JVM, never treat such a run as up to date,
+// and show its console output. Without BENCH=1 / -Dbench=1 (LIVE=1 / -Dlive=1) those tests skip.
 tasks.withType(Test).configureEach {
     System.properties.each { k, v ->
         def key = k.toString()
-        if (key == 'bench' || key.startsWith('bench.')) systemProperty key, v.toString()
+        if (key == 'bench' || key.startsWith('bench.') || key == 'live' || key.startsWith('live.')) {
+            systemProperty key, v.toString()
+        }
     }
-    if (System.getProperty('bench') != null || System.getenv('BENCH') != null) {
+    if (System.getProperty('bench') != null || System.getenv('BENCH') != null ||
+            System.getProperty('live') != null || System.getenv('LIVE') != null) {
         outputs.upToDateWhen { false }
         testLogging.showStandardStreams = true
     }
