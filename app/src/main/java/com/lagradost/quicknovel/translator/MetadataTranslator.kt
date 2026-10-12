@@ -71,10 +71,12 @@ interface MetadataBackend {
  *   for [batchWindowMs] per source language and sent as one AI call of at most [maxBatch] titles,
  *   so a page of posters is one request. Concurrent requests for the same title share one result.
  * - [novel]: title + synopsis of one novel in one AI call (preview sheet, result page).
- * - Rows are re-translated only when the hash of the original text changes, or once per session
- *   to replace a free Google translation by an AI one when AI becomes available.
- * - AI failures fall back to Google; a text that failed with every engine is not retried in this
- *   session. Nothing here throws (except cancellation of the caller).
+ * - Rows are re-translated only when the hash of the original text changes, or to replace a free
+ *   Google translation by an AI one when AI is available: one attempt per text, recorded in the
+ *   row (`*_upgrade_tried_at`) whether it succeeds or not and repeated only after
+ *   [UPGRADE_RETRY_MS], never twice in one session.
+ * - AI failures fall back to Google; a text that failed with every engine (no row) is not retried
+ *   in this session, but is in the next one. Nothing here throws (except cancellation of the caller).
  */
 class MetadataTranslator(
     private val store: MetadataStore,
@@ -123,7 +125,9 @@ class MetadataTranslator(
         if (request.original.isBlank()) return null
         cachedTitle(request.novelId, request.original)?.let { cached ->
             val row = memory[request.novelId]
-            if (row == null || !wantsUpgrade(row.titleEngine, "t:" + request.novelId, peekOnly = true)) return cached
+            if (row == null || !wantsUpgrade(row.titleEngine, row.titleUpgradeTriedAt, "t:" + request.novelId, peekOnly = true)) {
+                return cached
+            }
         }
         val key = request.novelId + "|" + hashOf(request.original)
         val deferred = lock.withLock {
@@ -191,6 +195,7 @@ class MetadataTranslator(
         val stored = loadRows(unique.map { it.novelId })
         val policy = backend.policy()
         val todo = ArrayList<TitleRequest>()
+        val upgrading = HashSet<String>()
         for (request in unique) {
             val row = stored[request.novelId]
             if (row != null && row.titleHash == hashOf(request.original)) {
@@ -201,7 +206,8 @@ class MetadataTranslator(
                     upgradeTried += upgradeKey
                     continue
                 }
-                if (!wantsUpgrade(row.titleEngine, upgradeKey)) continue
+                if (!wantsUpgrade(row.titleEngine, row.titleUpgradeTriedAt, upgradeKey)) continue
+                upgrading += request.novelId
             }
             if (request.novelId + "|" + hashOf(request.original) in failed && !out.containsKey(request.novelId)) continue
             todo += request
@@ -237,13 +243,15 @@ class MetadataTranslator(
             if (google != null) fresh[request.novelId] = google to MetadataEngine.GOOGLE
             else failed += request.novelId + "|" + hashOf(request.original)
         }
-        if (fresh.isEmpty()) return out
-
         val model = backend.aiModel()
+        val time = now()
         val rows = todo.mapNotNull { request ->
-            val (text, engine) = fresh[request.novelId] ?: return@mapNotNull null
-            out[request.novelId] = text
             val previous = stored[request.novelId]
+            val upgrade = request.novelId in upgrading
+            val (text, engine) = fresh[request.novelId]
+                // The AI upgrade gave nothing: keep the Google title, remember the attempt.
+                ?: return@mapNotNull previous?.takeIf { upgrade }?.copy(titleUpgradeTriedAt = time)
+            out[request.novelId] = text
             (previous ?: NovelMetadataTranslation(
                 novelId = request.novelId, sourceLang = lang, titleHash = "", translatedTitle = "",
                 titleEngine = engine.id, updatedAt = 0,
@@ -253,7 +261,9 @@ class MetadataTranslator(
                 translatedTitle = text,
                 titleEngine = engine.id,
                 model = if (engine == MetadataEngine.AI) model else previous?.model,
-                updatedAt = now(),
+                // A new text starts untried (an AI failure while translating it does not count).
+                titleUpgradeTriedAt = if (upgrade) time else 0,
+                updatedAt = time,
             )
         }
         saveRows(rows)
@@ -277,8 +287,10 @@ class MetadataTranslator(
         var newSynopsis = row?.translatedSynopsis?.takeIf { synopsisHash != null && row.synopsisHash == synopsisHash }
         val policy = backend.policy()
 
-        val titleUpgrade = newTitle != null && policy.ai && wantsUpgrade(row?.titleEngine, "t:$novelId")
-        val synopsisUpgrade = newSynopsis != null && policy.ai && wantsUpgrade(row?.synopsisEngine, "s:$novelId")
+        val titleUpgrade = newTitle != null && policy.ai &&
+                wantsUpgrade(row?.titleEngine, row?.titleUpgradeTriedAt ?: 0, "t:$novelId")
+        val synopsisUpgrade = newSynopsis != null && policy.ai &&
+                wantsUpgrade(row?.synopsisEngine, row?.synopsisUpgradeTriedAt ?: 0, "s:$novelId")
         var needTitle = (newTitle == null && "$novelId|$titleHash" !in failed) || titleUpgrade
         var needSynopsis = synopsis != null &&
                 ((newSynopsis == null && "$novelId|$synopsisHash" !in failed) || synopsisUpgrade)
@@ -286,6 +298,10 @@ class MetadataTranslator(
 
         var titleEngine = row?.titleEngine?.takeIf { newTitle != null }
         var synopsisEngine = row?.synopsisEngine?.takeIf { newSynopsis != null }
+        // Attempts to replace a Google text by AI, recorded whether they succeed or not.
+        val time = now()
+        val titleTriedAt = if (titleUpgrade) time else row?.titleUpgradeTriedAt?.takeIf { newTitle != null } ?: 0
+        val synopsisTriedAt = if (synopsisUpgrade) time else row?.synopsisUpgradeTriedAt?.takeIf { newSynopsis != null } ?: 0
         var usedAi = false
         if (policy.ai) {
             val (t, s) = try {
@@ -311,6 +327,9 @@ class MetadataTranslator(
 
         val finalTitle = newTitle
         if (finalTitle != null) {
+            val finalSynopsis = newSynopsis
+            // Called without a synopsis (the source has none here): keep the one already stored.
+            val keepSynopsis = synopsis == null && row != null
             saveRows(
                 listOf(
                     NovelMetadataTranslation(
@@ -319,11 +338,25 @@ class MetadataTranslator(
                         titleHash = titleHash,
                         translatedTitle = finalTitle,
                         titleEngine = titleEngine ?: MetadataEngine.GOOGLE.id,
-                        synopsisHash = if (newSynopsis != null) synopsisHash else null,
-                        translatedSynopsis = newSynopsis,
-                        synopsisEngine = if (newSynopsis != null) synopsisEngine else null,
+                        synopsisHash = when {
+                            finalSynopsis != null -> synopsisHash
+                            keepSynopsis -> row?.synopsisHash
+                            else -> null
+                        },
+                        translatedSynopsis = finalSynopsis ?: row?.translatedSynopsis?.takeIf { keepSynopsis },
+                        synopsisEngine = when {
+                            finalSynopsis != null -> synopsisEngine
+                            keepSynopsis -> row?.synopsisEngine
+                            else -> null
+                        },
                         model = if (usedAi) backend.aiModel() else row?.model,
-                        updatedAt = now(),
+                        updatedAt = time,
+                        titleUpgradeTriedAt = titleTriedAt,
+                        synopsisUpgradeTriedAt = when {
+                            finalSynopsis != null -> synopsisTriedAt
+                            keepSynopsis -> row?.synopsisUpgradeTriedAt ?: 0
+                            else -> 0
+                        },
                     )
                 )
             )
@@ -332,11 +365,14 @@ class MetadataTranslator(
     }
 
     /**
-     * Whether a cached [engine] translation should be redone with AI: Google rows are upgraded
-     * once per session per novel ([key]). With [peekOnly] nothing is recorded.
+     * Whether a cached [engine] translation should be redone with AI: a Google text is upgraded
+     * if no attempt is recorded in its row ([triedAt], 0 = never) or the last one is older than
+     * [UPGRADE_RETRY_MS], and at most once per session per novel ([key]). The caller records the
+     * attempt in the row. With [peekOnly] nothing is recorded in the session either.
      */
-    private fun wantsUpgrade(engine: String?, key: String, peekOnly: Boolean = false): Boolean {
+    private fun wantsUpgrade(engine: String?, triedAt: Long, key: String, peekOnly: Boolean = false): Boolean {
         if (MetadataEngine.fromId(engine) != MetadataEngine.GOOGLE) return false
+        if (triedAt > 0 && now() - triedAt < UPGRADE_RETRY_MS) return false
         return if (peekOnly) key !in upgradeTried else upgradeTried.add(key)
     }
 
@@ -385,6 +421,9 @@ class MetadataTranslator(
 
         /** Free Google requests of one batch running at the same time. */
         const val GOOGLE_PARALLEL = 4
+
+        /** A Google text whose AI upgrade was tried (and failed) is tried again after 30 days. */
+        const val UPGRADE_RETRY_MS = 30L * 24 * 60 * 60 * 1000
     }
 }
 

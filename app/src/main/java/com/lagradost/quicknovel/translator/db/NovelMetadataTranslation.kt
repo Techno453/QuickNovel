@@ -11,8 +11,9 @@ import androidx.room.Query
 /**
  * Cached English translation of a novel's title and synopsis (Browse, search, library, preview
  * sheet and result page). Written by [com.lagradost.quicknovel.translator.MetadataTranslator];
- * kept forever and re-translated only when the source text's hash changes (or, once per
- * session, to replace a free Google translation by an AI one). See docs/browse.md.
+ * kept forever and re-translated only when the source text's hash changes (or once, to replace
+ * a free Google translation by an AI one; the attempt is recorded in `*_upgrade_tried_at` and
+ * repeated only after 30 days). See docs/browse.md.
  *
  * The title and the synopsis are hashed separately because listings only know the title: the
  * synopsis is translated later, when the preview sheet or the result page is opened.
@@ -35,6 +36,10 @@ data class NovelMetadataTranslation(
     /** Model id of the last AI translation stored in this row, null for Google only. */
     val model: String? = null,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /** When an AI translation last tried to replace the Google title (0 = never; v8). */
+    @ColumnInfo(name = "title_upgrade_tried_at", defaultValue = "0") val titleUpgradeTriedAt: Long = 0,
+    /** Same for the synopsis (v8). */
+    @ColumnInfo(name = "synopsis_upgrade_tried_at", defaultValue = "0") val synopsisUpgradeTriedAt: Long = 0,
 )
 
 @Dao
