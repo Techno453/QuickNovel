@@ -143,7 +143,7 @@ source (an MTL aggregator, docs/sources.md); only its search API is read, as a t
   well under a cent.
 - **Raw sources answer their own titles.** Live on 2026-10-12 with the original titles: Quanben,
   Ixdzs and czbooks (traditional script on czbooks: 诡秘之主 lists 詭秘之主) found every Chinese
-  title; Syosetu, Kakuyomu, Alphapolis and Pixiv found the Japanese titles published on them;
+  title; Syosetu, Kakuyomu, Alphapolis (removed on 2026-10-12) and Pixiv found the Japanese titles published on them;
   Novelpia and Naver found the Korean ones (none for 백작가의 망나니가 되었다, a Kakao Page title).
   69shuba search, Piaotia and Hameln need the device's WebView (Cloudflare, Turnstile).
 - The NovelUpdates and Novel Buddy fixtures are synthetic. If a site changes its markup

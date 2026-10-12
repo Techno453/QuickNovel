@@ -29,6 +29,15 @@ class RemovedSourcesTest {
         "skynovels.net", "planetaepub.com",
     )
 
+    /** Alphapolis (ja), dropped on the user's decision (docs/sources.md, "Removed sources"). */
+    private val droppedCjkHosts = listOf("alphapolis.co.jp")
+
+    @Test
+    fun droppedCjkSitesAreNotRegistered() {
+        val registered = Apis.apis.filter { api -> droppedCjkHosts.any { it in api.mainUrl } }
+        assertTrue("Dropped CJK sites registered: ${registered.map { it.name }}", registered.isEmpty())
+    }
+
     @Test
     fun otherLanguageSitesAreNotRegistered() {
         val registered = Apis.apis.filter { api -> otherLanguageHosts.any { it in api.mainUrl } }

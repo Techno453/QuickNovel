@@ -14,7 +14,6 @@ import com.lagradost.quicknovel.providers.chinese.BiqugeProvider
 import com.lagradost.quicknovel.providers.chinese.IxdzsProvider
 import com.lagradost.quicknovel.providers.chinese.PiaotiaProvider
 import com.lagradost.quicknovel.providers.chinese.CzbooksProvider
-import com.lagradost.quicknovel.providers.japanese.AlphapolisProvider
 import com.lagradost.quicknovel.providers.japanese.HamelnProvider
 import com.lagradost.quicknovel.providers.japanese.PixivNovelProvider
 import com.lagradost.quicknovel.providers.korean.NaverWebNovelProvider
@@ -105,7 +104,6 @@ class Apis {
             // Raw CJK sources (docs/sources.md)
             IxdzsProvider(),
             PiaotiaProvider(),
-            AlphapolisProvider(),
             PixivNovelProvider(),
             NaverWebNovelProvider(),
             CzbooksProvider(),

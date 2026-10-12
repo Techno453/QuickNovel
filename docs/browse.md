@@ -41,7 +41,6 @@ Listings of the CJK providers (verified against the live sites, 2026-10):
 | Naver Webnovel | Best league: daily ranking / weekly ranking (`/best/ranking`, free column, one page) / most viewed / most favourited / top rated / completed (`finish=true`) / latest updates; Challenge league: daily ranking / new works ranking / most viewed / latest updates | every listing (the site has no all-genre lists; Fantasy is the default) |
 | Ixdzs | Popular: all time / this month / today (`/hot/…`), Completed works (`/end/`), In genre: popular / completed, popular / ongoing, popular / latest updates (`/sort/…`) | "In genre" listings only |
 | Piaotia | Most viewed this week / this month / of all time, Most recommended this week / of all time, Most favourited (`/booktop…`), Completed works (`articlelist.php?fullflag=1`), New works, Latest updates in genre (`/booksort…`) | "Latest updates in genre" only |
-| Alphapolis | 24-hour ranking, Weekly ranking, Monthly ranking, Most favourited, Recently completed, Latest updates, New works (`/novel/index?sort=`) | every listing |
 | Pixiv Novels | Weekly ranking: original works, Daily / Weekly / Monthly / Rookie ranking, Popular with male / female readers (`/novel/ranking.php`, from `__NEXT_DATA__`), In tag: newest / oldest (tag search) | "In tag" listings only |
 
 Pixiv's popular-by-bookmarks search needs Premium, so its popularity listings are the public

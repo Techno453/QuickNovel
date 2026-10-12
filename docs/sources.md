@@ -32,7 +32,6 @@ A source that mixes languages (Pixiv) is narrowed to one language at the request
 | **Piaotia (飘天文学)** | zh | yes | yes | yes | no | Cloudflare passive script only, no challenge; interceptor on as a safety net (2026-10-12) | `chinese/PiaotiaProvider` |
 | Kakuyomu (カクヨム) | ja | yes | yes | yes | no | none | `japanese/KakuyomuProvider` |
 | Syosetu (小説家になろう) | ja | yes | yes | yes | no | none | `SyosetuProvider` |
-| **Alphapolis (アルファポリス)** | ja | yes | yes | yes (free episodes) | no | none; reCAPTCHA if it suspects a bot | `japanese/AlphapolisProvider` |
 | **Hameln (ハーメルン)** | ja | yes | yes (rankings, latest updates) | yes | no | Cloudflare managed challenge on every request; cleared by the WebView interceptor (device only) | `japanese/HamelnProvider` |
 | **Pixiv Novels (pixiv小説)** | ja | yes | yes (by tag) | yes (all-ages works) | no | none | `japanese/PixivNovelProvider` |
 | Novelpia (노벨피아) | ko | yes | yes | yes (free episodes) | no | none | `korean/NovelpiaProvider` |
@@ -74,7 +73,6 @@ registered CJK provider so none comes back.
 | czbooks | 言情, 耽美, 百合, and 女性向 / 女生同人 (both list only romance and adult romance); the adult 情色工口 / 耽美工口 were already out |
 | Syosetu | Isekai romance (i1), 異世界〔恋愛〕 (101), 現実世界〔恋愛〕 (102) |
 | Kakuyomu | 恋愛 (love_story), ラブコメ (romance) |
-| Alphapolis | 恋愛 (110500), BL (119000) |
 | Pixiv Novels | tags 恋愛, 悪役令嬢 (villainess, a romance genre), BL, 百合 |
 | Novelpia | 로맨스 (6) |
 | Naver Webnovel | 로맨스 (101), 로판 / romance fantasy (109) |
@@ -207,19 +205,6 @@ Next.js Apollo state. All episodes are embedded on the work page. No login is ne
   big genre). Tags = status: All, Ongoing (連載中, `_r` / `type=r`), Completed (完結済, `_er` /
   `type=er`), Short stories (短編, `_t` / `type=t`).
 - The adult sister sites (Noc/Novel18, which need an `over18=yes` cookie) are not covered.
-
-### Alphapolis (アルファポリス), ja — https://www.alphapolis.co.jp
-- Search `/search?query=&category=novel`. Browse `/novel/index?sort=&category_ids=` (24h,
-  weekly, monthly points, recent, completed, favourites; 12 categories plus All, without 恋愛 and BL).
-- The table of contents is the `app-cover-data` JSON on the work page. Episodes of works that
-  became books turn into paid rentals (`isPublic:false`) and are left out of the chapter list.
-- Episode text is not in the episode page. The page's own script POSTs
-  `/novel/episode_body {episode, token}`. The provider does the same: GET the episode page, take
-  the per-page token, the Laravel `_token` (sent as `X-CSRF-TOKEN`) and the session cookies, then
-  POST. That is 2 requests per chapter, with `rateLimitTime` 1.5 s for downloads.
-- Ruby: kana furigana is dropped, and other readings are kept as `base《reading》` (same as Kakuyomu).
-- Limitations: if Alphapolis answers with a reCAPTCHA form (bot suspicion after heavy use), the
-  chapter fails with a "solve the CAPTCHA in the in-app browser" error.
 
 ### Pixiv Novels (pixiv小説), ja — https://www.pixiv.net/novel
 - JSON endpoints of the web app, readable logged out for all-ages works:
@@ -378,6 +363,7 @@ and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
 | Rewayat (rewayat.club), ar | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `RewayatProvider`, its icon, colour, deep link and README entry. |
 | SkyNovels (skynovels.net), es | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). Deleted `SkyNovelsProvider`, its icon, deep link and README entry. |
 | PlanetaEpub (planetaepub.com), es | 2026-10-12 | Not a Chinese, Japanese, Korean or English source (user decision). It was already unregistered ("not working"); deleted `PlanetaEpubProvider` and its icon. |
+| Alphapolis (アルファポリス, alphapolis.co.jp), ja | 2026-10-12 | User decision. It was a working source (search, `/novel/index` browse, free episodes through the `/novel/episode_body` token POST). Deleted `japanese/AlphapolisProvider`, its fixture tests and fixtures; `JapaneseProviderUtils` stays (Kakuyomu, Pixiv and Hameln use it). |
 
 ## Tests
 
@@ -391,7 +377,7 @@ and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
   ./gradlew :app:testDebugUnitTest --tests '*BrowseListingsLiveTest*' --tests '*ProviderFixesLiveTest*' -Dlive=1
   ```
 - Fixture tests: `app/src/test/java/com/lagradost/quicknovel/providers/cjk/*ProviderTest.kt`,
-  fixtures under `app/src/test/resources/providers/{ixdzs,piaotia,alphapolis,pixiv,naver,czbooks,hameln}/`. The
+  fixtures under `app/src/test/resources/providers/{ixdzs,piaotia,pixiv,naver,czbooks,hameln}/`. The
   fixtures keep each site's real markup (class names, inline JSON, scripts, broken HTML). Titles,
   names and prose are replaced with placeholders. The Piaotia fixtures are stored GBK-encoded.
 - Live tests (one search, one novel, one chapter, and the first main page per source; plus
