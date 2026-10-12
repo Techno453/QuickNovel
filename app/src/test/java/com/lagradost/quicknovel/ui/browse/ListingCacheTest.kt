@@ -167,4 +167,18 @@ class ListingCacheTest {
         c.get("p", refresh = false) { loader.load() }
         assertEquals(1, loader.calls)
     }
+
+    @Test
+    fun forgetDropsAPageFromBothLayers() = runBlocking {
+        // A merged multi-genre page with a failed genre is forgotten so it is asked for again.
+        val d = disk()
+        val c = cache(d)
+        val loader = Loader(Result.success(listOf("x")))
+        c.get("p", refresh = false) { loader.load() }
+        c.forget("p")
+        assertNull(c.inMemory("p"))
+        assertNull(d.get("k|p"))
+        c.get("p", refresh = false) { loader.load() }
+        assertEquals(2, loader.calls)
+    }
 }

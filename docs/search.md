@@ -1,7 +1,7 @@
 # Search
 
-The Search tab searches every enabled source at once. A row of language chips under the search
-field limits which sources are searched. For Chinese, Japanese and Korean sources, the query is
+The Search tab searches every enabled source at once. Multi-select language chips under the
+search field limit which sources are searched. For Chinese, Japanese and Korean sources, the query is
 also translated into a short list of candidate queries, so an English title can find the raw novel
 under its original name.
 
@@ -15,24 +15,31 @@ still call `SearchQueryTranslator.translateQuery` (first candidate only).
 ## Language chips
 
 All languages / Chinese / Japanese / Korean / English, in the same Compose `FilterChip` style as
-Browse's All sources page. The row scrolls sideways when the window is too narrow (phone and Fold
-cover widths). On wide windows it sits under the search field, centred with it.
+Browse's All sources page. The chips wrap onto a second line when the window is too narrow
+(phone and Fold cover widths); on wide windows they sit in one line under the search field,
+centred with it.
 
-| Chip | Sources searched | Query sent to them |
+Chinese, Japanese, Korean and English toggle independently (`SearchLanguages.toggle`). With none
+selected, All languages is shown selected; selecting a language unselects All languages, tapping
+All languages clears the others, and unselecting the last language goes back to All languages.
+
+| Selection | Sources searched | Query sent to them |
 |---|---|---|
 | All languages | every enabled source | each CJK source gets candidates in its own language; English sources get the raw query |
-| Chinese / Japanese / Korean | sources whose `MainAPI.lang` has that base language (`zh-CN` counts as Chinese) | candidates in that language only |
-| English | sources whose lang is `en` or unset (the upstream default of `MainAPI.lang`) | the raw query, never translated |
+| Some of Chinese / Japanese / Korean / English | the union of the selected languages: sources whose `MainAPI.lang` has a selected base language (`zh-CN` counts as Chinese; English = `en` or unset, the upstream default of `MainAPI.lang`) | each CJK source gets candidates in its own language; English sources get the raw query, never translated |
 
 - Only en, zh, ja and ko sources exist (the others were removed, docs/sources.md "Removed sources");
   a source in any other language would only be searched under All languages.
 - The user's settings still apply on top: Settings → Search providers (per source) and Provider
   languages.
-- The chip also filters the source tiles shown before a search.
-- The selection is stored in the default SharedPreferences under `search_language` (`all`, `zh`,
-  `ja`, `ko`, `en`; default `all`). It is restored when the tab opens.
-- Changing the chip while results are open re-runs the last query.
-- If no enabled source has the chosen language, a notice says so.
+- The chips also filter the source tiles shown before a search.
+- The selection is stored in the default SharedPreferences under `search_languages`, a string set
+  of `zh`, `ja`, `ko`, `en` (empty = All languages, the default). It is restored when the tab
+  opens. The single chip of earlier versions (`search_language` = `all` / `zh` / …) is migrated
+  once when the preferences are first read (`all` → empty, `zh` → {`zh`}, …) and the old key is
+  deleted (`SearchLanguages.migrate`).
+- Changing the selection while results are open re-runs the last query.
+- If no enabled source has a selected language, a notice says so.
 - Results: with All languages, the raw CJK sources' sections come first, then English sites
   (a source in any other language would come last). Sections with results come before empty or
   failed ones.

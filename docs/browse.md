@@ -17,7 +17,7 @@ A provider exposes three label/value lists and `loadMainPage(page, mainCategory,
 |---|---|---|
 | `mainCategories` | Listing | first chip row on the source page; "Popular / New / Completed" in All sources |
 | `orderBys` | Order | second chip row (empty for the providers below: their listings already include the order) |
-| `tags` | Genre | third chip row |
+| `tags` | Genre | one "Genres" chip that opens a multi-select sheet (see [Per-source page](#per-source-page)) |
 
 Rules every provider in the Browse tab follows:
 
@@ -72,7 +72,8 @@ with those providers).
 
 - **Lazy**: a rail loads when its card is first composed, i.e. when it scrolls into view.
 - **Cache, two layers** (`ListingCache` in front of `ListingDiskCache`, key = (source, listing,
-  page)):
+  order, sorted genre set, page); `TagFilter.pageKey`, e.g. `v1|Kakuyomu|0,0,2+5|1`; a single
+  genre keeps the old `…|0,0,2|1` form, so pages cached before multi-select stay valid):
   - Memory: every page loaded stays in memory until the app process ends, shared by the rails,
     the All sources feed and the source pages (opening "See all" shows the rail's page instantly).
   - Disk: every successful load is also written to `cacheDir/browse_listings/` (one JSON file per
@@ -98,15 +99,34 @@ with those providers).
 
 `MainPageFragment` / `MainScreen` / `MainPageViewModel2`:
 
-- Chip rows for Listing / Order / Genre (only lists with more than one entry), the search field
-  of the source on top (the bar hides while scrolling down).
+- Chip rows for Listing and Order (single choice, only lists with more than one entry), the
+  search field of the source on top (the bar hides while scrolling down).
+- **Genres** (multi-select, `TagFilter`, `GenreSelector` / `GenreSheet` in `MainScreen.kt`): one
+  chip under the rows reads "All genres", "Genres: Fantasy, Mystery" (up to two names, without the
+  bracketed original) or "Genres: 3 selected". It opens a bottom sheet (Material caps it at 640 dp
+  and centres it on the Fold inner screen) with every genre as a wrapping `FilterChip`, Clear and
+  Done on top; dismissing the sheet keeps the old selection. When the provider's first tag is its
+  no-filter entry (an "All" label or an empty value) it is the sheet's "All" chip: selecting it
+  clears the others, and no selection means no genre filter. A site without an all-genre list
+  (Naver: Fantasy first) always keeps at least its default genre.
+- **Several genres**: the provider API takes one tag, so page n of each selected genre's listing
+  is loaded (concurrently) and merged by rank: rank 1 of each genre in the sheet's order, then
+  rank 2 of each, and so on; a URL already placed is skipped (a novel in two genres appears once,
+  at its better rank). At most 4 genres are loaded (`TagFilter.MAX_LOADED`): with more selected,
+  the first 4 in the sheet's order are used and the sheet says so. Infinite scroll asks every
+  selected genre for its next page. Each genre's page is cached on its own and the merged page
+  under the sorted genre set; a genre that fails is left out of that merged page, which is then
+  not cached (Retry or pull to refresh asks again); the page fails only when every genre fails.
+  Genres the provider ignores on a listing (Ixdzs, Piaotia, Pixiv outside their genre listings)
+  return the same list for each genre, which the URL de-duplication folds back into one.
 - Infinite scroll with the adaptive poster grid (or rows), loading 9 items before the end. A page
   that adds nothing new (sites repeat their last page or return nothing) ends the list.
 - Pull to refresh, an empty / error state with Retry, and an inline Retry when a later page fails.
 - The chosen listing is remembered per source (default preferences
-  `browse_last_listing_<source name>` = `"category,order,tag"`) and restored when the page is
+  `browse_last_listing_<source name>` = `"category,order,tags"`, genres joined with `+`, e.g.
+  `"0,0,2+5"`; the older single-genre value reads the same way) and restored when the page is
   opened from Browse or from the Search screen's source tiles. Explicit filters (a genre chip on
-  the result page) win.
+  the result page selects that one genre) win.
 
 ## All sources
 
@@ -139,6 +159,8 @@ is invented; the sites' numbers are not comparable.
 The rules live in the pure `CombinedBrowse` and `BrowseCatalog` classes
 (`BrowseLogicTest`: interleave order, waiting for first pages, failure isolation, top-up
 pagination, de-duplication, author matching, script folding, listing resolution, grouping).
+The per-source genre rules are in the pure `TagFilter` (`TagFilterTest`: selection, the 4-genre
+cap, the tag-set cache key, the rank merge, the chip summary, the remembered listing).
 
 ## Translated titles and synopses
 
@@ -195,7 +217,9 @@ Browse).
 
 ## Limitations
 
-- The disk cache is per (source, listing, page) with a fixed 6 h TTL; a listing that changes faster
+- Several genres are a union (any selected genre), never an intersection: the sites' genre
+  parameters take one value.
+- The disk cache is per (source, listing, genres, page) with a fixed 6 h TTL; a listing that changes faster
   (latest updates) can look up to 6 hours old after a restart until pulled to refresh.
 - Top 100 / ranking pages (Novelpia, Naver) have a single page; the list ends there.
 - The All sources feed covers zh / ja / ko sources; English sources are browsed per source.
