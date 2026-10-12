@@ -716,7 +716,7 @@ private fun TranslateRow(state: ResultState, modifier: Modifier, action: (Result
                 .weight(1f),
             onClick = { action(ResultPageAction.OpenGlossary) }
         ) {
-            Icon(painterResource(R.drawable.ic_baseline_menu_book_24), contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(painterResource(R.drawable.ic_glossary_24), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(6.dp))
             Text(stringResource(R.string.result_glossary), maxLines = 1)
         }
@@ -739,12 +739,6 @@ private fun TranslateRow(state: ResultState, modifier: Modifier, action: (Result
                         menuOpen = false
                         action(ResultPageAction.Analyze)
                     })
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.result_glossary)) },
-                    onClick = {
-                        menuOpen = false
-                        action(ResultPageAction.OpenGlossary)
-                    })
                 if (state.isImported) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.imported_menu_language)) },
@@ -763,15 +757,26 @@ private fun Synopsis(display: MetadataDisplay, showOriginal: Boolean, modifier: 
     var expanded by rememberSaveable { mutableStateOf(false) }
     Column(modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
         if (display.canToggle) {
-            Text(
-                stringResource(if (showOriginal) R.string.browse_show_translation else R.string.browse_show_original),
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(RoundedShape())
                     .clickable { action(ResultPageAction.ToggleOriginal) }
                     .padding(horizontal = 6.dp, vertical = 4.dp)
-            )
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_original_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    stringResource(if (showOriginal) R.string.browse_show_translation else R.string.browse_show_original),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         val synopsis = display.synopsis
         if (synopsis.isNullOrBlank()) return@Column
