@@ -149,6 +149,10 @@ never waits: the original is shown until the translation arrives.
   language and sent as one AI call of at most 20 titles (`{"titles": [...]}` in, the same count
   out), so a screen of posters is one small request per language (a mixed All sources screen is
   one per language). Requests for the same title share one result.
+- The Google path (no AI, or AI failed) is one request per title, four at a time per batch. A
+  full queue never cancels the batch in flight; it goes out when that batch ends.
+- Chapter names on the result page and in the reader's chapter picker use the same path for the
+  visible rows only, see [result-page.md](result-page.md#chapter-names).
 - Synopsis: only when a novel's preview sheet or result page is opened, together with its title
   in one call (`{"title", "synopsis"}`; synopses are cut at 4000 characters). About $0.0002 per
   novel with gpt-6-luna.

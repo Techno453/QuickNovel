@@ -75,9 +75,13 @@ Read epub / download button (tap or long press for its menu) / Stream read and t
 Translate / Glossary / ⋮ (Analyze novel…, Glossary, Source language… for imports), Show original
 toggle and synopsis (tap to expand), tags (clickable when the provider lists them as a genre).
 
-Chapter pane: count, search, filter and sort; rows with name, date, read rows dimmed, and a
-Translated / Source changed / Queued chip ([reader.md](reader.md#chapter-list-status-chips)) from
-`ChapterStatusSource`, refreshed every 4 s while the page is on screen.
+Chapter pane: count, search, filter and sort; rows with name (translated, with the original and
+the date on a small second line), read rows dimmed, and a Translated / Source changed / Queued
+chip ([reader.md](reader.md#chapter-list-status-chips)) from `ChapterStatusSource`, refreshed
+every 4 s while the page is on screen. The search matches the original and the translated names.
+
+Reviews tab: the list loads more pages as it nears the end; a small "To top" button fades in once
+three reviews are scrolled past (`ResultPageLogic.showScrollToTop`) and scrolls back to the top.
 
 ## Translated metadata
 
@@ -88,22 +92,59 @@ translated at all (`MetadataTranslations.anyEnabled`, see [browse.md](browse.md#
 - latest chapter name + tags: `MetadataLabels` sends the page's labels (only CJK text that is not
   mostly Latin already, at most 30) through the batched title path, so they share one small call
   per page and are cached in `novel_metadata_translations` under `label:<lang>/<text>` ids;
-- "Show original" / "Show translation" switches all of them (and the chapter names);
-- chapter names in the list are translated with the free Google endpoint when "Auto-translate
-  titles & synopses" is on, as on the XML page (kept in memory for the session).
+- chapter names: see below;
+- "Show original" / "Show translation" switches all of them, chapter names included (the toggle
+  is also offered when only chapter names are translated).
 
-## What the XML page is still for
+### Chapter names
 
-`ResultFragment` / `fragment_result.xml` / `ResultViewModel` / `ChapterAdapter` are no longer
-navigated to; they stay compiling until a later cleanup. `ResultViewModel` is still used by the
-preview bottom sheet in `MainActivity` (long press on a poster), and its companion holds the chapter
-filter / sort preferences that both pages share. `MetadataTranslationViews.bindPreview` is still
-the preview sheet's binding; `bindResult` belongs to the old page only.
+Translated through the same batched, cached title path, only for what is on screen
+(`translator/ChapterNameWindow.kt`, `ChapterNameWindowTest`):
+
+- The chapter list reports its first and last visible rows (`ResultPageAction.ChapterRowsVisible`,
+  rows of the listed, i.e. filtered / sorted, chapters). Nothing is requested while it scrolls;
+  once it has been still for 300 ms, `ChapterNameWindow` plans the visible rows, then 15 below and
+  5 above, skipping names already requested or translated and text that is not CJK. A batch is
+  at most 40 names; `MetadataTranslator` sends them as AI calls of 20 (one or two calls per
+  stop), or through the free Google path, four requests at a time.
+- `ChapterNameTranslator` keeps one batch in flight: windows passed while it runs are never sent,
+  and the window the list is on when it ends goes next. A fling through 1,400 chapters costs only
+  the window it stops on. Translations already in memory show at once, without the debounce.
+- Cache ids are `MetadataLabels.labelId` (`label:<lang>/<name>`), so a chapter name and the
+  "Latest:" label share one row in `novel_metadata_translations`; rows are kept forever.
+- Same switch and engines as titles: when `MetadataTranslations.anyEnabled` (AI with a key and
+  "Translate titles and synopses with AI" on, else the "Auto-translate titles & synopses" Google
+  option). The original stays visible until the translation arrives, then moves to the small
+  second line.
+- The reader's chapter picker (`ReadActivity2.showChapterDialog`) uses the same driver on its
+  `ListView`: it opens at once with the originals and translates the visible rows as you scroll,
+  each translated row showing the original underneath (it used to Google-translate every name,
+  one request each, before opening).
+
+## The XML page (removed)
+
+`ResultFragment`, `ChapterAdapter`, `ReviewAdapter` and their resources were deleted once nothing
+opened them: layouts `fragment_result`, `simple_chapter`, `result_tag`, `result_review`,
+`result_review_tag`, `chapter_filter_popup`, `chapter_dialog`, `loading_downloads`,
+`loading_review`, `loading_line_short2`; drawables `chapter_status_chip`, `outline_big_25_gray`,
+`icon_boxnovel`; the `chapter_status_chip_space` dimen; the strings `synopsis`, `bookmarks`,
+`download_text`, `novel_imagecover_descript`, `background_image_descript`,
+`quickstream_novel_text`, `start_chapter` (all languages); `MetadataTranslationViews.bindResult`.
+`chapter_select_dialog` stays (reader). `ResultViewModel` stays: the preview bottom sheet in
+`MainActivity` (long press on a poster) uses it, and its companion holds the chapter filter /
+sort preferences the Compose page reads; `MetadataTranslationViews.bindPreview` is the preview
+sheet's binding. The code in `ResultViewModel` that only the old page called (chapter list,
+reviews, download actions) is still there.
 
 ## Limitations
 
 - The language row and the ⋮ menu are the only places to change an import's language; online
   novels take the provider's language.
-- Chapter-name translation is per visible row (Google), not batched, as before.
-- The XML page's FABs (scroll reviews to top, chapter filter) are replaced by the chapter pane's
-  filter button; reviews have no scroll-to-top button.
+- Chapter-name translation uses the novel-title prompt (`MetadataPrompts.titlesSystemPrompt`);
+  results read fine for chapter names but are not tuned for them.
+- Without an API key the Google path does one request per name (four at a time): a new window
+  takes several seconds. The chapter search only matches translated names that were already
+  translated (seen rows). Names that failed with every engine are not retried in the same
+  session (as for titles); on the emulator Google started answering with its HTML block page after
+  the reader had fallen back to Google for whole chapters, and new windows stayed in Chinese.
+- The XML page's chapter filter FAB is replaced by the chapter pane's filter button.
