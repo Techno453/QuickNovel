@@ -93,7 +93,11 @@ data class PageMetrics(
                 width = width,
                 height = height,
                 // TextView only applies its text colour to the paint while drawing
-                paint = TextPaint(styled.paint).apply { color = styled.currentTextColor },
+                // (and its link colour; a fresh paint has linkColor 0, which drew links invisible)
+                paint = TextPaint(styled.paint).apply {
+                    color = styled.currentTextColor
+                    linkColor = styled.linkTextColors?.defaultColor ?: styled.currentTextColor
+                },
                 spacingAdd = styled.lineSpacingExtra,
                 spacingMult = styled.lineSpacingMultiplier,
                 breakStrategy = breakStrategy,
