@@ -10,6 +10,12 @@ interface PendingTermDao {
     @Query("SELECT * FROM pending_terms WHERE novel_id = :novelId ORDER BY chapter_num, chinese")
     suspend fun getPendingTerms(novelId: String): List<PendingTerm>
 
+    @Query(
+        "SELECT COUNT(*) FROM pending_terms WHERE novel_id = :novelId AND chinese = :source " +
+            "AND suggested_english = :english"
+    )
+    suspend fun countMatching(novelId: String, source: String, english: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(term: PendingTerm)
 
