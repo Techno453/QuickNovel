@@ -311,9 +311,9 @@ class StoryBibleTest {
     @Test
     fun analysisEstimateIsInputHeavy() {
         val e = CostEstimator.estimateAnalysis(5, "gpt-4o-mini", "zh")
-        // 20k chars * 0.6 + 3 calls * 900 overhead = 14700 input, 0.3x output
-        assertEquals(14700, e.inputTokens)
-        assertEquals(4410, e.outputTokens)
+        // 5 x 4,500 = 22,500 chars * 0.97 (o200k zh) + 3 calls * 900 overhead = 24525 input, 0.3x output
+        assertEquals(24525, e.inputTokens)
+        assertEquals(7358, e.outputTokens)
         assertEquals(0, CostEstimator.estimateAnalysis(0, "gpt-4o-mini").totalTokens)
     }
 
