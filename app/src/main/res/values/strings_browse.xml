@@ -22,6 +22,7 @@
     <string name="browse_also_on">+%d</string>
     <string name="browse_also_on_description">Also on %d other sources</string>
     <string name="browse_end_of_list">End of the list</string>
+    <string name="browse_back">Back</string>
     <string name="browse_show_original">Show original</string>
     <string name="browse_show_translation">Show translation</string>
 </resources>

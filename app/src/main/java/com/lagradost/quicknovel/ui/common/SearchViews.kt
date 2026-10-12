@@ -106,6 +106,7 @@ fun SearchList(
     modifier: Modifier,
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
+    footer: @Composable (() -> Unit)? = null,
 ) {
     if (isRow) {
         SearchListRow(
@@ -113,6 +114,7 @@ fun SearchList(
             modifier = modifier,
             items = items,
             searchAction = searchAction,
+            footer = footer,
         )
     } else {
         SearchResponseGrid(
@@ -120,6 +122,7 @@ fun SearchList(
             modifier = modifier,
             items = items,
             searchAction = searchAction,
+            footer = footer,
         )
     }
 }
@@ -130,6 +133,7 @@ fun SearchListRow(
     modifier: Modifier,
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
+    footer: @Composable (() -> Unit)? = null,
 ) {
     // Rows are capped at MaxContentWidth and centred on wide windows, but the list itself stays
     // full width so it can be scrolled from the side gutters too.
@@ -150,6 +154,11 @@ fun SearchListRow(
                 SearchResponseRow(
                     response = item, action = searchAction, modifier = Modifier.animateItem()
                 )
+            }
+            if (footer != null) {
+                item(key = "footer", span = { GridItemSpan(maxLineSpan) }) {
+                    footer()
+                }
             }
         }
     }
@@ -692,6 +701,7 @@ fun SearchResponseGrid(
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
     modifier: Modifier,
+    footer: @Composable (() -> Unit)? = null,
 ) {
     LazyVerticalGrid(
         columns = AdaptiveAtLeast(PosterMinCellWidth, minCount = 3),
@@ -713,6 +723,11 @@ fun SearchResponseGrid(
                     .fillMaxWidth()
                     .wrapContentHeight()
             )
+        }
+        if (footer != null) {
+            item(key = "footer", span = { GridItemSpan(maxLineSpan) }) {
+                footer()
+            }
         }
     }
 

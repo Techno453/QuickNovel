@@ -4,12 +4,13 @@
             xmlns:tools="http://schemas.android.com/tools"
             android:id="@+id/mobile_navigation"
             app:startDestination="@+id/navigation_download">
+    <!-- Browse tab: per-language source cards with popular rails, and the All sources feed
+         (docs/browse.md). Each source's own page is navigation_mainpage. -->
     <fragment
-            android:id="@+id/navigation_homepage"
-            android:name="com.lagradost.quicknovel.ui.home.HomeFragment"
-            android:label="@string/title_home"
-            android:layout_height="match_parent"
-            tools:layout="@layout/fragment_home">
+            android:id="@+id/navigation_browse"
+            android:name="com.lagradost.quicknovel.ui.browse.BrowseFragment"
+            android:label="@string/title_browse"
+            android:layout_height="match_parent">
     </fragment>
     <fragment
             android:id="@+id/navigation_search"

@@ -1,6 +1,18 @@
 package com.lagradost.quicknovel.ui.mainpage
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.lagradost.quicknovel.ui.browse.LoadingFooter
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -92,6 +104,7 @@ fun MainScreenDialog(
         })*/
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainPageScreen(state: MainPageState, action: (MainPageAction) -> Unit) {
     if (state.openQuery) {
@@ -110,7 +123,7 @@ fun MainPageScreen(state: MainPageState, action: (MainPageAction) -> Unit) {
         derivedStateOf {
             val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             val totalItems = listState.layoutInfo.totalItemsCount
-            lastVisibleIndex >= totalItems - 5
+            lastVisibleIndex >= totalItems - 9
         }
     }
 
@@ -125,49 +138,131 @@ fun MainPageScreen(state: MainPageState, action: (MainPageAction) -> Unit) {
     val searchIsRow = store.getBoolean(stringResource(R.string.search_list_view_key), false)
     val searchIsRowState by searchIsRow.collectAsState()
 
+    // A different listing starts at the top.
+    LaunchedEffect(state.filter.query.category, state.filter.query.orderBy, state.filter.query.tag) {
+        if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0)
+    }
+
     Scaffold(
         topBar = {
             MainPageSearchBar(
-                openQuery = state.openQuery,
-                loading = if (state.openQuery) {
-                    state.query.loading
-                } else {
-                    state.filter.loading
-                },
-                url = state.filter.url,
+                state = state,
+                loading = if (state.openQuery) state.query.loading else state.filter.loading,
                 action = action,
-                query = state.filterVisual,
                 scrollBehavior = scrollBehavior,
-                apiName = state.apiName
             )
         },
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { innerPadding ->
-        SearchList(
-            lazyGridState = listState,
-            isRow = searchIsRowState,
-            items = if (state.openQuery) state.query.items else state.filter.items,
-            modifier = Modifier
-                .fillMaxSize()
-                // This fixes the double padding from the bottom nav bar
-                .padding(
-                    start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
-                    end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                    top = innerPadding.calculateTopPadding()
-                ),
-            searchAction = searchAction,
-        )
+        val contentModifier = Modifier
+            .fillMaxSize()
+            // This fixes the double padding from the bottom nav bar
+            .padding(
+                start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+                end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
+                top = innerPadding.calculateTopPadding()
+            )
+        if (state.openQuery) {
+            SearchList(
+                isRow = searchIsRowState,
+                items = state.query.items,
+                modifier = contentModifier,
+                searchAction = searchAction,
+            )
+            return@Scaffold
+        }
+        val filter = state.filter
+        var refreshing by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                action(MainPageAction.Refresh)
+                scope.launch {
+                    delay(400)
+                    refreshing = false
+                }
+            },
+            modifier = contentModifier,
+        ) {
+            if (filter.items.isEmpty() && !filter.loading) {
+                EmptyOrError(filter.error) { action(MainPageAction.Refresh) }
+            } else {
+                SearchList(
+                    lazyGridState = listState,
+                    isRow = searchIsRowState,
+                    items = filter.items,
+                    modifier = Modifier.fillMaxSize(),
+                    searchAction = searchAction,
+                    footer = {
+                        when {
+                            filter.loading -> LoadingFooter()
+                            filter.error != null -> EmptyOrError(filter.error, compact = true) {
+                                action(MainPageAction.Refresh)
+                            }
+                            filter.endReached -> Text(
+                                stringResource(R.string.browse_end_of_list),
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                            )
+                            else -> Spacer(Modifier.height(1.dp))
+                        }
+                    },
+                )
+            }
+        }
 
-        LaunchedEffect(shouldLoadMore.value) {
-            if (shouldLoadMore.value && state.filter.error == null && !state.filter.loading) {
+        LaunchedEffect(shouldLoadMore.value, filter.items.size) {
+            if (shouldLoadMore.value && filter.error == null && !filter.loading && !filter.endReached) {
                 action(MainPageAction.Expand)
             }
         }
     }
 }
 
+/** Empty listing or a failed load, with a retry button (and pull to refresh around it). */
+@Composable
+private fun EmptyOrError(error: Throwable?, compact: Boolean = false, onRetry: () -> Unit) {
+    val content: @Composable () -> Unit = {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = if (compact) 12.dp else 64.dp)
+        ) {
+            Text(
+                stringResource(if (error != null) R.string.browse_unavailable else R.string.browse_empty),
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center,
+            )
+            if (error != null) {
+                Text(
+                    error.message ?: error.javaClass.simpleName,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 4,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onRetry) { Text(stringResource(R.string.browse_retry)) }
+        }
+    }
+    if (compact) {
+        content()
+    } else {
+        // Scrollable so pull to refresh works on the empty state too.
+        LazyColumn(modifier = Modifier.fillMaxSize()) { item { content() } }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -248,21 +343,19 @@ fun SearchResponseDialog(
 
 @Composable
 fun MainPageSearchBar(
-    openQuery: Boolean,
+    state: MainPageState,
     loading: Boolean,
-    url: String,
-    query: FilterQueryVisual,
     action: (MainPageAction) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
-    apiName: String,
 ) {
+    val openQuery = state.openQuery
     val context = LocalContext.current
     val store = AndroidPreferenceStore(context)
     val searchIsRow = store.getBoolean(stringResource(R.string.search_list_view_key), false)
     val searchIsRowState by searchIsRow.collectAsState()
 
     BaseSearchBar(
-        placeholder = "${stringResource(R.string.search)} $apiName…",
+        placeholder = "${stringResource(R.string.search)} ${state.apiName}…",
         onQueryChange = { _ ->
             // action(MainPageAction.Search(query))
         },
@@ -298,18 +391,7 @@ fun MainPageSearchBar(
                             .padding(5.dp),
                         color = MaterialTheme.colorScheme.onBackground, strokeWidth = 3.0.dp
                     )
-                } else if (!openQuery) {
-                    IconButton(onClick = {
-                        action(MainPageAction.OpenInBrowser(url))
-                    }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_baseline_public_24),
-                            contentDescription = stringResource(R.string.open_in_browser),
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
                 }
-
                 IconButton(onClick = {
                     searchIsRow.set(!searchIsRowState)
                 }) {
@@ -321,32 +403,50 @@ fun MainPageSearchBar(
                     )
                 }
             }
-
         },
     ) {
         if (!openQuery) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 5.dp, start = 5.dp, end = 5.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                query.category?.let {
-                    SelectButton(it) {
-                        action(MainPageAction.OpenDialog(DialogType.Category))
-                    }
+            // Listing / order / genre as chip rows (docs/browse.md); the first entry of each is
+            // the provider's default (most popular first).
+            Column(modifier = Modifier.padding(bottom = 4.dp)) {
+                ChipRow(stringResource(R.string.browse_listing), state.categories, state.filter.query.category) {
+                    action(MainPageAction.SelectDialog(DialogType.Category, it))
                 }
-                query.orderBy?.let {
-                    SelectButton(it) {
-                        action(MainPageAction.OpenDialog(DialogType.OrderBy))
-                    }
+                ChipRow(stringResource(R.string.browse_order), state.orderBys, state.filter.query.orderBy) {
+                    action(MainPageAction.SelectDialog(DialogType.OrderBy, it))
                 }
-                query.tag?.let {
-                    SelectButton(it) {
-                        action(MainPageAction.OpenDialog(DialogType.Tags))
-                    }
+                ChipRow(stringResource(R.string.browse_genre), state.tags, state.filter.query.tag) {
+                    action(MainPageAction.SelectDialog(DialogType.Tags, it))
                 }
             }
+        }
+    }
+}
+
+/** One horizontally scrolling row of filter chips; hidden when there is nothing to choose. */
+@Composable
+private fun ChipRow(label: String, options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    if (options.size <= 1) return
+    val rowState = rememberLazyListState()
+    LaunchedEffect(Unit) {
+        if (selected > 0) rowState.scrollToItem(selected)
+    }
+    LazyRow(
+        state = rowState,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        item {
+            Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        itemsIndexed(options) { index, option ->
+            FilterChip(
+                selected = index == selected,
+                onClick = { if (index != selected) onSelect(index) },
+                label = { Text(option, maxLines = 1) },
+            )
         }
     }
 }

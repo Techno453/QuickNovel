@@ -559,7 +559,7 @@ class MainActivity : AppCompatActivity() {
 
         val isNavVisible = listOf(
             R.id.navigation_mainpage,
-            R.id.navigation_homepage,
+            R.id.navigation_browse,
             R.id.navigation_history,
             R.id.navigation_download,
             R.id.navigation_search,
@@ -579,6 +579,7 @@ class MainActivity : AppCompatActivity() {
 
     private val navMenuIds = setOf(
         R.id.navigation_download,
+        R.id.navigation_browse,
         R.id.navigation_search,
         R.id.navigation_history,
         R.id.navigation_settings,

@@ -101,10 +101,8 @@ object SearchScreen : Screen {
         ObserveEffect(viewModel.effect) { effect ->
             when (effect) {
                 is HomeEffect.NavigateToMainPage -> {
-                    CommonActivity.activity?.navigate(
-                        R.id.global_to_navigation_mainpage,
-                        MainPageFragment.newInstance(effect.api, effect.filter)
-                    )
+                    // Same per-source browse page as the Browse tab (restores the last listing).
+                    com.lagradost.quicknovel.ui.browse.BrowseFragment.openSource(effect.api)
                 }
             }
         }
