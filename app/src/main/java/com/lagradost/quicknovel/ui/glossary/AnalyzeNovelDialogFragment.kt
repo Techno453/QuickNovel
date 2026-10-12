@@ -36,7 +36,9 @@ class AnalyzeNovelDialogFragment : DialogFragment() {
         val novelId = arguments?.getString(ARG_NOVEL_ID).orEmpty()
         val apiName = NovelChapterSource.apiNameOf(novelId)
         val lang = TranslationLanguages.langOfApi(apiName) ?: TranslationLanguages.DEFAULT
-        val model = SecurePrefs.getModel(ctx)
+        // The "Analysis model" setting (default: the translation model).
+        val analysisConfig = SecurePrefs.analysisEngineConfig(ctx)
+        val model = analysisConfig.model
         var entry: NovelChapterSource.Entry? = null
         var count = SecurePrefs.getAnalyzeChapterCount(ctx)
 
@@ -87,7 +89,7 @@ class AnalyzeNovelDialogFragment : DialogFragment() {
             }
             start.setOnClickListener {
                 val e = entry ?: return@setOnClickListener
-                if (SecurePrefs.getApiKey(ctx).isNullOrBlank()) {
+                if (analysisConfig.apiKey.isBlank()) {
                     Toast.makeText(ctx, R.string.translator_no_api_key, Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }

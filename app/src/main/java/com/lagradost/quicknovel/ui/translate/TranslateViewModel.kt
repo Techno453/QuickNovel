@@ -8,7 +8,6 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
-import com.lagradost.quicknovel.util.AppUtils
 import kotlinx.coroutines.launch
 
 data class TranslationProgress(
@@ -29,6 +28,8 @@ data class TranslationProgress(
     val fallbackChapters: Int = 0,
     /** Fallback model id (null when no fallback is configured). */
     val fallbackModel: String? = null,
+    /** True while the job runs the analysis pre-pass before the novel's first translation. */
+    val analyzing: Boolean = false,
 ) {
     val hasQualityIssues: Boolean
         get() = glossaryDeviations > 0 || untranslatedFragments > 0 || paragraphWarnings > 0
@@ -103,8 +104,9 @@ class TranslateViewModel(application: Application) : AndroidViewModel(applicatio
         novelAuthor: String? = null,
         novelName: String? = null
     ) {
-        val ctx = getApplication<Application>()
-        if (isRunning || AppUtils.isServiceRunning(ctx, TranslationForegroundService::class.java)) return
+        // The service may be running only for read-ahead (low priority, yields to this job), so
+        // check the main slot rather than whether the service is running.
+        if (isRunning || TranslationState.isRunning) return
         isRunning = true
         currentNovelId = novelId
 

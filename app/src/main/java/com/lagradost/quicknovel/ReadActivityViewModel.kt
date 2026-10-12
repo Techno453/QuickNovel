@@ -66,6 +66,9 @@ import com.lagradost.quicknovel.ui.toUiText
 import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.translator.ChapterTranslationRepository
+import com.lagradost.quicknovel.translator.NovelAnalyzer
+import com.lagradost.quicknovel.ui.translate.NovelChapterSource
+import com.lagradost.quicknovel.ui.translate.ReadAheadScheduler
 import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.translator.TranslatorNovelId
 import com.lagradost.quicknovel.util.CoilImagesPlugin
@@ -228,6 +231,16 @@ abstract class AbstractBook {
 
     /** Chapters whose text was last served from the AI translation DB (or translated on demand). */
     val aiTranslatedChapters: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    /** Translator novel id ("apiName/novelName") for translatable sources, else null. */
+    open fun translatorNovelId(): String? = null
+
+    /** The reader moved to chapter [index]: keep the next chapters translated (read-ahead mode). */
+    fun onChapterOpened(index: Int) {
+        val ctx = context ?: return
+        val novelId = translatorNovelId() ?: return
+        ReadAheadScheduler.onChapterOpened(ctx, novelId, index)
+    }
 }
 
 class QuickBook(val data: QuickStreamData) : AbstractBook() {
@@ -241,6 +254,24 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
 
     override fun isTranslatableSource(): Boolean =
         TranslationLanguages.isTranslatableApi(data.meta.apiName)
+
+    override fun translatorNovelId(): String? =
+        if (isTranslatableSource()) TranslatorNovelId.from(data.meta.apiName, data.meta.name).also {
+            // Lets the read-ahead worker find the chapter list without reloading the novel page.
+            NovelChapterSource.remember(it, data.meta.apiName, data.meta.name, data.meta.author, data.data)
+        } else null
+
+    /** Toast once when the reader's on-demand path runs the automatic analysis. */
+    private val analysisListener = object : NovelAnalyzer.Listener {
+        @Volatile
+        private var announced = false
+        override fun onProgress(stage: NovelAnalyzer.Stage, current: Int, total: Int) {
+            if (!announced) {
+                announced = true
+                showToast(R.string.analysis_reader_started)
+            }
+        }
+    }
 
     override val canReload = true
 
@@ -267,7 +298,13 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
         val sourceLang = TranslationLanguages.langOfApi(data.meta.apiName)
         if (sourceLang != null && !reload) {
             val novelId = TranslatorNovelId.from(data.meta.apiName, data.meta.name)
-            ChapterTranslationRepository.getOrTranslate(ctx, novelId, index, sourceLang) {
+            ChapterTranslationRepository.getOrTranslate(
+                ctx, novelId, index, sourceLang,
+                chapterCount = data.data.size,
+                // Before the novel's first translation, the first chapters are analyzed (once).
+                fetchChapter = { i -> data.data.getOrNull(i)?.let { ctx.getQuickChapter(data.meta, it, i, false)?.html } },
+                analysisListener = analysisListener,
+            ) {
                 ctx.getQuickChapter(data.meta, data.data[index], index, false)?.html
             }?.let { aiTranslatedChapters += index; return it }
         }
@@ -355,6 +392,8 @@ class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBoo
 
     // novelId is only set when opened from the translation pipeline (zh/ja/ko source)
     override fun isTranslatableSource(): Boolean = novelId != null
+
+    override fun translatorNovelId(): String? = novelId
 
     override fun author(): String? {
         val author = data.metadata.authors.firstOrNull() ?: return null
@@ -1675,6 +1714,15 @@ class ReadActivityViewModel : ViewModel() {
 
     /** sets the metadata and global vars used as well as keys */
     private var lastChangeIndex: ScrollIndex? = null
+
+    /** Chapter last reported to [AbstractBook.onChapterOpened] (read-ahead scheduling). */
+    private var lastOpenedChapter = Int.MIN_VALUE
+
+    private fun reportChapterOpened(index: Int) {
+        if (index == lastOpenedChapter || index < 0) return
+        lastOpenedChapter = index
+        book.onChapterOpened(index)
+    }
     private var lastScrollMs: Long = 0
     private fun changeIndex(scrollIndex: ScrollIndex, alsoTitle: Boolean = true) {
         if (alsoTitle) {
@@ -1683,6 +1731,7 @@ class ReadActivityViewModel : ViewModel() {
 
         desiredIndex = scrollIndex
         currentIndex = scrollIndex.index
+        reportChapterOpened(scrollIndex.index)
 
         // the majority of the time is spent on setKey, and because this is called from onscroll
         // this fixes lag
@@ -1742,6 +1791,7 @@ class ReadActivityViewModel : ViewModel() {
         // set the state
         desiredIndex = ScrollIndex(index, 0, 0)
         currentIndex = index
+        reportChapterOpened(index)
         desiredTTSIndex = ScrollIndex(index, 0, 0)
 
         // push the update

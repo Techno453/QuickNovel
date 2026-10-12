@@ -54,8 +54,23 @@ object SecurePrefs {
     /** Suffixed with the source language: default_honorific_style_zh / _ja / _ko. */
     const val KEY_DEFAULT_HONORIFIC_STYLE_PREFIX = "default_honorific_style_"
 
+    /** Run the analysis pre-pass automatically before a novel's first translation (default on). */
+    const val KEY_AUTO_ANALYZE = "auto_analyze_before_translate"
+    /** Chapters the automatic pre-pass reads (1–20, default 3). */
+    const val KEY_AUTO_ANALYZE_CHAPTERS = "auto_analyze_chapter_count"
+    /** Preset id of the analysis model; absent = same as the translation model. */
+    const val KEY_ANALYSIS_PRESET = "analysis_preset"
+    /** Reader read-ahead: chapters after the current one kept translated (0 = off, default 2). */
+    const val KEY_READ_AHEAD_CHAPTERS = "read_ahead_chapters"
+
     const val DEFAULT_ANALYZE_CHAPTERS = 5
     const val MAX_ANALYZE_CHAPTERS = 20
+    const val DEFAULT_AUTO_ANALYZE_CHAPTERS = 3
+    const val DEFAULT_READ_AHEAD_CHAPTERS = 2
+
+    /** Choices offered for read-ahead (0 = off). */
+    val READ_AHEAD_OPTIONS = listOf(0, 1, 2, 3, 5, 10)
+    const val MAX_READ_AHEAD_CHAPTERS = 10
 
     const val MODEL_GPT4O = LlmConfig.MODEL_GPT4O
     const val MODEL_GPT4O_MINI = LlmConfig.MODEL_GPT4O_MINI
@@ -73,6 +88,8 @@ object SecurePrefs {
     @Volatile private var autoAddTerms = true
     @Volatile private var strictMode = true
     @Volatile private var carryStoryContext = true
+    @Volatile private var autoAnalyze = true
+    @Volatile private var readAheadChapters = DEFAULT_READ_AHEAD_CHAPTERS
 
     /** True if the encrypted store failed and plain SharedPreferences are in use. */
     @Volatile
@@ -92,6 +109,9 @@ object SecurePrefs {
                 autoAddTerms = created.getBoolean(KEY_AUTO_ADD_TERMS, true)
                 strictMode = created.getBoolean(KEY_STRICT_MODE, true)
                 carryStoryContext = created.getBoolean(KEY_CARRY_STORY_CONTEXT, true)
+                autoAnalyze = created.getBoolean(KEY_AUTO_ANALYZE, true)
+                readAheadChapters = created.getInt(KEY_READ_AHEAD_CHAPTERS, DEFAULT_READ_AHEAD_CHAPTERS)
+                    .coerceIn(0, MAX_READ_AHEAD_CHAPTERS)
                 migrateToPresets(created)
                 prefs = created
             }
@@ -364,6 +384,52 @@ object SecurePrefs {
 
     fun setAnalyzeChapterCount(context: Context, count: Int) =
         edit(context) { putInt(KEY_ANALYZE_CHAPTER_COUNT, count.coerceIn(1, MAX_ANALYZE_CHAPTERS)) }
+
+    /** Analyze a novel automatically before its first translation (default on). */
+    fun isAutoAnalyzeEnabled(context: Context?): Boolean {
+        ensureLoaded(context); return autoAnalyze
+    }
+
+    fun setAutoAnalyzeEnabled(context: Context, enabled: Boolean) {
+        autoAnalyze = enabled
+        edit(context) { putBoolean(KEY_AUTO_ANALYZE, enabled) }
+    }
+
+    /** Chapters read by the automatic analysis (1–20, default 3). */
+    fun getAutoAnalyzeChapterCount(context: Context?): Int =
+        (getPrefs(context)?.getInt(KEY_AUTO_ANALYZE_CHAPTERS, DEFAULT_AUTO_ANALYZE_CHAPTERS) ?: DEFAULT_AUTO_ANALYZE_CHAPTERS)
+            .coerceIn(1, MAX_ANALYZE_CHAPTERS)
+
+    fun setAutoAnalyzeChapterCount(context: Context, count: Int) =
+        edit(context) { putInt(KEY_AUTO_ANALYZE_CHAPTERS, count.coerceIn(1, MAX_ANALYZE_CHAPTERS)) }
+
+    /** Analysis model preset id, or null = same as the translation model (default). */
+    fun getAnalysisPresetId(context: Context?): String? =
+        getPrefs(context)?.getString(KEY_ANALYSIS_PRESET, null)?.takeIf { ModelPresets.byId(it) != null }
+
+    fun setAnalysisPresetId(context: Context, id: String?) = edit(context) {
+        if (id == null || ModelPresets.byId(id) == null) remove(KEY_ANALYSIS_PRESET) else putString(KEY_ANALYSIS_PRESET, id)
+    }
+
+    /**
+     * Engine config for the "Analyze novel" pre-pass (manual and automatic): the analysis preset
+     * when one is chosen and its provider has an API key, otherwise the translation model.
+     */
+    fun analysisEngineConfig(context: Context?): EngineConfig {
+        val preset = ModelPresets.byId(getAnalysisPresetId(context)) ?: return engineConfig(context)
+        val key = getApiKey(context, preset.provider.id) ?: return engineConfig(context)
+        return preset.toEngineConfig(key)
+    }
+
+    /** Reader read-ahead: chapters after the current one to keep translated (0 = off, default 2). */
+    fun getReadAheadChapters(context: Context?): Int {
+        ensureLoaded(context); return readAheadChapters
+    }
+
+    fun setReadAheadChapters(context: Context, count: Int) {
+        readAheadChapters = count.coerceIn(0, MAX_READ_AHEAD_CHAPTERS)
+        edit(context) { putInt(KEY_READ_AHEAD_CHAPTERS, readAheadChapters) }
+    }
 
     /** Global default name style for [lang] (see [TranslationStyle.nameStyleOptions]). */
     fun getDefaultNameStyle(context: Context?, lang: String?): String {

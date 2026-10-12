@@ -366,6 +366,14 @@
     <string name="analysis_failed">Analysis failed: %s</string>
     <string name="analysis_no_chapters">Could not load any chapters to analyze</string>
     <string name="analysis_cancelled">Analysis cancelled</string>
+    <string name="analyzing_before_translation">Analyzing novel before translating</string>
+    <string name="analyzing_novel_progress">Analyzing novel… %1$d/%2$d</string>
+    <string name="analysis_reader_started">Analyzing the novel before its first translation…</string>
+    <string name="read_ahead_title">Translating ahead</string>
+    <string name="read_ahead_text">%1$s (%2$d more queued)</string>
+    <string name="read_ahead_stop">Stop</string>
+    <string name="bible_auto_analyze_hint">No characters yet. The first chapters will be analyzed automatically before translating (Settings → AI Translation), or analyze them now.</string>
+    <string name="analyze_includes_auto">\nIncludes analyzing the first %1$d chapters first: %2$s</string>
     <string name="translator_busy">A translation or analysis is already running</string>
     <string name="translator_no_api_key">Set your API key in Settings → Translation first</string>
 

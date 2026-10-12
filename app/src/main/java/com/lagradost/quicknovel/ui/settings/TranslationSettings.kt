@@ -43,6 +43,7 @@ import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.translator.TranslationStyle
+import com.lagradost.quicknovel.ui.translate.TranslationForegroundService
 import com.lagradost.quicknovel.util.GoogleTranslate
 import com.mihon.common.preference.PreferenceData
 import com.mihon.presentation.settings.Preference
@@ -233,6 +234,33 @@ object TranslationSettings {
                 { SecurePrefs.setAnalyzeChapterCount(context, it) },
             )
         }
+        val autoAnalyze = remember {
+            secureSwitch(
+                context, "translator_auto_analyze", true,
+                SecurePrefs::isAutoAnalyzeEnabled, SecurePrefs::setAutoAnalyzeEnabled
+            )
+        }
+        val autoAnalyzeChapters = remember {
+            AccessorPreferenceData(
+                "translator_auto_analyze_chapters", SecurePrefs.DEFAULT_AUTO_ANALYZE_CHAPTERS,
+                { SecurePrefs.getAutoAnalyzeChapterCount(context) },
+                { SecurePrefs.setAutoAnalyzeChapterCount(context, it) },
+            )
+        }
+        val readAhead = remember {
+            AccessorPreferenceData(
+                "translator_read_ahead", SecurePrefs.DEFAULT_READ_AHEAD_CHAPTERS,
+                { SecurePrefs.getReadAheadChapters(context) },
+                { SecurePrefs.setReadAheadChapters(context, it) },
+            )
+        }
+        val readAheadEntries = SecurePrefs.READ_AHEAD_OPTIONS.associateWith { n ->
+            when (n) {
+                0 -> "Off"
+                1 -> "1 chapter"
+                else -> "$n chapters"
+            }
+        }
         val styleItems = STYLE_LANGUAGES.flatMap { lang -> styleDefaults(context, lang, translateIcon) }
         // Bumped whenever the model, fallback or a key changes so dependent rows re-read SecurePrefs.
         val configVersion = remember { mutableStateOf(0) }
@@ -288,6 +316,20 @@ object TranslationSettings {
                 subtitle = "Translate untranslated chapters with the LLM when opened in the reader",
                 preference = onDemand,
             ),
+            Preference.PreferenceItem.ListPreference(
+                icon = translateIcon,
+                title = "Auto-translate ahead",
+                preference = readAhead,
+                entries = readAheadEntries,
+                subtitleProvider = { value, entries ->
+                    if (value == 0) "Off. Keeps the next chapters after the one you are reading translated in the background"
+                    else "Keep the next ${entries[value]} after the one you are reading translated (when reading in translation)"
+                },
+                onValueChanged = { value ->
+                    if (value == 0) TranslationForegroundService.stopReadAhead(context)
+                    true
+                },
+            ),
             Preference.PreferenceItem.CustomPreference(
                 title = "Consistency",
                 content = { PreferenceGroupHeader(title = "Consistency") },
@@ -316,6 +358,23 @@ object TranslationSettings {
                 subtitle = "Default for Analyze novel, which builds the character sheet",
                 preference = analyzeChapters,
                 valueRange = 1..SecurePrefs.MAX_ANALYZE_CHAPTERS,
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = translateIcon,
+                title = "Analyze novel before first translation",
+                subtitle = "Build the character sheet from the first chapters automatically before a novel is translated for the first time",
+                preference = autoAnalyze,
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                icon = translateIcon,
+                title = "Chapters analyzed automatically",
+                subtitle = "How many of the first chapters the automatic analysis reads",
+                preference = autoAnalyzeChapters,
+                valueRange = 1..SecurePrefs.MAX_ANALYZE_CHAPTERS,
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = "Analysis model",
+                content = { AnalysisModelPreference(context, configVersion) },
             ),
         ) + styleItems
 
@@ -606,6 +665,74 @@ object TranslationSettings {
             confirmButton = {
                 TextButton(onClick = {
                     SecurePrefs.setFallbackPresetId(context, selected)
+                    version.value++
+                    dismiss()
+                }) { Text(stringResource(R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    /** Model for the "Analyze novel" pre-pass (manual and automatic); default: the translation model. */
+    @Composable
+    private fun AnalysisModelPreference(context: Context, version: MutableState<Int>) {
+        var showDialog by remember { mutableStateOf(false) }
+        val chapters = SecurePrefs.DEFAULT_AUTO_ANALYZE_CHAPTERS
+        fun estimate(model: String) =
+            CostEstimator.formatEstimate(CostEstimator.estimateAnalysis(chapters, model, TranslationLanguages.CHINESE))
+        val summary = remember(version.value) {
+            val preset = ModelPresets.byId(SecurePrefs.getAnalysisPresetId(context))
+            if (preset == null) {
+                "Same as the translation model"
+            } else {
+                buildString {
+                    append("${preset.label} (${preset.provider.label}) · ${estimate(preset.model)} per $chapters-chapter analysis (zh)")
+                    if (SecurePrefs.getApiKey(context, preset.provider.id) == null) {
+                        append(" · needs a ${preset.provider.label} API key; the translation model is used until then")
+                    }
+                }
+            }
+        }
+
+        TextPreferenceWidget(
+            title = "Analysis model",
+            subtitle = summary,
+            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            onPreferenceClick = { showDialog = true },
+        )
+        if (!showDialog) return
+
+        var selected by remember { mutableStateOf(SecurePrefs.getAnalysisPresetId(context)) }
+        val dismiss = { showDialog = false }
+        AlertDialog(
+            onDismissRequest = dismiss,
+            title = { Text("Analysis model") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "Model for Analyze novel, which builds the character sheet (names, genders, places, terms) " +
+                            "from the first chapters. It runs once per novel, so a stronger model costs little. " +
+                            "Cost shown for $chapters Chinese chapters.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    ChoiceRow(selected = selected == null, label = "Same as translation model", detail = null, notes = null) {
+                        selected = null
+                    }
+                    SecurePrefs.modelPresets.forEach { p ->
+                        ChoiceRow(
+                            selected = selected == p.id,
+                            label = p.label,
+                            detail = "${p.provider.label} · ${estimate(p.model)}",
+                            notes = p.notes,
+                        ) { selected = p.id }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    SecurePrefs.setAnalysisPresetId(context, selected)
                     version.value++
                     dismiss()
                 }) { Text(stringResource(R.string.ok)) }

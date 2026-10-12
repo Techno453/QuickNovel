@@ -13,6 +13,7 @@ import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.DialogTranslateRangeBinding
 import com.lagradost.quicknovel.translator.CostEstimator
+import com.lagradost.quicknovel.translator.NovelAnalyzer
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
@@ -62,6 +63,8 @@ class TranslateRangeDialogFragment : DialogFragment() {
         val strictMode = SecurePrefs.isStrictModeEnabled(ctx)
         val fallbackLabel = SecurePrefs.fallbackEngineConfig(ctx)?.label
         var bibleTerms = 0
+        /** Chapters the automatic analysis will read before translating (0 = none). */
+        var autoAnalysisChapters = 0
         var updateEstimates: () -> Unit = {}
 
         viewModel.loadTranslatedNums(novelId)
@@ -74,7 +77,12 @@ class TranslateRangeDialogFragment : DialogFragment() {
             val totalTerms = dao.countForNovel(novelId)
             binding.bibleStatus.text = getString(R.string.bible_status, characters, totalTerms - characters)
             bibleTerms = totalTerms
+            val autoAnalyze = chapters.isNotEmpty() && NovelAnalyzer.needsAutoAnalysis(ctx, novelId)
+            autoAnalysisChapters = if (autoAnalyze) {
+                SecurePrefs.getAutoAnalyzeChapterCount(ctx).coerceAtMost(chapters.size)
+            } else 0
             updateEstimates()
+            if (autoAnalyze) binding.bibleAnalyzeHint.setText(R.string.bible_auto_analyze_hint)
             val showHint = characters == 0 && chapters.isNotEmpty()
             binding.bibleAnalyzeHint.visibility = if (showHint) View.VISIBLE else View.GONE
             binding.bibleAnalyzeButton.visibility = if (showHint) View.VISIBLE else View.GONE
@@ -109,6 +117,12 @@ class TranslateRangeDialogFragment : DialogFragment() {
                 append("${TranslationLanguages.displayName(sourceLang)} → English")
                 if (strictMode) append(", strict mode")
                 if (fallbackLabel != null) append("\nFallback for blocked or refused passages: $fallbackLabel")
+                if (autoAnalysisChapters > 0 && toTranslate > 0) {
+                    val analysis = CostEstimator.estimateAnalysis(
+                        autoAnalysisChapters, SecurePrefs.analysisEngineConfig(ctx).model, sourceLang
+                    )
+                    append(getString(R.string.analyze_includes_auto, autoAnalysisChapters, CostEstimator.formatEstimate(analysis)))
+                }
             }
         }
 

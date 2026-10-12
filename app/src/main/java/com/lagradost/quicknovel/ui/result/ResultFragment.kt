@@ -836,7 +836,9 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 else -> {
                     // In progress for this book — grey out and show count.
                     setTranslateEnabled(false)
-                    binding.resultTranslateBtn.text = if (progress.total > 0)
+                    binding.resultTranslateBtn.text = if (progress.analyzing)
+                        progress.currentChapterName // "Analyzing novel… 1/3" before the first translation
+                    else if (progress.total > 0)
                         "${progress.current}/${progress.total}"
                     else
                         "Starting…"
