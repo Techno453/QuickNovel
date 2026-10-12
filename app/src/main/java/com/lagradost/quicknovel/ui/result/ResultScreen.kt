@@ -428,14 +428,15 @@ private fun Header(
                 .capped()
                 .padding(horizontal = 12.dp, vertical = 16.dp)
         ) {
-            AsyncImage(
-                contentScale = ContentScale.Crop,
+            com.lagradost.quicknovel.ui.common.PosterBox(
+                request = response.imageRequest(),
+                model = response.rememberPosterModel(),
+                title = response.name,
+                titleSize = 12.sp,
                 modifier = Modifier
                     .size(width = 100.dp, height = 150.dp)
                     .rounded()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(onClick = showPoster),
-                model = response.imageRequest(),
                 contentDescription = stringResource(R.string.poster_descript),
             )
             Column(

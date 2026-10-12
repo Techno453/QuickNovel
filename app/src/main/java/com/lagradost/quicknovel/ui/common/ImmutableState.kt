@@ -19,6 +19,7 @@ import androidx.annotation.CheckResult
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
@@ -68,6 +69,8 @@ import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.updates.LibraryUpdateStore
 import com.lagradost.quicknovel.updates.NovelUpdateState
 import com.lagradost.quicknovel.util.BlurTransformation
+import com.lagradost.quicknovel.util.ImageLoader
+import com.lagradost.quicknovel.util.PosterMemo
 import com.lagradost.quicknovel.util.ResultCached
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -180,7 +183,7 @@ data class ImmutableReview(
     val imageRequest
         get() = @Composable {
             val context = LocalContext.current
-            remember(context) {
+            remember(context, avatarUrl, avatarHeaders) {
                 ImageRequest(context)
             }
         }
@@ -189,7 +192,7 @@ data class ImmutableReview(
         ImageRequest.Builder(context)
             .data(avatarUrl)
             .httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
-                avatarHeaders?.forEach { (key, value) ->
+                PosterHeaders.withDefaults(avatarHeaders, com.lagradost.quicknovel.USER_AGENT).forEach { (key, value) ->
                     headerBuilder[key] = value
                 }
             }.build())
@@ -290,22 +293,56 @@ data class ImmutableSearchResponse(
         return copy(newChapters = state.newChapters, timeOfNewChapters = state.lastNewChaptersAt)
     }
 
+    /**
+     * The cover request, rebuilt only when the cover itself changes ([PosterModel] equality), not
+     * once per composition slot: a reused slot (rails without keys, a result page that first shows
+     * the cached item and then the loaded one) used to keep the previous item's request.
+     */
     val imageRequest
         get() = @Composable {
             val context = LocalContext.current
-            remember(context) {
-                ImageRequest(context)
+            val model = rememberPosterModel()
+            remember(context, model) {
+                ImageLoader.posterRequest(context, model)
             }
         }
     val blurImageRequest
         get() = @Composable {
             val context = LocalContext.current
-            remember(context) {
-                ImageRequest(context, radius = 100, sample = 3)
+            val model = rememberPosterModel()
+            remember(context, model) {
+                ImageRequest(context, model, radius = 100, sample = 3)
             }
         }
 
-    /** Where an imported book's cover (`poster.jpg`) is stored. */
+    /**
+     * The cover to show (docs/images.md): an imported book's `poster.jpg`; a downloaded book's
+     * saved `poster.jpg` when it exists (instant and offline); the item's own url; else the cover
+     * remembered from when this book's page or another listing was loaded ([PosterMemo]).
+     */
+    fun posterModel(context: Context): PosterModel {
+        if (isImported) return PosterModel(file = importedCoverFile(context).path)
+        val saved = if (downloadState != null) {
+            importedCoverFile(context).takeIf { PosterModel.looksLikeImage(it) }?.path
+        } else null
+        val memo = if (posterUrl.isNullOrBlank()) PosterMemo.get(url) else null
+        return PosterModel.resolve(posterUrl, posterHeaders, saved, memo)
+    }
+
+    @Composable
+    fun rememberPosterModel(): PosterModel {
+        val context = LocalContext.current
+        // Only a card without a cover of its own waits for the memo (it fills in when the book
+        // is opened, or loads from disk after a cold start).
+        val memoVersion = if (posterUrl.isNullOrBlank() && !isImported) {
+            PosterMemo.version.collectAsState().value
+        } else 0
+        return remember(context, url, posterUrl, posterHeaders, isImported, downloadState != null, memoVersion) {
+            posterModel(context)
+        }
+    }
+
+    /** Where an imported book's cover (`poster.jpg`) is stored; downloads save theirs at the same path. */
     fun importedCoverFile(context: Context): java.io.File = java.io.File(
         context.filesDir.toString() + getFilenameIMG(
             sanitizeFilename(apiName),
@@ -316,6 +353,7 @@ data class ImmutableSearchResponse(
 
     fun ImageRequest(
         context: Context,
+        model: PosterModel = posterModel(context),
         radius: Int = 0,
         sample: Int = 3
     ): ImageRequest {
@@ -326,23 +364,7 @@ data class ImmutableSearchResponse(
             )
         ) else emptyList()
 
-        return if (isImported) {
-            val uri = importedCoverFile(context).path.toUri()
-            ImageRequest.Builder(context)
-                .data(uri)
-                .crossfade(true).transformations(transformations)
-                .build()
-        } else {
-            ImageRequest.Builder(context)
-                .data(posterUrl)
-                .httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
-                    posterHeaders?.forEach { (key, value) ->
-                        headerBuilder[key] = value
-                    }
-                }.build())
-                .crossfade(true).transformations(transformations)
-                .build()
-        }
+        return ImageLoader.posterRequest(context, model, transformations)
     }
 
     fun toResultCached(
