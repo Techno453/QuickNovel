@@ -26,6 +26,8 @@ class BaseApplication : Application(), SingletonImageLoader.Factory, Configurati
         // Spend ledger for every paid translator call, and a poll of overnight batches.
         com.lagradost.quicknovel.translator.SpendLedger.install(this)
         com.lagradost.quicknovel.ui.translate.BatchScheduler.pollNow(this)
+        // Covers remembered from opened books, for listings that give none (docs/images.md).
+        com.lagradost.quicknovel.util.PosterMemo.init(this)
     }
 
     override fun newImageLoader(context: PlatformContext): coil3.ImageLoader {

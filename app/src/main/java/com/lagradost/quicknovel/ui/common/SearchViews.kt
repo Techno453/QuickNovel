@@ -669,7 +669,8 @@ fun ImportedLabel(modifier: Modifier = Modifier, color: Color, fontSize: TextUni
 /**
  * A card's poster. An imported book whose cover file does not exist (TXT imports from before
  * placeholder covers) shows its placeholder (title on the book's colour) instead of an image
- * request that can only fail.
+ * request that can only fail. Any other card without a cover, or whose cover fails, shows the
+ * title on the Browse placeholder ([PosterBox], docs/images.md).
  */
 @Composable
 fun CardPoster(
@@ -685,10 +686,11 @@ fun CardPoster(
         }
     } else false
     if (!coverMissing) {
-        AsyncImage(
-            contentScale = ContentScale.Crop,
-            model = imageRequest,
-            contentDescription = response.name,
+        PosterBox(
+            request = imageRequest,
+            model = response.rememberPosterModel(),
+            title = response.name,
+            titleSize = titleSize,
             modifier = modifier,
         )
         return
