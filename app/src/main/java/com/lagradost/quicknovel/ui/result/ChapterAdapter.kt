@@ -61,8 +61,11 @@ class ChapterAdapter(
 
     // ======================= translation status chips =======================
 
-    /** Where the chapter translation statuses come from (translator DB + queues). */
-    var statusSource: ChapterStatusSource = TranslatorChapterStatusSource
+    /**
+     * Where the chapter translation statuses come from (translator DB, read-ahead queue and
+     * unfinished overnight batches). Created from the list's context when null.
+     */
+    var statusSource: ChapterStatusSource? = null
 
     private var statuses: Map<Int, ChapterTranslationStatus> = emptyMap()
     private var statusJob: Job? = null
@@ -102,8 +105,10 @@ class ChapterAdapter(
             owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
                     val id = novelId()
+                    val source = statusSource
+                        ?: TranslatorChapterStatusSource.create(parent.context).also { statusSource = it }
                     val next = if (id == null) emptyMap() else withContext(Dispatchers.IO) {
-                        ChapterStatusSource.statuses(statusSource, parent.context.applicationContext, id)
+                        ChapterStatusSource.statuses(source, id)
                     }
                     if (next != statuses) {
                         statuses = next
