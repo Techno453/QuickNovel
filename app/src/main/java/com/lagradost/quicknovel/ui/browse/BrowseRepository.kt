@@ -4,25 +4,28 @@ import android.content.Context
 import android.os.Build
 import androidx.preference.PreferenceManager
 import com.lagradost.quicknovel.BaseApplication
+import com.lagradost.quicknovel.DataStore
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.ui.common.ImmutableHeadMainPageResponse
+import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Loads source listings for the Browse tab (docs/browse.md) through the provider objects only
  * (never a WebView or the site in a browser):
  *
- * - Session cache: every page loaded for (source, listing, page) is kept in memory until the app
- *   process ends; pull to refresh / retry bypass it. Failures are not cached.
+ * - Cache: every page loaded for (source, listing, page) is kept in memory until the app
+ *   process ends and written through to a small disk cache ([ListingDiskCache]: 6 h TTL, newest
+ *   200 pages) that is read on first access after a restart; pull to refresh / retry bypass both.
+ *   Failures and empty pages are not cached.
  * - Politeness: the Browse home loads at most [RAIL_CONCURRENCY] sources at a time, the "All
  *   sources" feed at most [FEED_CONCURRENCY]; each load times out after [TIMEOUT_MS]
  *   ([CLOUDFLARE_TIMEOUT_MS] behind the Cloudflare interceptor). Concurrent
@@ -49,15 +52,31 @@ object BrowseRepository {
 
     data class PageKey(val api: String, val listing: BrowseCatalog.Listing, val page: Int)
 
-    private val cache = ConcurrentHashMap<PageKey, ImmutableHeadMainPageResponse>()
-    private val inFlight = ConcurrentHashMap<PageKey, CompletableDeferred<Result<ImmutableHeadMainPageResponse>>>()
+    private val cache by lazy {
+        ListingCache<PageKey, ImmutableHeadMainPageResponse>(
+            disk = BaseApplication.context?.cacheDir?.let { ListingDiskCache(java.io.File(it, DISK_DIR)) },
+            diskKey = { it.diskKey() },
+            encode = { DataStore.mapper.writeValueAsString(DiskListingPage.from(it)) },
+            decode = { DataStore.mapper.readValue(it, DiskListingPage::class.java)?.toResponse() },
+            // Empty pages are not cached: a site that briefly answers with nothing (rate limiting, a
+            // hiccup) is asked again next time instead of ending the list.
+            cacheable = { it.list.isNotEmpty() },
+        )
+    }
 
-    fun cached(key: PageKey): ImmutableHeadMainPageResponse? = cache[key]
+    /** Folder under the app's cache dir. */
+    const val DISK_DIR = "browse_listings"
+
+    /** Key on disk; bump the version when [DiskListingPage] changes shape. */
+    fun PageKey.diskKey() = "v1|$api|${listing.category},${listing.orderBy},${listing.tag}|$page"
+
+    /** The page in the memory cache (no disk read). */
+    fun cached(key: PageKey): ImmutableHeadMainPageResponse? = cache.inMemory(key)
 
     /**
-     * Page [page] (1-based) of [listing] on [apiName], from the session cache unless [refresh].
-     * [gate] limits how many sources load at once (null = not throttled, for the page the user
-     * is looking at).
+     * Page [page] (1-based) of [listing] on [apiName], from the memory or disk cache unless
+     * [refresh]. [gate] limits how many sources load at once (null = not throttled, for the page
+     * the user is looking at).
      */
     suspend fun page(
         apiName: String,
@@ -65,28 +84,10 @@ object BrowseRepository {
         page: Int,
         gate: Semaphore? = null,
         refresh: Boolean = false,
-    ): Result<ImmutableHeadMainPageResponse> {
-        val key = PageKey(apiName, listing, page)
-        if (!refresh) cache[key]?.let { return Result.success(it) }
-        val mine = CompletableDeferred<Result<ImmutableHeadMainPageResponse>>()
-        val shared = inFlight.putIfAbsent(key, mine)
-        if (shared != null) return shared.await()
-        val result = try {
+    ): Result<ImmutableHeadMainPageResponse> =
+        cache.get(PageKey(apiName, listing, page), refresh) {
             if (gate != null) gate.withPermit { load(apiName, listing, page) } else load(apiName, listing, page)
-        } catch (e: CancellationException) {
-            inFlight.remove(key, mine)
-            mine.cancel()
-            throw e
-        } catch (e: Throwable) {
-            Result.failure(e)
         }
-        // Empty pages are not cached either: a site that briefly answers with nothing (rate
-        // limiting, a hiccup) is asked again next time instead of ending the list for the session.
-        result.onSuccess { if (it.list.isNotEmpty()) cache[key] = it }
-        inFlight.remove(key, mine)
-        mine.complete(result)
-        return result
-    }
 
     private suspend fun load(apiName: String, listing: BrowseCatalog.Listing, page: Int): Result<ImmutableHeadMainPageResponse> =
         withContext(Dispatchers.IO) {
@@ -166,4 +167,54 @@ object BrowsePrefs {
         }
         return emptyList()
     }
+}
+
+/** A listing page as stored on disk (only the fields a listing fills, see `ImmutableSearchResponse.from`). */
+data class DiskListingPage(
+    val url: String = "",
+    val items: List<DiskListingItem> = emptyList(),
+) {
+    fun toResponse(): ImmutableHeadMainPageResponse = ImmutableHeadMainPageResponse(
+        url = url,
+        list = items.map { it.toResponse() }.toImmutableList(),
+    )
+
+    companion object {
+        fun from(response: ImmutableHeadMainPageResponse) = DiskListingPage(
+            url = response.url,
+            items = response.list.map {
+                DiskListingItem(
+                    name = it.name,
+                    url = it.url,
+                    apiName = it.apiName,
+                    posterUrl = it.posterUrl,
+                    posterHeaders = it.posterHeaders,
+                    rating = it.rating,
+                    latestChapterName = it.latestChapterName,
+                )
+            },
+        )
+    }
+}
+
+data class DiskListingItem(
+    val name: String = "",
+    val url: String = "",
+    val apiName: String = "",
+    val posterUrl: String? = null,
+    val posterHeaders: Map<String, String>? = null,
+    val rating: Int? = null,
+    val latestChapterName: String? = null,
+) {
+    fun toResponse() = ImmutableSearchResponse(
+        name = name,
+        url = url,
+        apiName = apiName,
+        posterUrl = posterUrl,
+        posterHeaders = posterHeaders?.toImmutableMap(),
+        rating = rating,
+        latestChapterName = latestChapterName,
+        timeOfCached = System.currentTimeMillis(),
+        chaptersRead = ImmutableSearchResponse.chaptersRead(name),
+    )
 }

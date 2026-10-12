@@ -66,10 +66,22 @@ with those providers).
 `BrowseRepository`:
 
 - **Lazy**: a rail loads when its card is first composed, i.e. when it scrolls into view.
-- **Session cache**: every page loaded for (source, listing, page) stays in memory until the app
-  process ends, shared by the rails, the All sources feed and the source pages (opening "See
-  all" shows the rail's page instantly). Failures and empty pages are not cached. Pull to refresh and Retry
-  reload page 1 bypassing the cache.
+- **Cache, two layers** (`ListingCache` in front of `ListingDiskCache`, key = (source, listing,
+  page)):
+  - Memory: every page loaded stays in memory until the app process ends, shared by the rails,
+    the All sources feed and the source pages (opening "See all" shows the rail's page instantly).
+  - Disk: every successful load is also written to `cacheDir/browse_listings/` (one JSON file per
+    page, named by the SHA-1 of the key; the first line holds the save time and the key). After a
+    process restart the first access of a page reads it from disk, so the Browse home shows its
+    rails without network. Entries expire after 6 hours; at most 200 pages are kept, the least
+    recently used are deleted on each write (a read touches the file, so the order survives a
+    restart). Only the fields a listing fills are stored (`DiskListingPage`: title, URL, source,
+    poster URL and headers, rating, latest chapter); bump `diskKey`'s `v1` if that changes.
+    Unreadable or foreign files count as misses. Android may clear the cache dir at any time.
+  - Failures and empty pages are never cached in either layer. Pull to refresh and Retry reload
+    bypassing both layers and write the new page through to both.
+  - Tested in `ListingCacheTest` (TTL, LRU bound across instances, bypass, no caching of failures
+    or empty pages, corrupt files).
 - **Politeness**: at most 2 sources load at a time for the rails and 3 for the All sources feed;
   requests for the same page share one network call; each load times out after 25 s (60 s for sources behind the Cloudflare interceptor, whose first request may spend about 30 s clearing the challenge in a hidden WebView); the
   provider's own `rateLimitTime` still applies. A source page the user is looking at is not
@@ -165,7 +177,8 @@ novel's translations keeps these rows (they are tiny, paid for, and shown again 
 
 ## Limitations
 
-- Rails and pages are cached for the session only; there is no disk cache of listings.
+- The disk cache is per (source, listing, page) with a fixed 6 h TTL; a listing that changes faster
+  (latest updates) can look up to 6 hours old after a restart until pulled to refresh.
 - Top 100 / ranking pages (Novelpia, Naver) have a single page; the list ends there.
 - The All sources feed covers zh / ja / ko sources; other languages are browsed per source.
 - De-duplication only compares title (and author when listed); different novels with the same
