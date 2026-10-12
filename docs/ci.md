@@ -6,7 +6,7 @@
 |---|---|---|---|
 | **CI** | `ci.yml` | push to `master`, every pull request, manual | `./gradlew :app:testDebugUnitTest :app:assembleDebug`; uploads the debug APK (`QuickNovel-debug-<sha>`) and the unit-test report (`unit-test-report`) as artifacts, kept 14 days |
 | **Nightly live provider check** | `nightly-live.yml` | daily 03:17 UTC, manual (optional provider filter) | runs `CjkProvidersLiveSmokeTest` with `-Dlive=1`: one search, one novel page and one chapter per CJK provider. A broken provider fails the job. The job summary lists each provider's result; the report is uploaded as `live-test-report` |
-| **Release** | `release.yml` | push of a tag `v*`, manual (with a tag) | checks the tag is `v<versionName>`, runs the unit tests, builds the release APK (signed with the release key if the secrets exist, otherwise with a throwaway debug key and a warning in the notes), publishes a GitHub release titled `QuickNovel <versionName>` with `QuickNovel-<versionName>.apk` attached |
+| **Release** | `release.yml` | push of a tag `v*`, manual (with a tag) | checks the tag is `v<versionName>`, runs the unit tests, builds the release APKs (R8-shrunk, one per ABI plus a universal one; signed with the release key if the secrets exist, otherwise with a throwaway debug key and a warning in the notes), publishes a GitHub release titled `QuickNovel <versionName>` with `QuickNovel-<versionName>-{arm64-v8a,armeabi-v7a,x86_64,universal}.apk` and `QuickNovel-<versionName>-mapping.txt.gz` attached (see [Release APKs](#release-apks-shrinking-and-crash-traces)) |
 | **Pre-release** | `pre-release.yml` | after a green CI run of a push to `master`, manual | rebuilds the debug APK of that commit and replaces the rolling `pre-release` GitHub release (marked pre-release) with `QuickNovel-<versionName>-pre.<run>.apk` |
 
 All jobs use Ubuntu, Temurin JDK 21 (`gradle/gradle-daemon-jvm.properties` asks for a JDK 21
@@ -79,7 +79,8 @@ first (back up data in *Settings → App settings → Backup data*).
    `"3.8.0" → "3.8.1"`.
 2. Commit (`Release 3.8.1`) and push to `master`.
 3. Tag and push the tag: `git tag v3.8.1 && git push origin v3.8.1`.
-4. The Release workflow builds and publishes **QuickNovel 3.8.1** with `QuickNovel-3.8.1.apk`.
+4. The Release workflow builds and publishes **QuickNovel 3.8.1** with `QuickNovel-3.8.1-arm64-v8a.apk`,
+   `-armeabi-v7a.apk`, `-x86_64.apk`, `-universal.apk` and `QuickNovel-3.8.1-mapping.txt.gz`.
    A tag that does not match `v<versionName>` fails the workflow before building. The workflow
    can also be started by hand (*Actions → Release → Run workflow*, tag `v3.8.1`); the tag is then
    created on the chosen branch's head, and re-running for an existing release replaces its APK.
@@ -92,7 +93,13 @@ installed `versionName` as a string, so `3.10.0` would never be offered as an up
 
 - **Release builds** (`com.lagradost.quicknovel`) check
   `api.github.com/repos/Techno453/QuickNovel/releases/latest` (pre-releases are excluded by
-  GitHub) and offer the first asset when its `x.y.z` is greater than the installed versionName.
+  GitHub) and offer the APK for this device when its `x.y.z` is greater than the installed
+  versionName. `InAppUpdater.pickApkAsset` chooses among the release's `.apk` assets: the
+  `-<abi>.apk` of the first ABI in `Build.SUPPORTED_ABIS` that has one (a Fold or any 64-bit
+  phone: `arm64-v8a`; old 32-bit phones: `armeabi-v7a`; emulators: `x86_64`), else
+  `-universal.apk`, else the first APK without an ABI suffix (releases from before the split,
+  and the pre-release). Other assets such as the mapping file are ignored. All APKs of a release
+  share one versionCode; switching between universal and a per-ABI APK is an ordinary update.
 - **Debug builds** (`com.lagradost.quicknovel.debug`, installed next to the release app) check
   the rolling `pre-release` release instead and offer it when the run number in
   `…-pre.<run>.apk` is greater than `BuildConfig.CI_BUILD_NUMBER` (set from `QN_BUILD_NUMBER` by
@@ -102,6 +109,46 @@ installed `versionName` as a string, so `3.10.0` would never be offered as an up
   and signing certificates with the installed app. On a mismatch (debug vs release package, a
   self-built app vs a CI build, a debug-signed release) it shows *Can't install this update* with
   the reason and a button to the releases page, instead of letting the installer fail.
+
+## Release APKs, shrinking and crash traces
+
+**Per-ABI APKs.** `splits.abi` in `app/build.gradle` makes the release build produce
+`app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk` and
+`app-universal-release.apk` in `app/build/outputs/apk/release/`. Most of an APK is ML Kit's
+on-device translator (`libtranslate_jni.so`, 11-17 MB per ABI), so a per-ABI APK is about a
+third of the universal one. Debug builds are not split: `androidComponents` in
+`app/build.gradle` drops their per-ABI outputs, so `assembleDebug` still produces one universal
+`app/build/outputs/apk/debug/app-debug.apk` (CI artifact, pre-release, emulator installs).
+
+**R8.** Release builds are shrunk, optimized and obfuscated (`minifyEnabled`,
+`shrinkResources`). The keep rules are in `app/proguard-rules.pro`, each with the reason. The
+main one keeps the app's own package whole, because Jackson maps app classes (provider
+responses, everything DataStore and backups persist, the translator's JSON, the updater's
+GitHub models) by reflection. New code that uses reflection on a *library* class, or a new JSON
+library, needs a rule there; then check a release build on a device (`assembleRelease`, install
+`app-x86_64-release.apk` on an emulator) and look for `ClassNotFoundException`,
+`NoSuchFieldException`/`NoSuchMethodException` or Jackson errors in logcat.
+`JsonModelsRoundTripTest` round-trips the reflectively mapped model classes (unshrunk);
+`app/build/outputs/mapping/release/usage.txt` lists what R8 removed and `seeds.txt` what the
+keep rules matched.
+
+**Mapping files.** A stack trace from a release build has obfuscated library class names
+(`nt6.a`) and, thanks to `-keepattributes SourceFile,LineNumberTable`, real line numbers. Each
+build writes `app/build/outputs/mapping/release/mapping.txt`; the Release workflow attaches it
+to the GitHub release as `QuickNovel-<versionName>-mapping.txt.gz`. The mapping only fits the
+exact build it came from (a local build has its own). To de-obfuscate a trace saved as
+`trace.txt`:
+
+```
+gunzip QuickNovel-3.8.1-mapping.txt.gz
+# retrace ships with the Android SDK command-line tools (cmdline-tools/latest/bin), or use R8 directly:
+retrace QuickNovel-3.8.1-mapping.txt trace.txt
+java -cp r8.jar com.android.tools.r8.retrace.Retrace QuickNovel-3.8.1-mapping.txt trace.txt
+```
+
+**Trimmed resources.** `packaging.resources.excludes` drops BouncyCastle's post-quantum
+parameter tables (`org/bouncycastle/pqc/**`, ~8 MB uncompressed, ~4 MB in the APK), which come
+with pdfbox-android's crypto dependency and are never used (PDF import does not need them).
 
 ## Provider tests
 
