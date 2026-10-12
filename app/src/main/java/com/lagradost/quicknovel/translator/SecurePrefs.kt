@@ -431,6 +431,63 @@ object SecurePrefs {
         edit(context) { putInt(KEY_READ_AHEAD_CHAPTERS, readAheadChapters) }
     }
 
+    // ---- Spend caps ----
+
+    /** Monthly spend cap in USD (0 = off, default). */
+    const val KEY_MONTHLY_SPEND_CAP = "monthly_spend_cap_usd"
+    /** Per-job spend cap in USD (0 = off, default). */
+    const val KEY_PER_JOB_CAP = "per_job_cap_usd"
+
+    fun getMonthlySpendCap(context: Context?): Double =
+        (getPrefs(context)?.getFloat(KEY_MONTHLY_SPEND_CAP, 0f) ?: 0f).toDouble().coerceAtLeast(0.0)
+
+    fun setMonthlySpendCap(context: Context, usd: Double) =
+        edit(context) { putFloat(KEY_MONTHLY_SPEND_CAP, usd.coerceAtLeast(0.0).toFloat()) }
+
+    fun getPerJobCap(context: Context?): Double =
+        (getPrefs(context)?.getFloat(KEY_PER_JOB_CAP, 0f) ?: 0f).toDouble().coerceAtLeast(0.0)
+
+    fun setPerJobCap(context: Context, usd: Double) =
+        edit(context) { putFloat(KEY_PER_JOB_CAP, usd.coerceAtLeast(0.0).toFloat()) }
+
+    fun spendCaps(context: Context?): SpendCaps = SpendCaps(getMonthlySpendCap(context), getPerJobCap(context))
+
+    // ---- Charging / battery conditions for long jobs ----
+
+    /** Run range jobs and read-ahead only while charging (default off). */
+    const val KEY_JOBS_ONLY_WHILE_CHARGING = "jobs_only_while_charging"
+    /** Pause range jobs and read-ahead on low battery (default on). */
+    const val KEY_JOBS_PAUSE_ON_LOW_BATTERY = "jobs_pause_on_low_battery"
+    /** Low-battery threshold in percent (default 15). */
+    const val KEY_JOBS_LOW_BATTERY_PERCENT = "jobs_low_battery_percent"
+
+    fun isJobsOnlyWhileCharging(context: Context?): Boolean =
+        getPrefs(context)?.getBoolean(KEY_JOBS_ONLY_WHILE_CHARGING, false) ?: false
+
+    fun setJobsOnlyWhileCharging(context: Context, enabled: Boolean) =
+        edit(context) { putBoolean(KEY_JOBS_ONLY_WHILE_CHARGING, enabled) }
+
+    fun isJobsPauseOnLowBattery(context: Context?): Boolean =
+        getPrefs(context)?.getBoolean(KEY_JOBS_PAUSE_ON_LOW_BATTERY, true) ?: true
+
+    fun setJobsPauseOnLowBattery(context: Context, enabled: Boolean) =
+        edit(context) { putBoolean(KEY_JOBS_PAUSE_ON_LOW_BATTERY, enabled) }
+
+    fun getJobsLowBatteryPercent(context: Context?): Int =
+        (getPrefs(context)?.getInt(KEY_JOBS_LOW_BATTERY_PERCENT, PowerPolicy.DEFAULT_LOW_BATTERY_PERCENT)
+            ?: PowerPolicy.DEFAULT_LOW_BATTERY_PERCENT)
+            .coerceIn(PowerPolicy.MIN_LOW_BATTERY_PERCENT, PowerPolicy.MAX_LOW_BATTERY_PERCENT)
+
+    fun setJobsLowBatteryPercent(context: Context, percent: Int) = edit(context) {
+        putInt(KEY_JOBS_LOW_BATTERY_PERCENT, percent.coerceIn(PowerPolicy.MIN_LOW_BATTERY_PERCENT, PowerPolicy.MAX_LOW_BATTERY_PERCENT))
+    }
+
+    fun powerPolicy(context: Context?): PowerPolicy = PowerPolicy(
+        onlyWhileCharging = isJobsOnlyWhileCharging(context),
+        pauseOnLowBattery = isJobsPauseOnLowBattery(context),
+        lowBatteryPercent = getJobsLowBatteryPercent(context),
+    )
+
     /** Global default name style for [lang] (see [TranslationStyle.nameStyleOptions]). */
     fun getDefaultNameStyle(context: Context?, lang: String?): String {
         val code = TranslationLanguages.normalize(lang) ?: TranslationLanguages.DEFAULT

@@ -96,6 +96,12 @@ class TranslationEngine(
     private val fallback: TranslationEngine? = null,
     /** [PromptProfile] id for this model's system prompt (overridable per call via [TranslationOptions.promptProfile]). */
     private val promptProfile: String = PromptProfiles.DEFAULT_ID,
+    /** Price per token for the spend ledger; null = unknown (recorded as unpriced). */
+    private val pricing: CostEstimator.ModelPricing? = CostEstimator.pricingFor(model),
+    /** Provider id for the spend ledger. */
+    private val providerId: String = LlmProviders.forBaseUrl(baseUrl).id,
+    /** Receives the usage of every successful call; null = [UsageSinks.global]. */
+    private val usageSink: UsageSink? = null,
 ) {
     /** Engine for [config], optionally with a [fallback] config for blocked or refused chunks. */
     constructor(
@@ -114,6 +120,8 @@ class TranslationEngine(
         headers = config.headers,
         fallback = fallback?.takeUnless { it.sameModelAs(config) }?.let { TranslationEngine(it, sourceLang, client, null) },
         promptProfile = config.promptProfile,
+        pricing = SpendPricing.pricingFor(config),
+        providerId = config.providerId,
     )
 
     private val endpoint = LlmConfig.chatCompletionsUrl(baseUrl)
@@ -136,7 +144,7 @@ class TranslationEngine(
     @Volatile
     private var sendTemperature = sendTemperature
 
-    internal data class ChatResult(val content: String, val finishReason: String?)
+    internal data class ChatResult(val content: String, val finishReason: String?, val usage: TokenUsage? = null)
 
     companion object {
         private const val DEFAULT_CHUNK_SIZE = 2000
@@ -146,7 +154,7 @@ class TranslationEngine(
         private const val MAX_BACKOFF_MS = 60_000L
         private const val MAX_LENGTH_SPLIT_DEPTH = 3
         private const val MIN_SPLIT_CHARS = 200
-        private const val TEMPERATURE = 0.3
+        internal const val TEMPERATURE = 0.3
 
         private val JSON = "application/json".toMediaType()
 
@@ -178,6 +186,54 @@ class TranslationEngine(
         private const val MAX_RECENT_CHARACTERS = 20
         private const val SUMMARY_MERGE_THRESHOLD = 900
         private const val MAX_SUMMARY_CHARS = 1000
+
+        /** Bible entries for the prompt: terms in this chunk, plus recently present characters (pronoun context). */
+        internal fun selectPromptTerms(
+            inChunk: List<GlossaryTerm>,
+            bible: List<GlossaryTerm>,
+            recentCharacters: Set<String>,
+        ): List<GlossaryTerm> {
+            val inChunkSet = inChunk.toHashSet()
+            val recent = bible.filter { it.isCharacter && it !in inChunkSet && it.source in recentCharacters }
+                .take(MAX_RECENT_CHARACTERS)
+            return (inChunk + recent).take(MAX_PROMPT_TERMS)
+        }
+
+        /**
+         * Chat completions request body (also used for Batch API lines): model, messages,
+         * temperature unless [sendTemperature] is off, then [extraBody] (a null value removes a field).
+         */
+        internal fun buildChatBody(
+            model: String,
+            system: String?,
+            user: String,
+            temperature: Double,
+            sendTemperature: Boolean,
+            extraBody: Map<String, Any?>,
+            maxTokens: Int? = null,
+        ): Map<String, Any> {
+            val messages = buildList {
+                if (!system.isNullOrBlank()) add(mapOf("role" to "system", "content" to system))
+                add(mapOf("role" to "user", "content" to user))
+            }
+            return buildMap {
+                put("model", model)
+                put("messages", messages)
+                if (sendTemperature) put("temperature", temperature)
+                if (maxTokens != null) put("max_tokens", maxTokens)
+                for ((key, value) in extraBody) if (value == null) remove(key) else put(key, value)
+            }
+        }
+
+        /** `usage.prompt_tokens` / `usage.completion_tokens` of a chat completion, or null if absent. */
+        internal fun parseUsage(node: com.fasterxml.jackson.databind.JsonNode): TokenUsage? {
+            val usage = node.path("usage")
+            if (!usage.isObject) return null
+            val prompt = usage.path("prompt_tokens").takeIf { it.isNumber } ?: usage.path("input_tokens")
+            val completion = usage.path("completion_tokens").takeIf { it.isNumber } ?: usage.path("output_tokens")
+            if (!prompt.isNumber && !completion.isNumber) return null
+            return TokenUsage(prompt.asInt(0), completion.asInt(0))
+        }
 
         /** "End of Chapter" boilerplate lines that source sites append. */
         private val END_OF_CHAPTER = Regex(
@@ -446,7 +502,7 @@ class TranslationEngine(
     }
 
     /** Output of one source chunk (possibly assembled from split halves). */
-    private data class ChunkOutput(
+    internal data class ChunkOutput(
         val translation: String,
         val terms: List<DiscoveredTerm>,
         val summaries: List<String>,
@@ -499,6 +555,39 @@ class TranslationEngine(
     ): TranslationResult = withContext(Dispatchers.IO) {
         val plainSource = htmlToPlainText(sourceText)
         val chunks = splitIntoChunks(plainSource, chunkSizeFor(sourceLang))
+        assembleChapter(chunks, novelId, chapterNum, glossaryTerms, context, options, onProgress) { request ->
+            translateChunkLive(request, options)
+        }
+    }
+
+    /** One chunk's inputs, as [assembleChapter] passes them to its chunk producer. */
+    internal data class ChunkRequest(
+        val index: Int,
+        val chunk: String,
+        val promptTerms: List<GlossaryTerm>,
+        /** Bible terms present in the chunk (for the checks). */
+        val checkTerms: List<GlossaryTerm>,
+        val context: StoryContext,
+        /** English of the previous chunk ("" for the first chunk or with story context off). */
+        val preceding: String,
+    )
+
+    /**
+     * The chapter loop shared by live translation and Batch API results: for each chunk, select
+     * the bible entries, get the chunk's output from [produce], fold discovered terms into the
+     * in-memory bible (so later chunks see them), then build the [TranslationResult].
+     */
+    internal suspend fun assembleChapter(
+        chunks: List<String>,
+        novelId: String,
+        chapterNum: Int,
+        glossaryTerms: List<GlossaryTerm>,
+        context: StoryContext,
+        options: TranslationOptions,
+        onProgress: (Float) -> Unit = {},
+        produce: suspend (ChunkRequest) -> ChunkOutput,
+    ): TranslationResult {
+        val plainSource = chunks.joinToString("\n\n")
         val chunkContext = if (options.carryStoryContext) context else StoryContext(style = context.style)
 
         val bible = glossaryTerms.toMutableList()
@@ -525,7 +614,7 @@ class TranslationEngine(
 
             val inChunk = QualityChecks.termsInSource(chunk, bible)
             val promptTerms = selectPromptTerms(inChunk, bible, recentCharacters)
-            val out = translateChunk(chunk, promptTerms, inChunk, chunkContext, preceding, options, depth = 0)
+            val out = produce(ChunkRequest(index, chunk, promptTerms, inChunk, chunkContext, preceding))
 
             // Fold discovered terms into the in-memory bible so the next chunk already uses them.
             val decisions = BibleMerger.decide(out.terms, bible, novelId, chapterNum, chunk, options)
@@ -561,7 +650,7 @@ class TranslationEngine(
 
         onProgress(1f)
 
-        TranslationResult(
+        return TranslationResult(
             englishText = buildParagraphHtml(parts),
             pendingTerms = pending.distinctBy { it.source to it.suggestedEnglish.lowercase() },
             chunkCount = chunks.size,
@@ -584,17 +673,19 @@ class TranslationEngine(
         )
     }
 
-    /** Bible entries for the prompt: terms in this chunk, plus recently present characters (pronoun context). */
-    private fun selectPromptTerms(
-        inChunk: List<GlossaryTerm>,
-        bible: List<GlossaryTerm>,
-        recentCharacters: Set<String>,
-    ): List<GlossaryTerm> {
-        val inChunkSet = inChunk.toHashSet()
-        val recent = bible.filter { it.isCharacter && it !in inChunkSet && it.source in recentCharacters }
-            .take(MAX_RECENT_CHARACTERS)
-        return (inChunk + recent).take(MAX_PROMPT_TERMS)
-    }
+    /**
+     * Live translation of one chunk with the normal path (length splitting, fallback, strict
+     * retry). Also used for batch chunks that came back missing or failed the checks.
+     */
+    internal suspend fun translateChunkLive(request: ChunkRequest, options: TranslationOptions): ChunkOutput =
+        translateChunk(request.chunk, request.promptTerms, request.checkTerms, request.context, request.preceding, options, depth = 0)
+
+    /** Parses and checks a model reply for [chunk] exactly like a live reply. */
+    internal fun evaluateReply(chunk: String, raw: String, checkTerms: List<GlossaryTerm>): ChunkOutput =
+        evaluate(chunk, raw, checkTerms)
+
+    /** True if [candidate] has fewer issues (or as many with more paragraphs) than [current]. */
+    internal fun isBetterOutput(candidate: ChunkOutput, current: ChunkOutput): Boolean = isBetter(candidate, current)
 
     /** Merges chunk summaries; only long multi-chunk summaries get a (cheap) merge call, and only with story context on. */
     private suspend fun buildChapterSummary(summaries: List<String>, options: TranslationOptions): String {
@@ -659,7 +750,24 @@ class TranslationEngine(
             runFallback(chunk, promptTerms, checkTerms, context, preceding, options, depth)?.let { return it }
         }
         if (!options.strictMode || best.issueCount == 0) return best
+        return strictRetry(chunk, promptTerms, checkTerms, context, preceding, options, best)
+    }
 
+    /**
+     * Strict mode: re-requests [chunk] once with a reminder of what [first] got wrong and keeps the
+     * attempt with fewer issues. A failed retry keeps [first].
+     */
+    private suspend fun strictRetry(
+        chunk: String,
+        promptTerms: List<GlossaryTerm>,
+        checkTerms: List<GlossaryTerm>,
+        context: StoryContext,
+        preceding: String,
+        options: TranslationOptions,
+        first: ChunkOutput,
+    ): ChunkOutput {
+        var best = first
+        val system = PromptTemplates.systemPrompt(sourceLang, PromptProfiles.byId(options.promptProfile ?: promptProfile))
         val reminder = PromptTemplates.buildReminder(
             ChunkQuality(
                 violatedTerms = best.violatedTerms,
@@ -678,8 +786,12 @@ class TranslationEngine(
         } catch (e: Exception) {
             // Keep the first attempt; a failed retry must not fail the chapter.
         }
-        return best.copy(retries = 1)
+        return best.copy(retries = best.retries + 1)
     }
+
+    /** The strict-mode re-request (with reminder) for a chunk whose batch reply failed the checks. */
+    internal suspend fun strictRetryLive(request: ChunkRequest, first: ChunkOutput, options: TranslationOptions): ChunkOutput =
+        strictRetry(request.chunk, request.promptTerms, request.checkTerms, request.context, request.preceding, options, first)
 
     /**
      * Re-translates a chunk with the fallback engine (which has no fallback of its own). Returns
@@ -795,17 +907,7 @@ class TranslationEngine(
     private class RetryAfterException(message: String, val retryAfterMs: Long) : Exception(message)
 
     private fun buildRequest(system: String?, user: String, temperature: Double, maxTokens: Int? = null): Request {
-        val messages = buildList {
-            if (!system.isNullOrBlank()) add(mapOf("role" to "system", "content" to system))
-            add(mapOf("role" to "user", "content" to user))
-        }
-        val body = buildMap<String, Any> {
-            put("model", model)
-            put("messages", messages)
-            if (sendTemperature) put("temperature", temperature)
-            if (maxTokens != null) put("max_tokens", maxTokens)
-            for ((key, value) in extraBody) if (value == null) remove(key) else put(key, value)
-        }
+        val body = buildChatBody(model, system, user, temperature, sendTemperature, extraBody, maxTokens)
         return Request.Builder()
             .url(endpoint)
             .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey") }
@@ -820,7 +922,7 @@ class TranslationEngine(
         val (code, body, retryAfter) = response.use {
             Triple(it.code, it.body?.string().orEmpty(), it.header("Retry-After"))
         }
-        if (code in 200..299) return parseChatResponse(body)
+        if (code in 200..299) return parseChatResponse(body).also { reportUsage(it.usage) }
 
         val message = errorMessage(body) ?: "HTTP $code"
         if (isContentFilterError(code, body)) {
@@ -859,12 +961,44 @@ class TranslationEngine(
         null
     }
 
+    /** Records one successful call in the spend ledger (kind / novel / chapter from the coroutine's [SpendTag]). */
+    private suspend fun reportUsage(usage: TokenUsage?) {
+        val tag = coroutineContext[SpendTag]
+        val tokens = usage ?: TokenUsage.ZERO
+        val usd = SpendPricing.usd(tokens, pricing)
+        tag?.meter?.add(usd)
+        val sink = usageSink ?: UsageSinks.global ?: return
+        try {
+            sink.record(
+                UsageEvent(
+                    timestamp = System.currentTimeMillis(),
+                    kind = tag?.kind ?: SpendKind.OTHER,
+                    novelId = tag?.novelId,
+                    chapterNum = tag?.chapterNum,
+                    providerId = providerId,
+                    model = model,
+                    promptTokens = tokens.promptTokens,
+                    completionTokens = tokens.completionTokens,
+                    usd = usd,
+                    priced = pricing != null && usage != null,
+                    batchId = tag?.batchId,
+                )
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The ledger must never fail a translation.
+        }
+    }
+
     private fun parseChatResponse(json: String): ChatResult {
         return try {
-            val choice = mapper.readTree(json).path("choices").path(0)
+            val root = mapper.readTree(json)
+            val choice = root.path("choices").path(0)
             ChatResult(
                 content = choice.path("message").path("content").asText(""),
-                finishReason = choice.path("finish_reason").takeIf { !it.isMissingNode && !it.isNull }?.asText()
+                finishReason = choice.path("finish_reason").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
+                usage = parseUsage(root),
             )
         } catch (e: Exception) {
             throw TranslationApiException("Failed to parse API response: ${e.message}")

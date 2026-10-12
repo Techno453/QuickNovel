@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.lagradost.quicknovel.translator.batch.BatchStatus
 
 @Database(
     entities = [
@@ -15,8 +16,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PendingTerm::class,
         NovelContext::class,
         ChapterSummary::class,
+        SpendEntry::class,
+        BatchJob::class,
+        BatchChapter::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class TranslatorDatabase : RoomDatabase() {
@@ -25,11 +29,16 @@ abstract class TranslatorDatabase : RoomDatabase() {
     abstract fun pendingTermDao(): PendingTermDao
     abstract fun novelContextDao(): NovelContextDao
     abstract fun chapterSummaryDao(): ChapterSummaryDao
+    abstract fun spendDao(): SpendDao
+    abstract fun batchDao(): BatchDao
 
     /**
      * Removes everything stored for [novelId]: translated chapters, Story Bible terms, pending
-     * terms, novel context and chapter summaries. Every "delete this novel" path must use this so
-     * new per-novel tables cannot be forgotten.
+     * terms, novel context, chapter summaries and finished batch jobs. Every "delete this novel"
+     * path must use this so new per-novel tables cannot be forgotten.
+     *
+     * Kept on purpose: the spend ledger (money already spent), and batch jobs still running at
+     * OpenAI (so their cost is recorded when they finish).
      */
     suspend fun deleteAllForNovel(novelId: String) = withTransaction {
         translationDao().deleteAllForNovel(novelId)
@@ -37,6 +46,9 @@ abstract class TranslatorDatabase : RoomDatabase() {
         pendingTermDao().deleteAll(novelId)
         novelContextDao().deleteForNovel(novelId)
         chapterSummaryDao().deleteForNovel(novelId)
+        val finished = BatchStatus.FINISHED_NAMES
+        batchDao().deleteChaptersForNovel(novelId, finished)
+        batchDao().deleteJobsForNovel(novelId, finished)
     }
 
     companion object {
@@ -118,9 +130,44 @@ abstract class TranslatorDatabase : RoomDatabase() {
             }
         }
 
+        /** SQL of [MIGRATION_5_6] (kept separate so a JVM unit test can check it). */
+        val MIGRATION_5_6_SQL = listOf(
+            // Source-hash cache invalidation: existing rows get "" (unknown, treated as valid).
+            "ALTER TABLE translated_chapters ADD COLUMN source_hash TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE translated_chapters ADD COLUMN stale INTEGER NOT NULL DEFAULT 0",
+            // Spend ledger.
+            "CREATE TABLE IF NOT EXISTS `spend_entries` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`timestamp` INTEGER NOT NULL, `novel_id` TEXT, `chapter_num` INTEGER, `kind` TEXT NOT NULL, " +
+                "`provider` TEXT NOT NULL, `model` TEXT NOT NULL, `prompt_tokens` INTEGER NOT NULL, " +
+                "`completion_tokens` INTEGER NOT NULL, `usd` REAL NOT NULL, `priced` INTEGER NOT NULL, `batch_id` INTEGER)",
+            "CREATE INDEX IF NOT EXISTS `index_spend_entries_timestamp` ON `spend_entries` (`timestamp`)",
+            // Overnight batch pre-translation (OpenAI Batch API).
+            "CREATE TABLE IF NOT EXISTS `batch_jobs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`novel_id` TEXT NOT NULL, `api_name` TEXT NOT NULL, `novel_name` TEXT NOT NULL, `novel_author` TEXT, " +
+                "`source_lang` TEXT NOT NULL, `model` TEXT NOT NULL, `preset_id` TEXT, `status` TEXT NOT NULL, " +
+                "`openai_batch_id` TEXT, `input_file_id` TEXT, `output_file_id` TEXT, `error_file_id` TEXT, " +
+                "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `completed_at` INTEGER, " +
+                "`from_chapter` INTEGER NOT NULL, `to_chapter` INTEGER NOT NULL, `request_count` INTEGER NOT NULL, " +
+                "`completed_count` INTEGER NOT NULL, `failed_count` INTEGER NOT NULL, `estimated_usd` REAL NOT NULL, " +
+                "`actual_usd` REAL, `error` TEXT)",
+            "CREATE TABLE IF NOT EXISTS `batch_chapters` (`batch_id` INTEGER NOT NULL, `chapter_num` INTEGER NOT NULL, " +
+                "`chapter_name` TEXT NOT NULL, `source_hash` TEXT NOT NULL, `chunks_json` TEXT NOT NULL, " +
+                "`status` TEXT NOT NULL, `error` TEXT, PRIMARY KEY(`batch_id`, `chapter_num`))",
+        )
+
+        /**
+         * v6 (additive): translated_chapters.source_hash / stale, the spend ledger
+         * (spend_entries) and overnight batch jobs (batch_jobs, batch_chapters).
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_5_6_SQL.forEach { db.execSQL(it) }
+            }
+        }
+
         /** Every migration, oldest first; all registered in [getInstance]. */
         val ALL_MIGRATIONS: Array<Migration>
-            get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         fun getInstance(context: Context): TranslatorDatabase {
             return instance ?: synchronized(this) {

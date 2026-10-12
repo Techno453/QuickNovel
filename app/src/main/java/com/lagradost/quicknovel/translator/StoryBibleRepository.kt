@@ -86,10 +86,14 @@ object StoryBibleRepository {
         result: TranslationResult,
         model: String,
         lang: String,
+        /** [SourceHash] of the source that was translated ("" = unknown). */
+        sourceHash: String = "",
     ): PersistOutcome {
         val db = TranslatorDatabase.getInstance(ctx)
         db.translationDao().insert(
             TranslatedChapter(
+                sourceHash = sourceHash,
+                stale = false,
                 novelId = novelId,
                 chapterNum = chapterNum,
                 englishText = result.englishText,

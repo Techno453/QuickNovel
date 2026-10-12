@@ -2,8 +2,12 @@ package com.lagradost.quicknovel.translator
 
 import android.content.Context
 import android.util.Log
+import com.lagradost.quicknovel.translator.db.TranslatedChapter
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
@@ -63,29 +67,114 @@ object ChapterTranslationRepository {
         fetchSource: suspend () -> String?,
         beforeTranslate: suspend (source: String) -> Unit = {},
         onProgress: (Float) -> Unit = {},
+        /** What the paid calls are recorded as in the spend ledger (the job's meter is kept). */
+        spendKind: SpendKind = SpendKind.TRANSLATE,
+        /**
+         * Re-translate a stored translation marked stale. The source is fetched and compared
+         * first: if it matches the stored hash again, the stored translation is kept (no paid call).
+         */
+        retranslateStale: Boolean = false,
     ): String? = withChapterLock(novelId, chapterIndex) {
         // Another caller may have finished translating while we waited.
-        getCached(ctx, novelId, chapterIndex)?.let { return@withChapterLock it }
+        val cached = getCachedEntry(ctx, novelId, chapterIndex)
+        if (cached != null && !(retranslateStale && cached.stale)) return@withChapterLock cached.englishText
 
         val source = fetchSource()?.takeIf { it.isNotBlank() } ?: return@withChapterLock null
+        val hash = SourceHash.of(source)
+        if (cached != null && SourceHash.compare(cached.sourceHash, hash) == SourceHash.Check.MATCH) {
+            // The source is back to what was translated: reuse it, skip the paid call.
+            markSourceState(ctx, novelId, chapterIndex, hash, stale = false)
+            return@withChapterLock cached.englishText
+        }
         beforeTranslate(source)
         val engine = TranslationEngine(config, lang, fallback = SecurePrefs.fallbackEngineConfig(ctx))
         // Loaded after beforeTranslate so a fresh analysis is used.
         val inputs = StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIndex, lang)
-        val result = engine.translateChapter(
-            sourceText = source,
-            novelId = novelId,
-            chapterNum = chapterIndex,
-            glossaryTerms = inputs.bible,
-            context = inputs.context,
-            options = inputs.options,
-            onProgress = onProgress,
-        )
+        val outer = coroutineContext[SpendTag]
+        val tag = SpendTag(spendKind, novelId, chapterIndex, outer?.batchId, outer?.meter)
+        val result = withContext(tag) {
+            engine.translateChapter(
+                sourceText = source,
+                novelId = novelId,
+                chapterNum = chapterIndex,
+                glossaryTerms = inputs.bible,
+                context = inputs.context,
+                options = inputs.options,
+                onProgress = onProgress,
+            )
+        }
         if (result.englishText.isBlank()) return@withChapterLock null
 
-        StoryBibleRepository.persistChapter(ctx, novelId, chapterIndex, result, config.model, lang)
+        StoryBibleRepository.persistChapter(ctx, novelId, chapterIndex, result, config.model, lang, hash)
         result.englishText
     }
+
+    // ---- Source-hash cache invalidation ----
+
+    /** The stored translation row (text, model, hash, stale flag), or null. */
+    suspend fun getCachedEntry(ctx: Context, novelId: String, chapterIndex: Int): TranslatedChapter? =
+        try {
+            TranslatorDatabase.getInstance(ctx).translationDao().getTranslation(novelId, chapterIndex)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read translation", e)
+            null
+        }
+
+    private suspend fun markSourceState(ctx: Context, novelId: String, chapterIndex: Int, hash: String, stale: Boolean) {
+        try {
+            TranslatorDatabase.getInstance(ctx).translationDao().setSourceState(novelId, chapterIndex, hash, stale)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not update the source state of $novelId #$chapterIndex", e)
+        }
+    }
+
+    /**
+     * Call whenever a chapter's source was fetched anyway (reader reload, analysis, a job): compares
+     * it with the hash stored with the translation and
+     * - CHANGED: marks the translation stale (still readable; never re-translated automatically);
+     * - MATCH: clears a stale flag;
+     * - UNKNOWN (translation from before DB v6): treated as valid and the hash is filled in, so later
+     *   changes are detected.
+     * Cheap (one hash + one DB read). Never fetch a source only to call this.
+     */
+    suspend fun checkSourceHash(ctx: Context, novelId: String, chapterIndex: Int, source: String): SourceHash.Check {
+        if (source.isBlank()) return SourceHash.Check.NO_TRANSLATION
+        val stored = getCachedEntry(ctx, novelId, chapterIndex) ?: return SourceHash.Check.NO_TRANSLATION
+        val hash = SourceHash.of(source)
+        val check = SourceHash.compare(stored.sourceHash, hash)
+        when (check) {
+            SourceHash.Check.CHANGED -> if (!stored.stale) {
+                Log.i(TAG, "Source of $novelId #$chapterIndex changed since it was translated: marked stale")
+                markSourceState(ctx, novelId, chapterIndex, stored.sourceHash, stale = true)
+            }
+            SourceHash.Check.MATCH -> if (stored.stale) markSourceState(ctx, novelId, chapterIndex, hash, stale = false)
+            SourceHash.Check.UNKNOWN -> markSourceState(ctx, novelId, chapterIndex, hash, stale = false)
+            SourceHash.Check.NO_TRANSLATION -> Unit
+        }
+        return check
+    }
+
+    /** True if the stored translation of the chapter is marked stale (its source changed). */
+    suspend fun isStale(ctx: Context, novelId: String, chapterIndex: Int): Boolean =
+        getCachedEntry(ctx, novelId, chapterIndex)?.stale == true
+
+    /** Chapter indices of [novelId] whose translation is stale. */
+    suspend fun staleChapters(ctx: Context, novelId: String): List<Int> = try {
+        TranslatorDatabase.getInstance(ctx).translationDao().getStaleChapterNums(novelId)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not read stale chapters", e)
+        emptyList()
+    }
+
+    /** Live list of stale chapter indices of [novelId] (for the reader / chapter list). */
+    fun observeStaleChapters(ctx: Context, novelId: String): Flow<List<Int>> =
+        TranslatorDatabase.getInstance(ctx).translationDao().observeStaleChapterNums(novelId)
 
     /**
      * @param sourceLang provider language (zh/ja/ko); untranslatable languages only get the cache.
