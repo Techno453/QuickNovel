@@ -39,6 +39,7 @@ import com.lagradost.quicknovel.imported.ImportedBookId
 import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.translator.ChapterNameTranslator
 import com.lagradost.quicknovel.translator.MetadataLabels
 import com.lagradost.quicknovel.translator.MetadataTranslations
 import com.lagradost.quicknovel.translator.SecurePrefs
@@ -97,8 +98,13 @@ data class ResultState(
     val languageLabel: SourceLanguageLabel? = null,
     /** AI chapter translation is set up (Translate and Glossary buttons). */
     val translationEnabled: Boolean = false,
-    /** Chapter names are machine-translated in the list (Google option, translatable source). */
+    /**
+     * Chapter names are translated in the list (translatable novel and titles are translated at
+     * all, see [MetadataTranslations.anyEnabled]); only the visible rows, batched.
+     */
     val translateChapterNames: Boolean = false,
+    /** Translated chapter names so far (original → English). */
+    val chapterNames: PersistentMap<String, String> = persistentMapOf(),
     /** Every chapter, in novel order (null: no chapter list). */
     val allChapters: PersistentList<ImmutableChapterData>? = null,
     /** The chapters as listed: filtered, searched and sorted. */
@@ -186,6 +192,9 @@ sealed class ResultPageAction {
     data class SetChapterFilter(val filter: ChapterFilter) : ResultPageAction()
     data class SetChapterSort(val sort: Int) : ResultPageAction()
     data class SetChapterQuery(val query: String) : ResultPageAction()
+
+    /** The chapter list shows listed rows [first]..[last] (drives chapter-name translation). */
+    data class ChapterRowsVisible(val first: Int, val last: Int) : ResultPageAction()
 
     data class Download(val action: DownloadMenuAction) : ResultPageAction()
     /** Tap on the download button when it has no choice to make: download / pause / resume. */
@@ -307,6 +316,11 @@ class ResultViewModel2(
     private var loadUrl: String = url
     private var loadJob: Job? = null
     private var metadataJob: Job? = null
+
+    /** Batched translation of the visible chapter names (per source language). */
+    private var chapterNameTranslator: ChapterNameTranslator? = null
+    private var chapterNameLang: String? = null
+    private var listedNames: Pair<List<ImmutableChapterData>, List<String>>? = null
     private var statusSource: ChapterStatusSource? = null
 
     init {
@@ -388,7 +402,7 @@ class ResultViewModel2(
                     lang = lang,
                     languageLabel = labelInfo,
                     translationEnabled = SecurePrefs.isTranslationEnabled(ctx),
-                    googleTitles = SecurePrefs.isGoogleTranslateTitlesEnabled(ctx),
+                    titlesTranslated = MetadataTranslations.anyEnabled(ctx),
                     readAt = readTimes(res, chapters?.size ?: 0),
                     bookmark = getBookmarkState(id),
                 )
@@ -413,7 +427,7 @@ class ResultViewModel2(
                 sourceLang = extra.lang,
                 languageLabel = extra.languageLabel,
                 translationEnabled = extra.translationEnabled,
-                translateChapterNames = extra.lang != null && extra.googleTitles,
+                translateChapterNames = extra.lang != null && extra.titlesTranslated,
                 allChapters = chapters,
                 readAt = extra.readAt,
                 bookmark = extra.bookmark,
@@ -443,7 +457,7 @@ class ResultViewModel2(
         val lang: String?,
         val languageLabel: SourceLanguageLabel?,
         val translationEnabled: Boolean,
-        val googleTitles: Boolean,
+        val titlesTranslated: Boolean,
         val readAt: PersistentMap<Int, Long>,
         val bookmark: ReadType,
     )
@@ -483,6 +497,7 @@ class ResultViewModel2(
             filter = chapterFilter,
             sort = chapterSort,
             query = chapterQuery,
+            translatedNames = if (showOriginal) emptyMap() else chapterNames,
         )
         return copy(chapters = listed.toPersistentList())
     }
@@ -497,7 +512,12 @@ class ResultViewModel2(
         metadataJob?.cancel()
         metadataJob = viewModelScope.launch {
             if (!withContext(Dispatchers.IO) { MetadataTranslations.anyEnabled(context) }) {
-                updateState { copy(translatedTitle = null, translatedSynopsis = null, labels = persistentMapOf()) }
+                updateState {
+                    copy(
+                        translatedTitle = null, translatedSynopsis = null, labels = persistentMapOf(),
+                        translateChapterNames = false, chapterNames = persistentMapOf(),
+                    )
+                }
                 return@launch
             }
             launch {
@@ -521,6 +541,40 @@ class ResultViewModel2(
             } ?: return@launch
             updateState { copy(translatedTitle = translated.title, translatedSynopsis = translated.synopsis) }
         }
+    }
+
+    // ============================== chapter names ==============================
+
+    /**
+     * The chapter list shows listed rows [first]..[last]: their names (plus a small lookahead)
+     * are translated in batches once the list stops for a moment ([ChapterNameWindow]).
+     */
+    private fun onChapterRowsVisible(first: Int, last: Int) {
+        val s = state.value
+        val lang = s.sourceLang
+        val chapters = s.chapters
+        if (lang == null || chapters == null || !s.translateChapterNames || s.showOriginal) return
+        val translator = chapterNameTranslator?.takeIf { chapterNameLang == lang } ?: run {
+            chapterNameTranslator?.reset()
+            ChapterNameTranslator(
+                scope = viewModelScope,
+                translate = { names -> MetadataLabels.translateNames(lang, names) },
+                onTranslated = { map ->
+                    updateState {
+                        if (sourceLang != lang) return@updateState this
+                        val next = copy(chapterNames = (chapterNames + map).toPersistentMap())
+                        if (chapterQuery.isBlank()) next else next.withListedChapters()
+                    }
+                },
+                cached = { name -> MetadataLabels.cachedName(lang, name) },
+            ).also {
+                chapterNameTranslator = it
+                chapterNameLang = lang
+            }
+        }
+        val names = listedNames?.takeIf { it.first === chapters }?.second
+            ?: chapters.map { it.name }.also { listedNames = chapters to it }
+        translator.visible(names, first, last)
     }
 
     // ============================== chapter statuses ==============================
@@ -839,17 +893,18 @@ class ResultViewModel2(
         val novelId = s.novelId ?: return
         val pending = s.dialog as? ResultDialog.SourceLanguage
         viewModelScope.launch {
-            val record = withContext(Dispatchers.IO) {
+            val (record, titlesTranslated) = withContext(Dispatchers.IO) {
                 ImportedBooks.setLangOverride(novelId, code)
-                ImportedBooks.record(novelId)
+                ImportedBooks.record(novelId) to MetadataTranslations.anyEnabled(context)
             }
             updateState {
                 copy(
                     dialog = null,
                     sourceLang = TranslationLanguages.normalize(code) ?: code,
                     languageLabel = ResultPageLogic.sourceLanguageLabel(record?.detectedLang, record?.langOverride ?: code),
-                    translateChapterNames = SecurePrefs.isGoogleTranslateTitlesEnabled(context),
-                )
+                    translateChapterNames = titlesTranslated,
+                    chapterNames = persistentMapOf(),
+                ).withListedChapters()
             }
             // Chips and title translation follow the new language.
             translateMetadata()
@@ -906,7 +961,10 @@ class ResultViewModel2(
                 }
             }
 
-            ResultPageAction.ToggleOriginal -> updateState { copy(showOriginal = !showOriginal) }
+            ResultPageAction.ToggleOriginal -> updateState {
+                // A chapter search also matches translated names, which Show original turns off.
+                copy(showOriginal = !showOriginal).let { if (chapterQuery.isBlank()) it else it.withListedChapters() }
+            }
             ResultPageAction.Retry -> loadNovel()
 
             ResultPageAction.OpenChapterFilter -> updateState { copy(dialog = ResultDialog.ChapterFilter) }
@@ -924,6 +982,7 @@ class ResultViewModel2(
             }
 
             is ResultPageAction.SetChapterQuery -> updateState { copy(chapterQuery = action.query).withListedChapters() }
+            is ResultPageAction.ChapterRowsVisible -> onChapterRowsVisible(action.first, action.last)
 
             is ResultPageAction.Download -> {
                 // Imported books only offer Delete: there is no site to download from.

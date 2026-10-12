@@ -217,4 +217,39 @@ class ResultPageLogicTest {
         val none = logic.metadataDisplay("Name", null, "Chapter 3", emptyList(), null, null, emptyMap(), false)
         assertFalse(none.canToggle)
     }
+
+    // ---------------- chapter names ----------------
+
+    @Test
+    fun chapterRowShowsTheTranslationWithTheOriginalUnderIt() {
+        val names = mapOf("第1章 开始" to "Chapter 1: The Beginning")
+        assertEquals("Chapter 1: The Beginning" to "第1章 开始", logic.chapterRowName("第1章 开始", names, translate = true, showOriginal = false))
+        assertEquals("第1章 开始" to null, logic.chapterRowName("第1章 开始", names, translate = true, showOriginal = true))
+        assertEquals("第1章 开始" to null, logic.chapterRowName("第1章 开始", names, translate = false, showOriginal = false))
+        assertEquals("第2章 夜" to null, logic.chapterRowName("第2章 夜", names, translate = true, showOriginal = false))
+        // Names are looked up trimmed, as they are requested.
+        assertEquals("Chapter 1: The Beginning" to " 第1章 开始", logic.chapterRowName(" 第1章 开始", names, translate = true, showOriginal = false))
+    }
+
+    @Test
+    fun chapterSearchAlsoMatchesTranslatedNames() {
+        val all = ChapterFilter(read = true, unread = true)
+        val translated = mapOf("Chapter 3 第3章" to "Chapter 3: Rainy Night")
+        assertEquals(listOf(2), names(logic.filterChapters(chapters, emptyMap(), null, all, CHAPTER_SORT, query = "rainy", translatedNames = translated)))
+        assertEquals(emptyList<Int>(), names(logic.filterChapters(chapters, emptyMap(), null, all, CHAPTER_SORT, query = "rainy")))
+    }
+
+    @Test
+    fun translatedChapterNamesAloneOfferShowOriginal() {
+        val display = logic.metadataDisplay("Name", null, null, emptyList(), null, null, emptyMap(), false, chapterNamesTranslated = true)
+        assertTrue(display.canToggle)
+    }
+
+    @Test
+    fun reviewsToTopAppearsAfterAFewReviews() {
+        assertFalse(logic.showScrollToTop(0))
+        assertFalse(logic.showScrollToTop(2))
+        assertTrue(logic.showScrollToTop(3))
+        assertTrue(logic.showScrollToTop(40))
+    }
 }

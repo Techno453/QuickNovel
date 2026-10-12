@@ -214,6 +214,7 @@ object ResultPageLogic {
         filter: ChapterFilter,
         sort: Int,
         query: String = "",
+        translatedNames: Map<String, String> = emptyMap(),
     ): List<ImmutableChapterData> {
         val q = query.trim()
         val number = q.toIntOrNull()
@@ -222,7 +223,9 @@ object ResultPageLogic {
             (filter.unread && !read) || (filter.read && read) ||
                     (filter.downloaded && downloadedProgress != null && downloadedProgress > chapter.index)
         }.filter { chapter ->
-            q.isEmpty() || chapter.name.contains(q, ignoreCase = true) || (number != null && chapter.index + 1 == number)
+            q.isEmpty() || chapter.name.contains(q, ignoreCase = true) ||
+                    translatedNames[chapter.name.trim()]?.contains(q, ignoreCase = true) == true ||
+                    (number != null && chapter.index + 1 == number)
         }.let { list ->
             when (sort) {
                 CHAPTER_SORT -> list.sortedBy { it.index }
@@ -233,6 +236,26 @@ object ResultPageLogic {
             }
         }
     }
+
+    /**
+     * A chapter row's name and the original shown under it (null: none). The translation replaces
+     * the name when names are translated, one has arrived and Show original is off.
+     */
+    fun chapterRowName(
+        name: String,
+        chapterNames: Map<String, String>,
+        translate: Boolean,
+        showOriginal: Boolean,
+    ): Pair<String, String?> {
+        if (!translate || showOriginal) return name to null
+        val translated = chapterNames[name.trim()] ?: return name to null
+        return translated to name
+    }
+
+    /** The reviews list shows its "To top" button once this many reviews are scrolled past. */
+    const val SCROLL_TO_TOP_AFTER = 3
+
+    fun showScrollToTop(firstVisibleIndex: Int): Boolean = firstVisibleIndex >= SCROLL_TO_TOP_AFTER
 
     /** The chip of chapter [index] (Queued over Source changed over Translated, see [ChapterStatusSource]). */
     fun chipFor(index: Int, statuses: Map<Int, ChapterTranslationStatus>): ChapterTranslationStatus =
@@ -272,10 +295,12 @@ object ResultPageLogic {
         translatedSynopsis: String?,
         labels: Map<String, String>,
         showOriginal: Boolean,
+        chapterNamesTranslated: Boolean = false,
     ): MetadataDisplay {
         val tagTranslated = tags.any { labels.containsKey(it.trim()) }
         val latestTranslated = latest != null && labels.containsKey(latest.trim())
-        val canToggle = translatedTitle != null || translatedSynopsis != null || tagTranslated || latestTranslated
+        val canToggle = translatedTitle != null || translatedSynopsis != null || tagTranslated || latestTranslated ||
+                chapterNamesTranslated
         if (showOriginal || !canToggle) {
             return MetadataDisplay(name, null, synopsis, latest, tags, canToggle)
         }

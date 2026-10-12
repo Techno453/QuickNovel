@@ -180,6 +180,9 @@ abstract class AbstractBook {
     /** Translator novel id ("apiName/novelName") for translatable sources, else null. */
     open fun translatorNovelId(): String? = null
 
+    /** zh / ja / ko of a translatable book (chapter-name translation), else null. May read disk. */
+    open fun sourceLang(): String? = null
+
     /** The reader moved to chapter [index]: keep the next chapters translated (read-ahead mode). */
     fun onChapterOpened(index: Int) {
         val ctx = context ?: return
@@ -199,6 +202,8 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
 
     override fun isTranslatableSource(): Boolean =
         TranslationLanguages.isTranslatableApi(data.meta.apiName)
+
+    override fun sourceLang(): String? = TranslationLanguages.langOfApi(data.meta.apiName)
 
     override fun translatorNovelId(): String? =
         if (isTranslatableSource()) TranslatorNovelId.from(data.meta.apiName, data.meta.name).also {
@@ -324,6 +329,12 @@ class RegularBook(
     override fun isTranslatableSource(): Boolean = novelId != null
 
     override fun translatorNovelId(): String? = novelId
+
+    override fun sourceLang(): String? {
+        val id = novelId ?: return null
+        // Imports: detected / chosen language; offline EPUBs of a source: "apiName/novelName".
+        return if (imported) ImportedBooks.lang(id) else TranslationLanguages.langOfApi(id.substringBefore('/'))
+    }
 
     /** Toast once when the on-demand path runs the automatic analysis. */
     private val analysisListener = object : NovelAnalyzer.Listener {

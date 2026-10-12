@@ -77,6 +77,21 @@ object MetadataLabels {
         return translate(requests) { MetadataTranslations.translator.title(it) }
     }
 
+    /**
+     * Chapter names of a scrolling list ([ChapterNameTranslator]): same path and cache ids as the
+     * labels, so the "Latest:" name and its row share one translation. Original → English.
+     */
+    suspend fun translateNames(lang: String, names: List<String>): Map<String, String> {
+        val requests = names.map { it.trim() }.filter { needsTranslation(it) }.distinct()
+            .map { MetadataTranslator.TitleRequest(labelId(lang, it), lang, it) }
+        if (requests.isEmpty()) return emptyMap()
+        return translate(requests) { MetadataTranslations.translator.title(it) }
+    }
+
+    /** A chapter name's translation if it is in memory, without suspending. */
+    fun cachedName(lang: String, name: String): String? =
+        name.trim().takeIf { needsTranslation(it) }?.let { MetadataTranslations.translator.cachedTitle(labelId(lang, it), it) }
+
     /** All [requests] at once, so they share one batch of [title]. */
     suspend fun translate(
         requests: List<MetadataTranslator.TitleRequest>,

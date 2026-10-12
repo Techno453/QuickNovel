@@ -12,17 +12,13 @@
     <string name="restore_settings">Verileri yedekten geri yükle</string>
 
     <string name="search_hint">Roman Ara</string>
-    <string name="synopsis">Özet</string>
     <string name="no_data">Veri Yok</string>
     <string name="no_author">Yazar bulunamadı</string>
     <string name="no_chapters">Bölüm Yok</string>
     <string name="generate_epub">Epub Oluştur</string>
     <string name="generating_epub">Epub Oluşturuluyor</string>
     <string name="reload_error">Bağlantıyı yeniden dene…</string>
-    <string name="download_text">İndir</string>
     <string name="download">İndir</string>
-    <string name="novel_imagecover_descript">Roman Kapak Görseli</string>
-    <string name="background_image_descript">Arka Plan Görseli</string>
     <string name="back_to_search">Aramaya geri dön</string>
     <string name="downloads_text">İndirilenler</string>
     <string name="open_text">Oku</string>
@@ -113,7 +109,6 @@
     <string name="background_color">Arka Plan Rengi</string>
     <string name="text_color">Metin Rengi</string>
     <string name="long_download_time">Uyarı, bu kaynak aşırı uzun indirme süresine sahip, akış önerilir</string>
-    <string name="quickstream_novel_text">Romanı akışla oku</string>
     <string name="history_more_options">Daha Fazla Seçenek</string>
     <string name="stream_read">Akışla Oku</string>
     <string name="clear_history">Geçmişi Temizle</string>

@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Room kept on each side of a chapter title when its translation status chip shows -->
-    <dimen name="chapter_status_chip_space">110dp</dimen>
-</resources>

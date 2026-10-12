@@ -4,6 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.translator.db.NovelMetadataTranslation
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -93,6 +98,9 @@ class MetadataTranslator(
     private val pending = LinkedHashMap<String, MutableList<Pair<TitleRequest, CompletableDeferred<String?>>>>()
     private val inFlight = HashMap<String, CompletableDeferred<String?>>()
     private val flushJobs = HashMap<String, Job>()
+
+    /** Languages whose flush job is still in its [batchWindowMs] delay (guarded by [lock]). */
+    private val windowWaiting = HashSet<String>()
     private val novelLocks = ConcurrentHashMap<String, Mutex>()
 
     /** Number of AI title calls made (for tests and the docs' "one call per page" claim). */
@@ -125,11 +133,19 @@ class MetadataTranslator(
             val queue = pending.getOrPut(request.lang) { mutableListOf() }
             queue += request to created
             if (queue.size >= maxBatch) {
-                flushJobs.remove(request.lang)?.cancel()
-                flushJobs[request.lang] = scope.launch { flush(request.lang) }
+                // A full batch skips the rest of the window. Only a flush still waiting out the
+                // window is replaced: cancelling a running one would cancel the batch in flight
+                // (its callers would get nothing); a running flush takes the queue next anyway.
+                if (flushJobs[request.lang] == null || request.lang in windowWaiting) {
+                    windowWaiting -= request.lang
+                    flushJobs.remove(request.lang)?.cancel()
+                    flushJobs[request.lang] = scope.launch { flush(request.lang) }
+                }
             } else if (flushJobs[request.lang] == null) {
+                windowWaiting += request.lang
                 flushJobs[request.lang] = scope.launch {
                     delay(batchWindowMs)
+                    lock.withLock { windowWaiting -= request.lang }
                     flush(request.lang)
                 }
             }
@@ -208,9 +224,16 @@ class MetadataTranslator(
                 }
             }
         }
-        for (request in todo) {
-            if (fresh.containsKey(request.novelId) || out.containsKey(request.novelId)) continue
-            val google = usable(safeGoogle(lang, request.original), request.original)
+        // The free endpoint takes one text per request: a few at a time, not one after the other.
+        val googleTodo = todo.filter { !fresh.containsKey(it.novelId) && !out.containsKey(it.novelId) }
+        val googled = coroutineScope {
+            val gate = Semaphore(GOOGLE_PARALLEL)
+            googleTodo.map { request ->
+                async { gate.withPermit { usable(safeGoogle(lang, request.original), request.original) } }
+            }.awaitAll()
+        }
+        googleTodo.forEachIndexed { i, request ->
+            val google = googled[i]
             if (google != null) fresh[request.novelId] = google to MetadataEngine.GOOGLE
             else failed += request.novelId + "|" + hashOf(request.original)
         }
@@ -359,6 +382,9 @@ class MetadataTranslator(
     companion object {
         const val DEFAULT_BATCH_WINDOW_MS = 150L
         const val MAX_TITLES_PER_CALL = 20
+
+        /** Free Google requests of one batch running at the same time. */
+        const val GOOGLE_PARALLEL = 4
     }
 }
 

@@ -13,7 +13,6 @@
 
     <string name="active_providers">%d providers enabled</string>
     <string name="search_hint">Search Novels…</string>
-    <string name="synopsis">Synopsis</string>
     <string name="no_data">No Data</string>
     <string name="none">@string/type_none</string>
     <string name="action_bar_up_description">Navigate up</string>
@@ -24,13 +23,10 @@
     <string name="generating_epub">Generating Epub</string>
     <string name="translating_chapters">Translating chapters</string>
     <string name="reload_error">Retry connection…</string>
-    <string name="download_text">Download</string>
     <string name="download">Download</string>
     <string name="download_from_chapter">Partial download</string>
     <string name="download_ml">Download translation model</string>
     <string name="download_ml_long">To translate locally the app needs to download the translation model (~30MB)</string>
-    <string name="novel_imagecover_descript">Novel Imagecover</string>
-    <string name="background_image_descript">Background Image</string>
     <string name="back_to_search">Back to search</string>
     <string name="downloads_text">Downloads</string>
     <string name="open_text">Read</string>
@@ -152,7 +148,6 @@
     <string name="background_color">Background Color</string>
     <string name="text_color">Text Color</string>
     <string name="long_download_time">Warning, This source has extremely long download time, streaming is recommended</string>
-    <string name="quickstream_novel_text">Stream read novel</string>
     <string name="history_more_options">More Options</string>
     <string name="stream_read">Stream Read</string>
     <string name="clear_history">Clear History</string>
@@ -286,7 +281,6 @@
     <string name="translate_from">Translate from language</string>
     <string name="translate_to">Translate to language</string>
     <string name="toWhatLanguague">-></string>
-    <string name="start_chapter">Skipped chapters</string>
     <string name="tts_speed">TTS Speed</string>
     <string name="tts_pitch">TTS Pitch</string>
     <string name="show_logcat_key" translatable="false">show_logcat_key</string>
@@ -307,7 +301,6 @@
     <string name="log_cat">Logcat 🐈</string>
     <string name="log_cat_location">Logcat location</string>
     <string name="unread">Unread</string>
-    <string name="bookmarks">Bookmarks</string>
     <string name="bookmark">Bookmark</string>
     <string name="read">Read</string>
     <string name="import_epub">Import a book</string>

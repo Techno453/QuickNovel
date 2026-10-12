@@ -3,6 +3,10 @@ package com.lagradost.quicknovel
 import android.animation.ObjectAnimator
 import android.content.res.Configuration
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.KeyEvent
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
@@ -16,7 +20,9 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import com.lagradost.quicknovel.databinding.ReadMainBinding
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.observe
-import com.lagradost.quicknovel.translator.SecurePrefs
+import com.lagradost.quicknovel.translator.ChapterNameTranslator
+import com.lagradost.quicknovel.translator.MetadataLabels
+import com.lagradost.quicknovel.translator.MetadataTranslations
 import com.lagradost.quicknovel.ui.CONFIG_COLOR
 import com.lagradost.quicknovel.ui.CONFIG_FONT
 import com.lagradost.quicknovel.ui.CONFIG_FONT_BOLD
@@ -32,7 +38,6 @@ import com.lagradost.quicknovel.ui.reader.ReaderScrollController
 import com.lagradost.quicknovel.ui.reader.ReaderSettingsSheet
 import com.lagradost.quicknovel.ui.reader.ReaderTtsController
 import com.lagradost.quicknovel.ui.reader.paged.PagedReaderController
-import com.lagradost.quicknovel.util.GoogleTranslate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -327,56 +332,84 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         }
     }
 
+    /**
+     * The chapter picker. For zh / ja / ko books (when titles are translated at all) the names of
+     * the visible rows are translated in batches as the list scrolls, through the same cached path
+     * as the result page's chapter list ([ChapterNameTranslator]); each translated row keeps the
+     * original as a smaller second line.
+     */
     private fun showChapterList(titles: List<UiText>) {
-        val shouldTranslate = viewModel.book.isTranslatableSource() &&
-                SecurePrefs.isGoogleTranslateTitlesEnabled(this)
-
-        fun showChapterDialog(displayTitles: List<String>) {
-            val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
-            val currentChapter = viewModel.desiredIndex?.index
-            val validChapter =
-                currentChapter != null && currentChapter >= 0 && currentChapter < displayTitles.size
-            if (validChapter) {
-                builderSingle.setTitle(displayTitles[currentChapter])
-            } else {
-                builderSingle.setTitle(R.string.select_chapter)
+        lifecycleScope.launch {
+            val book = viewModel.book
+            val lang = withContext(Dispatchers.IO) {
+                if (book.isTranslatableSource() && MetadataTranslations.anyEnabled(this@ReadActivity2)) book.sourceLang() else null
             }
-
-            val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
-            arrayAdapter.addAll(displayTitles)
-
-            builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
-            builderSingle.setAdapter(arrayAdapter) { _, which ->
-                viewModel.seekToChapter(which)
-            }
-
-            val dialog = builderSingle.create()
-            dialog.show()
-
-            dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
-            if (validChapter) {
-                dialog.listView.setSelection(currentChapter)
-                dialog.listView.setItemChecked(currentChapter, true)
-            }
-        }
-
-        if (shouldTranslate) {
-            lifecycleScope.launch {
-                val translated = withContext(Dispatchers.IO) {
-                    titles.map { title ->
-                        try {
-                            GoogleTranslate.translate(title.asString(this@ReadActivity2))
-                        } catch (_: Exception) {
-                            title.asString(this@ReadActivity2)
-                        }
-                    }
-                }
-                showChapterDialog(translated)
-            }
-        } else {
-            showChapterDialog(titles.map { it.asString(this) })
+            showChapterDialog(titles.map { it.asString(this@ReadActivity2) }, lang)
         }
     }
+
+    private fun showChapterDialog(names: List<String>, lang: String?) {
+        val currentChapter = viewModel.desiredIndex?.index
+        val validChapter = currentChapter != null && currentChapter >= 0 && currentChapter < names.size
+        val shown = ArrayList<CharSequence>(names)
+        val builderSingle: AlertDialog.Builder = AlertDialog.Builder(this)
+        if (validChapter) {
+            builderSingle.setTitle(names[currentChapter])
+        } else {
+            builderSingle.setTitle(R.string.select_chapter)
+        }
+
+        val arrayAdapter = ArrayAdapter<CharSequence>(this, R.layout.chapter_select_dialog, shown)
+
+        builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
+        builderSingle.setAdapter(arrayAdapter) { _, which ->
+            viewModel.seekToChapter(which)
+        }
+
+        val dialog = builderSingle.create()
+        dialog.show()
+
+        dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
+        if (validChapter) {
+            dialog.listView.setSelection(currentChapter)
+            dialog.listView.setItemChecked(currentChapter, true)
+        }
+
+        if (lang == null) return
+        val translated = HashMap<String, String>()
+        val translator = ChapterNameTranslator(
+            scope = lifecycleScope,
+            translate = { batch -> MetadataLabels.translateNames(lang, batch) },
+            onTranslated = { map ->
+                if (!dialog.isShowing) return@ChapterNameTranslator
+                translated += map
+                names.forEachIndexed { i, name ->
+                    val english = translated[name.trim()] ?: return@forEachIndexed
+                    shown[i] = withOriginal(english, name)
+                }
+                arrayAdapter.notifyDataSetChanged()
+                if (validChapter) translated[names[currentChapter].trim()]?.let { dialog.setTitle(it) }
+            },
+            cached = { name -> MetadataLabels.cachedName(lang, name) },
+        )
+        dialog.listView.setOnScrollListener(object : AbsListView.OnScrollListener {
+            override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {}
+
+            override fun onScroll(view: AbsListView?, first: Int, visibleCount: Int, total: Int) {
+                if (visibleCount > 0) translator.visible(names, first, first + visibleCount - 1)
+            }
+        })
+        dialog.setOnDismissListener { translator.reset() }
+    }
+
+    /** "English" with the original under it, smaller and dimmer. */
+    private fun withOriginal(english: String, original: String): CharSequence =
+        SpannableStringBuilder(english).append('\n').also { sb ->
+            val start = sb.length
+            sb.append(original)
+            sb.setSpan(RelativeSizeSpan(0.8f), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            sb.setSpan(ForegroundColorSpan(0x99888888.toInt()), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
 
     /** Tap to toggle the bars; the bars follow [ReadActivityViewModel.bottomVisibility]. */
     private fun bindVisibility() {

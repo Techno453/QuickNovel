@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -66,10 +67,11 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -118,13 +120,17 @@ import com.lagradost.quicknovel.ui.download.LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.util.AppUtils.openInBrowser
-import com.lagradost.quicknovel.util.GoogleTranslate
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SettingsHelper.getRatingReview
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentHashMap
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.filterNotNull
 
 /**
  * Scroll positions of the page, created above the layout switch so that fold / unfold (one pane
@@ -231,6 +237,7 @@ private fun metadataDisplayOf(state: ResultState, response: ImmutableSearchRespo
         translatedSynopsis = state.translatedSynopsis,
         labels = state.labels,
         showOriginal = state.showOriginal,
+        chapterNamesTranslated = state.translateChapterNames && state.chapterNames.isNotEmpty(),
     )
 
 @Composable
@@ -873,6 +880,18 @@ private fun ChapterPane(
                 )
             }
         } else {
+            if (state.translateChapterNames && !state.showOriginal) {
+                // Report the visible rows; the view model translates them (and a few more) in
+                // batches once scrolling pauses.
+                LaunchedEffect(listState, chapters) {
+                    snapshotFlow {
+                        val visible = listState.layoutInfo.visibleItemsInfo
+                        if (visible.isEmpty()) null else visible.first().index to visible.last().index
+                    }.filterNotNull().distinctUntilChanged().collect { (first, last) ->
+                        action(ResultPageAction.ChapterRowsVisible(first, last))
+                    }
+                }
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -894,19 +913,6 @@ private fun ChapterPane(
     }
 }
 
-/** Machine-translated chapter names (the Google option), kept for the session. */
-private object ChapterNameTranslations {
-    private val cache = ConcurrentHashMap<String, String>()
-    fun cached(name: String): String? = cache[name]
-    suspend fun translate(name: String): String? = cache[name] ?: withContext(Dispatchers.IO) {
-        try {
-            GoogleTranslate.translate(name).takeIf { it.isNotBlank() }?.also { cache[name] = it }
-        } catch (t: Throwable) {
-            null
-        }
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChapterRow(
@@ -919,13 +925,9 @@ private fun ChapterRow(
     modifier: Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val translateNames = state.translateChapterNames && !state.showOriginal
-    val name by produceState(
-        initialValue = if (translateNames) ChapterNameTranslations.cached(chapter.name) ?: chapter.name else chapter.name,
-        chapter.name, translateNames
-    ) {
-        value = if (translateNames) ChapterNameTranslations.translate(chapter.name) ?: chapter.name else chapter.name
-    }
+    val (name, original) = ResultPageLogic.chapterRowName(
+        chapter.name, state.chapterNames, state.translateChapterNames, state.showOriginal
+    )
     Box(modifier) {
         Row(
             Modifier
@@ -943,11 +945,26 @@ private fun ChapterRow(
                     .alpha(if (read) 0.5f else 1f)
             ) {
                 Text(name, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (!chapter.dateOfRelease.isNullOrBlank()) {
-                    Text(
-                        chapter.dateOfRelease, fontSize = 12.sp, lineHeight = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                val date = chapter.dateOfRelease?.takeIf { it.isNotBlank() }
+                if (original != null || date != null) {
+                    // The original name (when translated) and the date share one small line.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (original != null) {
+                            Text(
+                                original, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        }
+                        if (original != null && date != null) Spacer(Modifier.width(8.dp))
+                        if (date != null) {
+                            Text(
+                                date, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
             if (status != ChapterTranslationStatus.NONE) {
@@ -1015,15 +1032,38 @@ private fun ReviewsPage(
     listState: LazyListState,
     action: (ResultPageAction) -> Unit,
 ) {
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        items(reviews.items, key = { it.randomUuid }) { review ->
-            ReviewItem(review, modifier = Modifier.capped(), action = action)
-        }
-        if (reviews.loading) {
-            item(key = "loading") {
-                Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+    val scope = rememberCoroutineScope()
+    val showToTop by remember { derivedStateOf { ResultPageLogic.showScrollToTop(listState.firstVisibleItemIndex) } }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            items(reviews.items, key = { it.randomUuid }) { review ->
+                ReviewItem(review, modifier = Modifier.capped(), action = action)
+            }
+            if (reviews.loading) {
+                item(key = "loading") {
+                    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
+            }
+        }
+        // "To top", as the XML page's reviews FAB: appears once a few reviews are scrolled past.
+        AnimatedVisibility(
+            visible = showToTop,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            SmallFloatingActionButton(
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_baseline_arrow_upward_24),
+                    contentDescription = stringResource(R.string.reviews_to_top)
+                )
             }
         }
     }
