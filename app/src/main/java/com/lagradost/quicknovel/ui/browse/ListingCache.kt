@@ -119,6 +119,13 @@ class ListingCache<K : Any, V : Any>(
     /** The page in memory, without touching the disk. */
     fun inMemory(key: K): V? = memory[key]
 
+    /** Drops [key] from both layers (a page that should be asked for again next time). */
+    suspend fun forget(key: K) {
+        memory.remove(key)
+        val store = disk ?: return
+        withContext(io) { store.remove(diskKey(key)) }
+    }
+
     suspend fun get(key: K, refresh: Boolean, load: suspend () -> Result<V>): Result<V> {
         if (!refresh) {
             memory[key]?.let { return Result.success(it) }

@@ -45,7 +45,7 @@ class MainPageFragment : Fragment() {
                 putString("apiName", apiName)
                 putInt("mainCategory", filter.category)
                 putInt("orderBy", filter.orderBy)
-                putInt("tag", filter.tag)
+                putIntArray("tags", filter.tags.toIntArray())
             }
     }
 

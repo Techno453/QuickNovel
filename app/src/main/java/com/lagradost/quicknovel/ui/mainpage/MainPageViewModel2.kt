@@ -15,9 +15,9 @@ import com.lagradost.cloudstream4.state.StateContainer
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.BookDownloader2
-import com.lagradost.quicknovel.ui.browse.BrowseCatalog
 import com.lagradost.quicknovel.ui.browse.BrowsePrefs
 import com.lagradost.quicknovel.ui.browse.BrowseRepository
+import com.lagradost.quicknovel.ui.browse.TagFilter
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseOperation
@@ -45,6 +45,8 @@ data class MainPageState(
     val categories: PersistentList<String> = persistentListOf(),
     val orderBys: PersistentList<String> = persistentListOf(),
     val tags: PersistentList<String> = persistentListOf(),
+    /** The provider's first tag means "no genre filter" (see [TagFilter]). */
+    val tagsFirstIsNoFilter: Boolean = false,
 )
 
 @Immutable
@@ -78,7 +80,8 @@ data class FilterQuery(
     val page: Int = 0,
     val category: Int = 0,
     val orderBy: Int = 0,
-    val tag: Int = 0,
+    /** Selected genre indexes, normalized by [TagFilter.normalize] (empty = no genre filter). */
+    val tags: List<Int> = emptyList(),
 )
 
 enum class DialogType {
@@ -104,6 +107,9 @@ sealed class MainPageAction {
     data class OpenDialog(val type: DialogType) : MainPageAction()
     data class SelectDialog(val type: DialogType, val selected: Int) : MainPageAction()
 
+    /** Genres chosen in the genre sheet (indexes into the provider's tags). */
+    data class SelectTags(val tags: List<Int>) : MainPageAction()
+
     /** Pull to refresh, or retry after an error: reload from page 1 bypassing the session cache. */
     object Refresh : MainPageAction()
 }
@@ -127,34 +133,37 @@ class MainPageViewModel2(
         categories = api.mainCategories.map { it.first }.toPersistentList(),
         orderBys = api.orderBys.map { it.first }.toPersistentList(),
         tags = api.tags.map { it.first }.toPersistentList(),
+        tagsFirstIsNoFilter = api.tags.firstOrNull().let { TagFilter.firstIsNoFilter(it?.first, it?.second) },
     )
 ), EffectContainer<MainPageEffect> by DefaultEffectContainer(), ActionHandler<MainPageAction> {
     companion object {
         /**
-         * Explicit mainCategory / orderBy / tag in the bundle (e.g. a genre chip on the result
-         * page) win; without any, the source's last chosen listing is restored.
+         * Explicit mainCategory / orderBy / tag / tags in the bundle (e.g. a genre chip on the
+         * result page) win; without any, the source's last chosen listing is restored.
          */
         fun provideFactory(bundle: Bundle) = viewModelFactory {
             initializer {
                 val apiName = bundle.getString("apiName")!!
                 val api = getApiFromName(apiName)
                 val explicit = bundle.containsKey("mainCategory") || bundle.containsKey("orderBy") ||
-                        bundle.containsKey("tag")
-                val listing = if (explicit) {
-                    BrowseCatalog.Listing(
-                        bundle.getInt("mainCategory", 0), bundle.getInt("orderBy", 0), bundle.getInt("tag", 0)
+                        bundle.containsKey("tag") || bundle.containsKey("tags")
+                val (category, orderBy, tags) = if (explicit) {
+                    Triple(
+                        bundle.getInt("mainCategory", 0), bundle.getInt("orderBy", 0),
+                        bundle.getIntArray("tags")?.toList() ?: listOf(bundle.getInt("tag", 0)),
                     )
                 } else {
-                    BrowsePrefs.lastListing(BaseApplication.context, api.name) ?: BrowseCatalog.Listing()
+                    BrowsePrefs.lastListing(BaseApplication.context, api.name) ?: Triple(0, 0, emptyList())
                 }
                 fun clamp(index: Int, size: Int) = if (index in 0 until size) index else 0
+                val firstIsNoFilter = api.tags.firstOrNull().let { TagFilter.firstIsNoFilter(it?.first, it?.second) }
                 MainPageViewModel2(
                     api,
                     FilterQuery(
                         page = 0,
-                        category = clamp(listing.category, api.mainCategories.size),
-                        orderBy = clamp(listing.orderBy, api.orderBys.size),
-                        tag = clamp(listing.tag, api.tags.size),
+                        category = clamp(category, api.mainCategories.size),
+                        orderBy = clamp(orderBy, api.orderBys.size),
+                        tags = TagFilter.normalize(tags, api.tags.size, firstIsNoFilter),
                     )
                 )
             }
@@ -169,8 +178,6 @@ class MainPageViewModel2(
         }
     }
 
-    private fun FilterQuery.listing() = BrowseCatalog.Listing(category, orderBy, tag)
-
     suspend fun expand(refresh: Boolean = false) = withContext(Dispatchers.IO) {
         expandMutex.withLock {
             val from = state.value.filter.query
@@ -178,18 +185,21 @@ class MainPageViewModel2(
             if (state.value.filter.endReached && !refresh) return@withLock
 
             val mainCategory = api.mainCategories.getOrNull(from.category)
-            val tag = api.tags.getOrNull(from.tag)
+            val tags = TagFilter.loaded(from.tags).mapNotNull { api.tags.getOrNull(it)?.first }
             val orderBy = api.orderBys.getOrNull(from.orderBy)
             updateState {
                 copy(
                     filterVisual = FilterQueryVisual(
-                        category = mainCategory?.first, tag = tag?.first, orderBy = orderBy?.first
+                        category = mainCategory?.first, tag = tags.joinToString().ifEmpty { null }, orderBy = orderBy?.first
                     ), filter = filter.copy(loading = true, error = null)
                 )
             }
 
             val nextPage = from.page + 1
-            BrowseRepository.page(api.name, from.listing(), nextPage, gate = null, refresh = refresh)
+            // Several genres: page n of each genre's listing, merged by rank (TagFilter).
+            BrowseRepository.page(
+                api.name, from.category, from.orderBy, from.tags, nextPage, gate = null, refresh = refresh
+            )
                 .onFailure { error ->
                     if (error is CancellationException) {
                         updateState { copy(filter = filter.copy(loading = false)) }
@@ -255,19 +265,30 @@ class MainPageViewModel2(
     }
 
     private fun select(type: DialogType, selected: Int) {
+        val query = state.value.filter.query
+        applyQuery(
+            when (type) {
+                DialogType.Tags -> query.copy(tags = normalizeTags(listOf(selected)))
+                DialogType.Category -> query.copy(category = selected)
+                DialogType.OrderBy -> query.copy(orderBy = selected)
+            }
+        )
+    }
+
+    private fun normalizeTags(tags: List<Int>) =
+        TagFilter.normalize(tags, api.tags.size, state.value.tagsFirstIsNoFilter)
+
+    /** Starts [query] from page 1 and remembers it as the source's last listing. */
+    private fun applyQuery(query: FilterQuery) {
+        val next = query.copy(page = 0)
         updateState {
             copy(
                 filter = filter.copy(
-                    query = filter.query.copy(
-                        tag = if (type == DialogType.Tags) selected else filter.query.tag,
-                        category = if (type == DialogType.Category) selected else filter.query.category,
-                        orderBy = if (type == DialogType.OrderBy) selected else filter.query.orderBy,
-                        page = 0,
-                    ), items = persistentListOf(), error = null, url = "", endReached = false,
+                    query = next, items = persistentListOf(), error = null, url = "", endReached = false,
                 ), dialog = null
             )
         }
-        BrowsePrefs.setLastListing(BaseApplication.context, api.name, state.value.filter.query.listing())
+        BrowsePrefs.setLastListing(BaseApplication.context, api.name, next.category, next.orderBy, next.tags)
         viewModelScope.launch {
             expand()
         }
@@ -311,7 +332,7 @@ class MainPageViewModel2(
                         dialog = MainPageDialog(
                             selected = when (action.type) {
                                 DialogType.Category -> filter.query.category
-                                DialogType.Tags -> filter.query.tag
+                                DialogType.Tags -> filter.query.tags.firstOrNull() ?: 0
                                 DialogType.OrderBy -> filter.query.orderBy
                             }, options = names.toPersistentList(), type = action.type
                         )
@@ -320,6 +341,12 @@ class MainPageViewModel2(
             }
 
             is MainPageAction.SelectDialog -> select(action.type, action.selected)
+
+            is MainPageAction.SelectTags -> {
+                val tags = normalizeTags(action.tags)
+                val query = state.value.filter.query
+                if (tags != query.tags) applyQuery(query.copy(tags = tags))
+            }
 
             MainPageAction.Refresh -> {
                 updateState {

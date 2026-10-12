@@ -105,24 +105,127 @@ class SearchLanguageTest {
         assertTrue(SearchLanguage.KOREAN.translationTargets(listOf("zh", "en")).isEmpty())
     }
 
+    // ---- multi-select (SearchLanguages) ----
+
+    private fun names(selection: SearchLanguages) = selection.filter(apis) { it.lang }.map { it.name }
+
+    private fun of(vararg langs: SearchLanguage) = SearchLanguages(langs.toSet())
+
+    @Test
+    fun emptySelectionIsAllLanguages() {
+        val all = SearchLanguages.ALL
+        assertTrue(all.isAll)
+        assertTrue(all.isSelected(SearchLanguage.ALL))
+        assertFalse(all.isSelected(SearchLanguage.CHINESE))
+        assertEquals(apis.map { it.name }, names(all))
+        assertTrue(all.matches("ru"))
+    }
+
+    @Test
+    fun selectingALanguageUnselectsAll() {
+        val zh = SearchLanguages.ALL.toggle(SearchLanguage.CHINESE)
+        assertEquals(of(SearchLanguage.CHINESE), zh)
+        assertFalse(zh.isSelected(SearchLanguage.ALL))
+        assertTrue(zh.isSelected(SearchLanguage.CHINESE))
+    }
+
+    @Test
+    fun languagesToggleIndependently() {
+        val zhJa = SearchLanguages.ALL.toggle(SearchLanguage.CHINESE).toggle(SearchLanguage.JAPANESE)
+        assertEquals(of(SearchLanguage.CHINESE, SearchLanguage.JAPANESE), zhJa)
+        assertEquals(of(SearchLanguage.JAPANESE), zhJa.toggle(SearchLanguage.CHINESE))
+        // Removing the last language goes back to All.
+        assertEquals(SearchLanguages.ALL, of(SearchLanguage.KOREAN).toggle(SearchLanguage.KOREAN))
+    }
+
+    @Test
+    fun allClearsTheOthers() {
+        val three = of(SearchLanguage.CHINESE, SearchLanguage.KOREAN, SearchLanguage.ENGLISH)
+        assertEquals(SearchLanguages.ALL, three.toggle(SearchLanguage.ALL))
+        assertEquals(SearchLanguages.ALL, SearchLanguages.ALL.toggle(SearchLanguage.ALL))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun allIsNeverStoredAsALanguage() {
+        SearchLanguages(setOf(SearchLanguage.ALL))
+    }
+
+    @Test
+    fun sourcesAreTheUnionOfTheSelectedLanguages() {
+        assertEquals(
+            listOf("Ixdzs", "Novelpia", "Quanben", "Booktoki"),
+            names(of(SearchLanguage.CHINESE, SearchLanguage.KOREAN)),
+        )
+        assertEquals(
+            listOf("Royal", "Syosetu", "Kakuyomu", "Upstream", "Wuxia"),
+            names(of(SearchLanguage.JAPANESE, SearchLanguage.ENGLISH)),
+        )
+        // Every listed language selected still leaves out other languages (only All has them).
+        val four = of(SearchLanguage.CHINESE, SearchLanguage.JAPANESE, SearchLanguage.KOREAN, SearchLanguage.ENGLISH)
+        assertFalse("Ranobes" in names(four))
+        assertEquals(apis.size - 1, names(four).size)
+    }
+
+    @Test
+    fun eachCjkSourceGetsItsOwnLanguageAndEnglishTheRawQuery() {
+        val zhEn = of(SearchLanguage.CHINESE, SearchLanguage.ENGLISH)
+        assertEquals("zh", zhEn.queryLanguageFor("zh-CN"))
+        assertNull(zhEn.queryLanguageFor("en"))
+        assertNull(zhEn.queryLanguageFor(null))
+        // Not selected: not searched, never translated.
+        assertNull(zhEn.queryLanguageFor("ja"))
+        assertEquals(setOf("zh"), zhEn.translationTargets(apis.map { it.lang }))
+        assertEquals(
+            setOf("ja", "ko"),
+            of(SearchLanguage.JAPANESE, SearchLanguage.KOREAN).translationTargets(apis.map { it.lang }),
+        )
+        assertEquals(setOf("zh", "ja", "ko"), SearchLanguages.ALL.translationTargets(apis.map { it.lang }))
+        assertTrue(of(SearchLanguage.ENGLISH).translationTargets(apis.map { it.lang }).isEmpty())
+    }
+
     // ---- preference ----
 
     @Test
-    fun preferenceDefaultIsAll() {
-        assertEquals("search_language", SearchLanguage.PREF_KEY)
-        assertEquals(SearchLanguage.ALL, SearchLanguage.DEFAULT)
-        assertEquals("all", SearchLanguage.DEFAULT.prefValue)
-        assertEquals(SearchLanguage.ALL, SearchLanguage.fromPref(null))
-        assertEquals(SearchLanguage.ALL, SearchLanguage.fromPref(""))
-        assertEquals(SearchLanguage.ALL, SearchLanguage.fromPref("klingon"))
+    fun preferenceKeys() {
+        assertEquals("search_languages", SearchLanguages.PREF_KEY)
+        assertEquals("search_language", SearchLanguages.LEGACY_PREF_KEY)
     }
 
     @Test
     fun preferenceRoundTrips() {
+        val zhKo = of(SearchLanguage.CHINESE, SearchLanguage.KOREAN)
+        assertEquals(setOf("zh", "ko"), zhKo.toPref())
+        assertEquals(zhKo, SearchLanguages.fromPref(zhKo.toPref()))
+        assertEquals(emptySet<String>(), SearchLanguages.ALL.toPref())
+        assertEquals(SearchLanguages.ALL, SearchLanguages.fromPref(emptySet()))
+        assertEquals(SearchLanguages.ALL, SearchLanguages.fromPref(null))
+        // Unknown values and "all" are ignored; case and spaces are not significant.
+        assertEquals(of(SearchLanguage.JAPANESE), SearchLanguages.fromPref(setOf(" JA ", "klingon", "all")))
+    }
+
+    @Test
+    fun oldSingleChipIsMigratedOnce() {
+        assertEquals(emptySet<String>(), SearchLanguages.migrate(mapOf("search_language" to "all")))
+        assertEquals(setOf("zh"), SearchLanguages.migrate(mapOf("search_language" to "zh")))
+        assertEquals(setOf("ja"), SearchLanguages.migrate(mapOf("search_language" to "ja")))
+        assertEquals(setOf("ko"), SearchLanguages.migrate(mapOf("search_language" to "ko")))
+        assertEquals(setOf("en"), SearchLanguages.migrate(mapOf("search_language" to "en")))
+        assertEquals(emptySet<String>(), SearchLanguages.migrate(mapOf("search_language" to "klingon")))
+        // Nothing stored, or already migrated: nothing to do.
+        assertNull(SearchLanguages.migrate(emptyMap<String, Any>()))
+        assertNull(
+            SearchLanguages.migrate(mapOf("search_language" to "zh", "search_languages" to setOf("ko")))
+        )
+        assertNull(SearchLanguages.migrate(mapOf("search_language" to 3)))
+    }
+
+    @Test
+    fun chipPrefValues() {
         for (lang in SearchLanguage.entries) {
-            assertEquals(lang, SearchLanguage.fromPref(lang.prefValue))
+            assertEquals(lang, SearchLanguage.fromPrefValue(lang.prefValue))
         }
-        assertEquals(SearchLanguage.KOREAN, SearchLanguage.fromPref(" KO "))
+        assertNull(SearchLanguage.fromPrefValue(null))
+        assertNull(SearchLanguage.fromPrefValue("klingon"))
     }
 
     @Test

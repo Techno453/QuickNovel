@@ -38,9 +38,9 @@ data class HomeViewModelState(
     val shownMainPageApis: ImmutableList<MainAPI> = mainPageApis,
     val filterNames: ImmutableSet<String> = persistentSetOf(),
     val filterLanguages: ImmutableSet<String> = persistentSetOf(),
-    /** Language chip above the tiles / results (docs/search.md). */
-    val searchLanguage: SearchLanguage = SearchLanguage.DEFAULT,
-    /** Last submitted query, re-run when the language chip changes. */
+    /** Language chips above the tiles / results (docs/search.md); empty = All languages. */
+    val searchLanguages: SearchLanguages = SearchLanguages.ALL,
+    /** Last submitted query, re-run when the language selection changes. */
     val lastQuery: String? = null,
     val isConfigureShow: Boolean = false,
     val searchRows: PersistentList<SearchRow> = persistentListOf(),
@@ -66,7 +66,11 @@ sealed class HomeAction {
     data class Open(val item: MainAPI) : HomeAction()
     data class ConfigureApisNames(val names: ImmutableSet<String>) : HomeAction()
     data class ConfigureApisLanguages(val languages: ImmutableSet<String>) : HomeAction()
-    data class SelectLanguage(val language: SearchLanguage) : HomeAction()
+    /** Tap on a language chip (multi-select, see [SearchLanguages.toggle]). */
+    data class ToggleLanguage(val chip: SearchLanguage) : HomeAction()
+
+    /** The stored language selection (restored when the tab opens, or after a toggle). */
+    data class SetLanguages(val languages: SearchLanguages) : HomeAction()
     object CloseQuery : HomeAction()
     data class ResultAction(val action: SearchResponseAction) : HomeAction()
     data class OpenRow(val row: SearchRow) : HomeAction()
@@ -103,12 +107,12 @@ class HomeViewModel2 : ViewModel(),
         apis: ImmutableList<MainAPI>,
         names: ImmutableSet<String>,
         languages: ImmutableSet<String>,
-        searchLanguage: SearchLanguage,
+        searchLanguages: SearchLanguages,
     ): ImmutableList<MainAPI> {
         if (names.isEmpty() || languages.isEmpty()) return persistentListOf()
 
-        // Settings (provider languages, Search providers) first, then the language chip.
-        return searchLanguage.filter(apis.filter { api ->
+        // Settings (provider languages, Search providers) first, then the language chips.
+        return searchLanguages.filter(apis.filter { api ->
             languages.contains(api.lang) && names.contains(
                 api.name
             )
@@ -149,7 +153,7 @@ class HomeViewModel2 : ViewModel(),
                             mainPageApis,
                             action.names,
                             filterLanguages,
-                            searchLanguage,
+                            searchLanguages,
                         )
                     )
                 }
@@ -163,23 +167,26 @@ class HomeViewModel2 : ViewModel(),
                             mainPageApis,
                             filterNames,
                             action.languages,
-                            searchLanguage,
+                            searchLanguages,
                         )
                     )
                 }
             }
 
-            is HomeAction.SelectLanguage -> {
+            is HomeAction.ToggleLanguage ->
+                onAction(HomeAction.SetLanguages(state.value.searchLanguages.toggle(action.chip)))
+
+            is HomeAction.SetLanguages -> {
                 val before = state.value
-                if (before.searchLanguage == action.language) return
+                if (before.searchLanguages == action.languages) return
                 updateState {
                     copy(
-                        searchLanguage = action.language,
+                        searchLanguages = action.languages,
                         shownMainPageApis = filterApis(
                             mainPageApis,
                             filterNames,
                             filterLanguages,
-                            action.language,
+                            action.languages,
                         )
                     )
                 }
@@ -221,16 +228,16 @@ class HomeViewModel2 : ViewModel(),
             updateState { copy(lastQuery = query) }
             val state = state.value
             val searchApis = filterApis(
-                state.allApis, state.filterNames, state.filterLanguages, state.searchLanguage
+                state.allApis, state.filterNames, state.filterLanguages, state.searchLanguages
             )
-            searchQuery(query, searchApis, state.searchLanguage)
+            searchQuery(query, searchApis, state.searchLanguages)
         }
     }
 
     private suspend fun searchQuery(
         query: String,
         apis: ImmutableList<MainAPI>,
-        language: SearchLanguage,
+        languages: SearchLanguages,
     ) {
         updateState {
             copy(
@@ -242,10 +249,9 @@ class HomeViewModel2 : ViewModel(),
         apis.cmap { api ->
             // Translated search (docs/search.md): zh/ja/ko providers get candidate queries in their
             // language (AI known title, NovelUpdates original names, literal translation), tried in
-            // order until one answers; English and other sources get the raw query. The language
-            // chip decides the target: All = each CJK source's own language, a CJK chip = that
-            // language only, English = no translation.
-            val target = language.queryLanguageFor(api.lang)
+            // order until one answers; English and other sources get the raw query. Only sources
+            // of the selected languages are searched, each CJK one in its own language.
+            val target = languages.queryLanguageFor(api.lang)
             val candidates =
                 if (target == null) listOf(query)
                 else SearchQueryTranslator.candidatesFor(query, target).all.ifEmpty { listOf(query) }

@@ -32,7 +32,8 @@ the wizard, the dialogs, Spending, the glossary and the notifications).
 | **Spending** | The screen; "spend cap" for limits ("Monthly spend cap", "Per-job spend cap") | Spend (alone), Per-job cap | The screen title was already Spending. |
 | **Source language** | Language of a novel | language of this book | Already the result page label. |
 | **Translation model / Fallback model / Analysis model / Title lookup model** | The model settings (the last one resolves search queries to original titles, docs/search.md) | LLM | "LLM" appeared once in a summary. |
-| **All languages / Chinese / Japanese / Korean / English** | Language chips (Browse All sources, Search tab) | All, CN/JP/KR | Same words in both tabs. |
+| **All languages / Chinese / Japanese / Korean / English** | Language chips (Browse All sources, Search tab; multi-select on Search) | All, CN/JP/KR | Same words in both tabs. |
+| **Genres** | The multi-select genre chip and sheet of a source page: "All genres", "Genres: Fantasy, Mystery", "Genres: 3 selected"; sheet title "Genres", buttons Clear / Done (`clear`, `done`); notes "Novels from any selected genre, merged by rank." and "Only the first 4 genres in this list are loaded." (`browse_genres*` in `strings_browse.xml`) | Tags, Categories, Filter | One word for the axis; it replaces the old single-choice "Genre" chip row (`browse_genre`, removed). |
 | **API key**, **Test connection** | Key rows and the free key check (wizard and settings) | Verify, "API key is valid!" | The wizard already said Test connection. |
 | **Source changed** | Stale translations (chip, Translate dialog checkbox) | stale | The chip's wording. |
 

@@ -13,6 +13,9 @@ import kotlinx.collections.immutable.toImmutableMap
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -50,7 +53,14 @@ object BrowseRepository {
     /** Gate for the "All sources" feed. */
     val feedGate = Semaphore(FEED_CONCURRENCY)
 
-    data class PageKey(val api: String, val listing: BrowseCatalog.Listing, val page: Int)
+    /**
+     * One cached page: [tags] is the set of genre indexes (sorted; one entry for a plain listing,
+     * several for a merged multi-genre page, see [TagFilter]).
+     */
+    data class PageKey(val api: String, val category: Int, val orderBy: Int, val tags: List<Int>, val page: Int) {
+        constructor(api: String, listing: BrowseCatalog.Listing, page: Int) :
+                this(api, listing.category, listing.orderBy, listOf(listing.tag), page)
+    }
 
     private val cache by lazy {
         ListingCache<PageKey, ImmutableHeadMainPageResponse>(
@@ -68,7 +78,7 @@ object BrowseRepository {
     const val DISK_DIR = "browse_listings"
 
     /** Key on disk; bump the version when [DiskListingPage] changes shape. */
-    fun PageKey.diskKey() = "v1|$api|${listing.category},${listing.orderBy},${listing.tag}|$page"
+    fun PageKey.diskKey() = TagFilter.pageKey(api, category, orderBy, tags, page)
 
     /** The page in the memory cache (no disk read). */
     fun cached(key: PageKey): ImmutableHeadMainPageResponse? = cache.inMemory(key)
@@ -88,6 +98,49 @@ object BrowseRepository {
         cache.get(PageKey(apiName, listing, page), refresh) {
             if (gate != null) gate.withPermit { load(apiName, listing, page) } else load(apiName, listing, page)
         }
+
+    /**
+     * Page [page] of a source page filtered by several genres ([tags], indexes into the provider's
+     * tags; at most [TagFilter.MAX_LOADED] are loaded): page [page] of each genre's listing, merged
+     * by rank and de-duplicated by URL ([TagFilter.merge]). Each genre's page is cached on its own
+     * and the merged page under the sorted tag set. A genre that fails is left out of the merged
+     * page, which is then not cached (Retry or pull to refresh asks again); the page fails only
+     * when every genre fails. One tag is the plain listing.
+     */
+    suspend fun page(
+        apiName: String,
+        category: Int,
+        orderBy: Int,
+        tags: List<Int>,
+        page: Int,
+        gate: Semaphore? = null,
+        refresh: Boolean = false,
+    ): Result<ImmutableHeadMainPageResponse> {
+        val loaded = TagFilter.loaded(tags)
+        if (loaded.size == 1) {
+            return BrowseRepository.page(apiName, BrowseCatalog.Listing(category, orderBy, loaded[0]), page, gate, refresh)
+        }
+        val key = PageKey(apiName, category, orderBy, loaded, page)
+        var partial = false
+        val result = cache.get(key, refresh) {
+            val results = coroutineScope {
+                loaded.map { tag ->
+                    async { BrowseRepository.page(apiName, BrowseCatalog.Listing(category, orderBy, tag), page, gate, refresh) }
+                }.awaitAll()
+            }
+            val pages = results.mapNotNull { it.getOrNull() }
+            if (pages.isEmpty()) return@get Result.failure(results.firstNotNullOf { it.exceptionOrNull() })
+            partial = pages.size < results.size
+            Result.success(
+                ImmutableHeadMainPageResponse(
+                    url = pages.first().url,
+                    list = TagFilter.merge(pages.map { it.list }) { it.url }.toImmutableList(),
+                )
+            )
+        }
+        if (partial) cache.forget(key)
+        return result
+    }
 
     private suspend fun load(apiName: String, listing: BrowseCatalog.Listing, page: Int): Result<ImmutableHeadMainPageResponse> =
         withContext(Dispatchers.IO) {
@@ -139,17 +192,17 @@ object BrowsePrefs {
     private fun prefs(context: Context?) =
         (context ?: BaseApplication.context)?.applicationContext?.let { PreferenceManager.getDefaultSharedPreferences(it) }
 
-    /** The listing last chosen on a source's browse page, or null. */
-    fun lastListing(context: Context?, apiName: String): BrowseCatalog.Listing? {
-        val raw = prefs(context)?.getString(LAST_LISTING_PREFIX + apiName, null) ?: return null
-        val parts = raw.split(',').mapNotNull { it.trim().toIntOrNull() }
-        if (parts.size != 3) return null
-        return BrowseCatalog.Listing(parts[0], parts[1], parts[2])
-    }
+    /**
+     * The listing last chosen on a source's browse page as (category, order, genre indexes), or
+     * null. Stored as [TagFilter.encodeListing] ("0,1,3" or "0,1,2+5"; the single-tag form of
+     * older versions reads the same way).
+     */
+    fun lastListing(context: Context?, apiName: String): Triple<Int, Int, List<Int>>? =
+        TagFilter.decodeListing(prefs(context)?.getString(LAST_LISTING_PREFIX + apiName, null))
 
-    fun setLastListing(context: Context?, apiName: String, listing: BrowseCatalog.Listing) {
+    fun setLastListing(context: Context?, apiName: String, category: Int, orderBy: Int, tags: List<Int>) {
         prefs(context)?.edit()?.putString(
-            LAST_LISTING_PREFIX + apiName, "${listing.category},${listing.orderBy},${listing.tag}"
+            LAST_LISTING_PREFIX + apiName, TagFilter.encodeListing(category, orderBy, tags)
         )?.apply()
     }
 

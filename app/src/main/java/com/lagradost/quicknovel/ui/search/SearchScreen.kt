@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -108,16 +110,21 @@ object SearchScreen : Screen {
             viewModel.onAction(HomeAction.ConfigureApisLanguages(selectionLangState.toPersistentSet()))
         }
 
-        // Language chip: remembered in SharedPreferences ("search_language", default All).
-        val languagePref = store.provider.searchLanguage
+        // Language chips: remembered in SharedPreferences ("search_languages", empty = All).
+        val languagePref = store.provider.searchLanguages
         val languageValue by languagePref.collectAsState()
         LaunchedEffect(languageValue) {
-            viewModel.onAction(HomeAction.SelectLanguage(SearchLanguage.fromPref(languageValue)))
+            viewModel.onAction(HomeAction.SetLanguages(SearchLanguages.fromPref(languageValue)))
         }
         val onAction = remember(viewModel, languagePref) {
             { action: HomeAction ->
-                if (action is HomeAction.SelectLanguage) languagePref.set(action.language.prefValue)
-                viewModel.onAction(action)
+                if (action is HomeAction.ToggleLanguage) {
+                    val next = viewModel.state.value.searchLanguages.toggle(action.chip)
+                    languagePref.set(next.toPref())
+                    viewModel.onAction(HomeAction.SetLanguages(next))
+                } else {
+                    viewModel.onAction(action)
+                }
             }
         }
 
@@ -142,26 +149,30 @@ private fun SearchLanguage.labelRes(): Int = when (this) {
     SearchLanguage.ENGLISH -> R.string.search_language_en
 }
 
-/** All / Chinese / Japanese / Korean / English; scrolls sideways when the window is narrow. */
+/**
+ * All languages / Chinese / Japanese / Korean / English, multi-select ([SearchLanguages.toggle]):
+ * any number of languages, or All. Wraps onto a second line when the window is narrow.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchLanguageChips(
-    selected: SearchLanguage,
+    selected: SearchLanguages,
     action: (HomeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val description = stringResource(R.string.search_language)
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = PaddingValues(horizontal = 10.dp),
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         modifier = modifier
             .widthIn(max = MaxContentWidth)
             .fillMaxWidth()
+            .padding(horizontal = 10.dp)
             .semantics { contentDescription = description },
     ) {
-        items(SearchLanguage.CHIPS, key = { it.prefValue }) { lang ->
+        for (lang in SearchLanguage.CHIPS) {
             FilterChip(
-                selected = selected == lang,
-                onClick = { action(HomeAction.SelectLanguage(lang)) },
+                selected = selected.isSelected(lang),
+                onClick = { action(HomeAction.ToggleLanguage(lang)) },
                 label = { Text(stringResource(lang.labelRes())) },
             )
         }
@@ -195,7 +206,7 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
     // user drags the list.
     val resultsState = rememberLazyListState()
     val resultsDragged by resultsState.interactionSource.collectIsDraggedAsState()
-    var followTop by remember(state.lastQuery, state.searchLanguage) { mutableStateOf(true) }
+    var followTop by remember(state.lastQuery, state.searchLanguages) { mutableStateOf(true) }
     LaunchedEffect(resultsDragged) { if (resultsDragged) followTop = false }
     LaunchedEffect(state.searchRows, followTop) {
         if (followTop && state.searchRows.isNotEmpty()) resultsState.requestScrollToItem(0)
@@ -221,7 +232,7 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
         topBar = {
             BaseSearchBar(
                 content = {
-                    SearchLanguageChips(state.searchLanguage, action)
+                    SearchLanguageChips(state.searchLanguages, action)
                     Spacer(modifier = Modifier.height(2.dp))
                 },
                 onQueryChange = { _ ->
@@ -286,7 +297,7 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
                     SearchRow(row, action)
                 }
                 if (!state.isLoading && state.searchRows.isEmpty() &&
-                    state.searchLanguage != SearchLanguage.ALL
+                    !state.searchLanguages.isAll
                 ) {
                     item(key = "no_sources") { NoSourcesNotice() }
                 }
@@ -311,7 +322,7 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
                     MainAPIItem(api = api, action = action)
                 }
                 if (state.shownMainPageApis.isEmpty() && state.filterNames.isNotEmpty() &&
-                    state.searchLanguage != SearchLanguage.ALL
+                    !state.searchLanguages.isAll
                 ) {
                     item(key = "no_sources", span = { GridItemSpan(maxLineSpan) }) {
                         NoSourcesNotice()

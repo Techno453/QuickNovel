@@ -14,6 +14,14 @@ import androidx.compose.runtime.setValue
 import com.lagradost.quicknovel.ui.browse.LoadingFooter
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextOverflow
+import com.lagradost.quicknovel.ui.browse.TagFilter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -142,7 +150,7 @@ fun MainPageScreen(state: MainPageState, action: (MainPageAction) -> Unit) {
     // as well: while it is empty only the footer is shown, and the grid would otherwise keep the
     // footer in view when the first page arrives, i.e. open the new listing scrolled down.
     val listEmpty = state.filter.items.isEmpty()
-    LaunchedEffect(state.filter.query.category, state.filter.query.orderBy, state.filter.query.tag, listEmpty) {
+    LaunchedEffect(state.filter.query.category, state.filter.query.orderBy, state.filter.query.tags, listEmpty) {
         listState.scrollToItem(0)
     }
 
@@ -418,8 +426,117 @@ fun MainPageSearchBar(
                 ChipRow(stringResource(R.string.browse_order), state.orderBys, state.filter.query.orderBy) {
                     action(MainPageAction.SelectDialog(DialogType.OrderBy, it))
                 }
-                ChipRow(stringResource(R.string.browse_genre), state.tags, state.filter.query.tag) {
-                    action(MainPageAction.SelectDialog(DialogType.Tags, it))
+                GenreSelector(state, action)
+            }
+        }
+    }
+}
+
+/**
+ * Genre filter of a source page (docs/browse.md): one chip summarising the selection ("All
+ * genres", "Genres: Fantasy, Xianxia", "Genres: 3 selected") that opens [GenreSheet]. Hidden when
+ * the source has no genres to choose from.
+ */
+@Composable
+private fun GenreSelector(state: MainPageState, action: (MainPageAction) -> Unit) {
+    if (state.tags.size <= 1) return
+    var open by rememberSaveable { mutableStateOf(false) }
+    val selected = state.filter.query.tags
+    val summary = TagFilter.summary(state.tags, selected, state.tagsFirstIsNoFilter)
+    val text = when (summary) {
+        TagFilter.Summary.All -> stringResource(R.string.browse_genres_all)
+        is TagFilter.Summary.Default -> summary.label
+        is TagFilter.Summary.Names -> stringResource(R.string.browse_genres_names, summary.names.joinToString(", "))
+        is TagFilter.Summary.Count -> stringResource(R.string.browse_genres_count, summary.count)
+    }
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        FilterChip(
+            selected = summary is TagFilter.Summary.Names || summary is TagFilter.Summary.Count,
+            onClick = { open = true },
+            label = { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            trailingIcon = {
+                Icon(
+                    painter = painterResource(R.drawable.arrow_drop_down_24px),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            },
+        )
+    }
+    if (open) {
+        GenreSheet(
+            labels = state.tags,
+            selected = selected,
+            firstIsNoFilter = state.tagsFirstIsNoFilter,
+            onDismiss = { open = false },
+            onDone = {
+                open = false
+                action(MainPageAction.SelectTags(it))
+            },
+        )
+    }
+}
+
+/**
+ * Multi-select genre sheet: every genre as a wrapping [FilterChip] (no sideways scrolling), Clear
+ * and Done on top. The provider's no-filter entry ("All") clears the others. A bottom sheet on
+ * every width; Material caps it at 640 dp and centres it on the Fold inner screen.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun GenreSheet(
+    labels: List<String>,
+    selected: List<Int>,
+    firstIsNoFilter: Boolean,
+    onDismiss: () -> Unit,
+    onDone: (List<Int>) -> Unit,
+) {
+    var draft by rememberSaveable { mutableStateOf(selected) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(R.string.browse_genres),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { draft = TagFilter.normalize(emptyList(), labels.size, firstIsNoFilter) }) {
+                    Text(stringResource(R.string.clear))
+                }
+                Spacer(Modifier.width(4.dp))
+                Button(onClick = { onDone(draft) }) { Text(stringResource(R.string.done)) }
+            }
+            Text(
+                stringResource(R.string.browse_genres_note),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (TagFilter.overCap(draft)) {
+                Text(
+                    stringResource(R.string.browse_genres_cap, TagFilter.MAX_LOADED),
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                labels.forEachIndexed { index, label ->
+                    FilterChip(
+                        selected = if (firstIsNoFilter && index == 0) draft.isEmpty() else index in draft,
+                        onClick = { draft = TagFilter.toggle(draft, index, firstIsNoFilter) },
+                        label = { Text(label) },
+                    )
                 }
             }
         }

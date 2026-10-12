@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import com.lagradost.quicknovel.ui.search.SearchLanguage
+import com.lagradost.quicknovel.ui.search.SearchLanguages
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.mihon.common.preference.AndroidPreferenceStore
 import com.mihon.common.preference.PreferenceStore
@@ -51,9 +51,16 @@ class ProviderPreferences(preferences: PreferenceStore) {
     val searchLangList =
         preferences.getStringSet("provider_lang_key", apis.map { it.lang }.toPersistentHashSet())
 
-    /** Language chip of the Search tab ([SearchLanguage.prefValue]); All by default. */
-    val searchLanguage =
-        preferences.getString(SearchLanguage.PREF_KEY, SearchLanguage.DEFAULT.prefValue)
+    /** Selected language chips of the Search tab ([SearchLanguages.toPref]); empty = All. */
+    val searchLanguages = preferences.getStringSet(SearchLanguages.PREF_KEY, emptySet())
+
+    init {
+        // Once: the single chip stored before the chips were multi-select.
+        SearchLanguages.migrate(preferences.getAll())?.let { migrated ->
+            searchLanguages.set(migrated)
+            preferences.getString(SearchLanguages.LEGACY_PREF_KEY).delete()
+        }
+    }
 }
 
 class DownloadPreferences(preferences: PreferenceStore) {

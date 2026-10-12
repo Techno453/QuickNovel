@@ -12,7 +12,12 @@
     <string name="browse_all_sources_summary">Every source\'s popular list, interleaved by rank</string>
     <string name="browse_listing">Listing</string>
     <string name="browse_order">Order</string>
-    <string name="browse_genre">Genre</string>
+    <string name="browse_genres">Genres</string>
+    <string name="browse_genres_all">All genres</string>
+    <string name="browse_genres_names">Genres: %1$s</string>
+    <string name="browse_genres_count">Genres: %1$d selected</string>
+    <string name="browse_genres_note">Novels from any selected genre, merged by rank.</string>
+    <string name="browse_genres_cap">Only the first %1$d genres in this list are loaded.</string>
     <string name="browse_language_all">All languages</string>
     <string name="browse_listing_popular">Popular</string>
     <string name="browse_listing_new">New</string>
