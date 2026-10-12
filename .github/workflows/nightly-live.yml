@@ -1,0 +1,68 @@
+# Daily live smoke test of the CJK providers against the real sites (one search, one novel,
+# one chapter each). A provider that breaks fails the job, and GitHub emails the owner about the
+# failed scheduled run. See docs/ci.md.
+name: Nightly live provider check
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # 03:17 UTC daily
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Only providers whose name contains this text (empty = all)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+      - name: Install Android platform (compileSdk 37)
+        run: sdkmanager --install "platforms;android-37.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Live smoke test
+        env:
+          LIVE_PROVIDER: ${{ inputs.provider }}
+        run: >
+          ./gradlew :app:testDebugUnitTest
+          --tests 'com.lagradost.quicknovel.providers.CjkProvidersLiveSmokeTest'
+          -Dlive=1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Live provider check'
+            echo
+            echo '```'
+            grep -ho '\[live [^&<]*' app/build/test-results/testDebugUnitTest/*.xml || echo 'no output'
+            echo
+            grep -ho 'failure message="[^"]*"' app/build/test-results/testDebugUnitTest/*.xml \
+              | sed 's/^failure message="\(.*\)"$/FAILED: \1/' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-test-report
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 30

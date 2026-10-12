@@ -113,8 +113,8 @@ class BiqugeProvider : MainAPI() {
 
     private suspend fun get(url: String) = app.get(url, headers = headers)
 
-    /** Parse SearchResponse list from any book-listing page. */
-    private fun parseBookList(document: org.jsoup.nodes.Document): List<SearchResponse> {
+    /** Parse SearchResponse list from any book-listing page. Pure; covered by a JVM fixture test. */
+    internal fun parseBookList(document: org.jsoup.nodes.Document): List<SearchResponse> {
         val results = mutableListOf<SearchResponse>()
 
         // Search results: div.newbox ul li > div.newnav h3
@@ -303,6 +303,28 @@ class BiqugeProvider : MainAPI() {
 
         val doc = Jsoup.parse(get(infoUrl).textWithEncoding(), infoUrl)
 
+        // Full chapter list at /book/{id}/
+        val listUrl = catalogUrl(infoUrl)
+        val listDoc = runCatching { Jsoup.parse(get(listUrl).textWithEncoding(), listUrl) }.getOrNull()
+
+        return parseLoad(infoUrl, doc, listDoc)
+    }
+
+    /** `/book/{id}/` chapter-list URL for a `/book/{id}.htm` info URL. */
+    internal fun catalogUrl(infoUrl: String): String {
+        val bookId = infoUrl.substringAfterLast("/book/").removeSuffix(".htm").trimEnd('/')
+        return "$mainUrl/book/$bookId/"
+    }
+
+    /**
+     * Pure half of [load]: builds the response from the info page and the chapter-list page
+     * ([listDoc] is null when that fetch failed). Covered by a JVM fixture test.
+     */
+    internal suspend fun parseLoad(
+        infoUrl: String,
+        doc: org.jsoup.nodes.Document,
+        listDoc: org.jsoup.nodes.Document?,
+    ): LoadResponse {
         // Title: <div class="booknav2"><h1><a>…</a></h1>
         val title = (
             doc.selectFirst("div.booknav2 h1 a")?.text()
@@ -324,13 +346,9 @@ class BiqugeProvider : MainAPI() {
         // Status from booknav2 text (contains "连载" / "完本")
         val statusText = doc.selectFirst("div.booknav2")?.text()
 
-        // Full chapter list at /book/{id}/
-        val bookId = infoUrl.substringAfterLast("/book/").removeSuffix(".htm").trimEnd('/')
-        val listUrl = "$mainUrl/book/$bookId/"
         val chapters = mutableListOf<com.lagradost.quicknovel.ChapterData>()
 
-        runCatching {
-            val listDoc = Jsoup.parse(get(listUrl).textWithEncoding(), listUrl)
+        if (listDoc != null) runCatching {
             // <div class="catalog" id="catalog"><ul><li data-num="N"><a href="/txt/…">ch title</a>
             // Page shows newest-first; reverse so index 0 = chapter 1
             listDoc.select("div.catalog#catalog ul li a[href], div.catalog ul li a[href]")

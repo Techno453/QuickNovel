@@ -14,12 +14,13 @@ object ChineseProviderUtils {
      * Detect charset from HTML meta tags or Content-Type header and decode bytes accordingly.
      * Handles GBK, GB2312, GB18030, and UTF-8 encoded Chinese novel sites.
      */
-    fun NiceResponse.textWithEncoding(): String {
-        val bytes = okhttpResponse.body.bytes()
+    fun NiceResponse.textWithEncoding(): String =
+        decodeHtml(okhttpResponse.body.bytes(), okhttpResponse.header("Content-Type"))
 
+    /** Pure half of [textWithEncoding]: decodes [bytes] by the Content-Type or meta charset. */
+    fun decodeHtml(bytes: ByteArray, contentType: String?): String {
         // Try to detect encoding from Content-Type header
-        val contentType = okhttpResponse.header("Content-Type") ?: ""
-        val headerCharset = extractCharset(contentType)
+        val headerCharset = extractCharset(contentType ?: "")
         if (headerCharset != null) {
             return bytes.toString(charset(headerCharset))
         }

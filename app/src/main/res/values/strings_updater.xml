@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- In-app updater (util/InAppUpdater.kt): shown instead of the system installer when the
+         downloaded APK cannot replace the installed app. -->
+    <string name="update_cannot_install_title">Can\'t install this update</string>
+    <string name="update_other_key">This update is signed with a different key than the installed app (for example a build you compiled yourself and a build from GitHub). Android only installs an update signed with the same key, so the install would fail.\n\nTo switch builds, back up your data (Settings → App settings → Backup data), uninstall this app, then install the APK from the releases page.</string>
+    <string name="update_other_package">This update is for %1$s, but this app is %2$s. Debug and release builds are separate apps, so it cannot update this one; install it from the releases page instead.</string>
+    <string name="update_not_an_apk">The downloaded update is not a valid APK. Try again later.</string>
+    <string name="update_open_releases">Open releases page</string>
+</resources>

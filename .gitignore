@@ -16,3 +16,7 @@ nul
 *.local.properties
 # Translation benchmark: user-provided sample chapters (may be copyrighted; never commit)
 /bench/samples/
+# Release signing keys (CI uses GitHub secrets, see docs/ci.md; never commit)
+*.jks
+*.keystore
+keystore.b64
