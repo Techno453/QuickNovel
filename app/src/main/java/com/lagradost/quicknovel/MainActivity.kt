@@ -66,6 +66,9 @@ import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
+import com.lagradost.quicknovel.updates.LibraryUpdateNotifier
+import com.lagradost.quicknovel.updates.LibraryUpdateScheduler
+import com.lagradost.quicknovel.updates.LibraryUpdateStore
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiSettings
 import com.lagradost.quicknovel.util.Apis.Companion.printProviders
@@ -500,6 +503,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
+        // Taps on the "new chapters" notifications; the action is consumed so a recreated
+        // activity does not open the novel again
+        when (intent.action) {
+            LibraryUpdateNotifier.ACTION_OPEN_RESULT -> {
+                intent.action = null
+                val url = intent.getStringExtra(LibraryUpdateNotifier.EXTRA_URL)
+                val apiName = intent.getStringExtra(LibraryUpdateNotifier.EXTRA_API_NAME)
+                if (url != null && apiName != null) {
+                    this.loadResult(url, apiName)
+                }
+                return
+            }
+
+            LibraryUpdateNotifier.ACTION_OPEN_LIBRARY -> {
+                intent.action = null
+                binding?.navView?.selectedItemId = R.id.navigation_download
+                return
+            }
+        }
         if (intent.action == Intent.ACTION_SEND) {
             val extraText = try { // I don't trust android
                 intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -898,6 +920,11 @@ class MainActivity : AppCompatActivity() {
 
         // Build the (slow) encrypted translator prefs off the main thread.
         ioSafe { SecurePrefs.warmUp(this@MainActivity) }
+
+        // New-chapter checks: opening a novel clears its "+N new", and the periodic check
+        // follows the settings (an unchanged schedule keeps its timing)
+        LibraryUpdateStore.install(this)
+        ioSafe { LibraryUpdateScheduler.schedule(this@MainActivity) }
 
         handleIntent(intent)
 

@@ -50,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -344,6 +345,17 @@ fun SearchResponseRow(
             }
         }
 
+        if (response.newChapters > 0) {
+            NewChaptersBadge(
+                count = response.newChapters,
+                modifier = Modifier
+                    .padding(horizontal = 5.dp)
+                    .circle()
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(vertical = 3.dp, horizontal = 10.dp)
+            )
+        }
+
         if (response.downloadState != null) {
             RefreshButton(response, action)
         } else {
@@ -379,6 +391,24 @@ fun SearchResponseRow(
         }
 
         Spacer(Modifier.width(10.dp))
+    }
+}
+
+/** "+N new": chapters the library update checker found since the novel was last opened */
+@Composable
+fun NewChaptersBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = TextUnit.Unspecified,
+) {
+    Box(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.library_update_new_badge, count),
+            color = MaterialTheme.colorScheme.background,
+            fontSize = fontSize,
+            lineHeight = fontSize,
+            maxLines = 1,
+        )
     }
 }
 
@@ -547,6 +577,17 @@ fun SearchResponseItem(
                                 fontSize = 12.sp, lineHeight = 12.sp
                             )
                         }
+                    }
+                    if (response.newChapters > 0) {
+                        NewChaptersBadge(
+                            count = response.newChapters,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .padding(start = 4.dp)
+                                .rounded()
+                                .background(MaterialTheme.colorScheme.primary)
+                                .padding(4.dp)
+                        )
                     }
                 }
             }

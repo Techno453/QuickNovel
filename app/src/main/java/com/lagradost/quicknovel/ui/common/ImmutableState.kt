@@ -63,6 +63,8 @@ import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.ui.download.DownloadFragment
+import com.lagradost.quicknovel.updates.LibraryUpdateStore
+import com.lagradost.quicknovel.updates.NovelUpdateState
 import com.lagradost.quicknovel.util.BlurTransformation
 import com.lagradost.quicknovel.util.ResultCached
 import kotlinx.collections.immutable.ImmutableList
@@ -263,6 +265,10 @@ data class ImmutableSearchResponse(
     val chaptersRead: Int,
     val loadData: ImmutableLoadData? = null,
     val reviewData: String? = null,
+    /** New chapters found by the library update checker since the item was last opened */
+    val newChapters: Int = 0,
+    /** The time the library update checker last found new chapters */
+    val timeOfNewChapters: Long? = null,
 ) {
 
     fun matchesQuery(query: String): Boolean =
@@ -271,6 +277,16 @@ data class ImmutableSearchResponse(
     val chapters: Long? get() = totalChapters ?: downloadState?.total
     val isImported: Boolean get() = (apiName == IMPORT_SOURCE || apiName == IMPORT_SOURCE_PDF)
     val hasNewChapters: Boolean get() = downloadState != null && epubSize != null && !isImported && epubSize < downloadState.progress
+
+    /** "Recently updated": a new chapter was downloaded or found on the site, whichever is later */
+    val timeOfLastUpdate: Long
+        get() = maxOf(timeOfChapterDownloaded ?: 0L, timeOfNewChapters ?: 0L)
+
+    /** Copy with the stored library update state of this item */
+    fun withUpdateState(): ImmutableSearchResponse {
+        val state = id?.let { libraryUpdateState(it) } ?: return this
+        return copy(newChapters = state.newChapters, timeOfNewChapters = state.lastNewChaptersAt)
+    }
 
     val imageRequest
         get() = @Composable {
@@ -406,6 +422,9 @@ data class ImmutableSearchResponse(
 
         fun epubSize(id: Int): Int = getKey(DOWNLOAD_EPUB_SIZE, id.toString()) ?: 0
 
+        fun libraryUpdateState(id: Int): NovelUpdateState? =
+            getKey<NovelUpdateState>(LibraryUpdateStore.FOLDER, id.toString())
+
         fun setTimeOfPageOpened(id: Int, value: Long) {
             setKey(
                 DOWNLOAD_EPUB_LAST_ACCESS,
@@ -496,8 +515,9 @@ data class ImmutableSearchResponse(
         }
 
 
-        fun from(cache: ResultCached): ImmutableSearchResponse =
-            ImmutableSearchResponse(
+        fun from(cache: ResultCached): ImmutableSearchResponse {
+            val update = libraryUpdateState(cache.id)
+            return ImmutableSearchResponse(
                 name = cache.name,
                 url = cache.source,
                 posterUrl = cache.poster,
@@ -510,15 +530,19 @@ data class ImmutableSearchResponse(
                 author = cache.author,
                 synopsis = cache.synopsis,
                 timeOfPageOpened = timeOfPageOpened(cache.id),
-                chaptersRead = chaptersRead(cache.name)
+                chaptersRead = chaptersRead(cache.name),
+                newChapters = update?.newChapters ?: 0,
+                timeOfNewChapters = update?.lastNewChaptersAt,
             )
+        }
 
         fun from(
             id: Int,
             cache: DownloadFragment.DownloadData,
             downloadState: ImmutableDownloadState? = null
-        ) =
-            ImmutableSearchResponse(
+        ): ImmutableSearchResponse {
+            val update = libraryUpdateState(id)
+            return ImmutableSearchResponse(
                 name = cache.name,
                 url = cache.source,
                 posterUrl = cache.posterUrl,
@@ -534,8 +558,11 @@ data class ImmutableSearchResponse(
                 tags = cache.tags?.toImmutableList(),
                 timeOfPageOpened = timeOfPageOpened(id),
                 epubSize = epubSize(id),
-                chaptersRead = chaptersRead(cache.name)
+                chaptersRead = chaptersRead(cache.name),
+                newChapters = update?.newChapters ?: 0,
+                timeOfNewChapters = update?.lastNewChaptersAt,
             )
+        }
     }
 
     fun doAction(operation: SearchResponseOperation) {
@@ -830,6 +857,11 @@ val normalSortingMethods = persistentListOf(
         SortingMethodType.LastOpened,
         SortingMethodType.RevLastOpened
     ),
+    SortingMethodPair(
+        R.string.recently_updated_sort,
+        SortingMethodType.LastNewChapterDownloaded,
+        SortingMethodType.RevLastNewChapterDownloaded
+    ),
     /*SortingMethodPair(
         R.string.recently_visisted_sort,
         SortingMethodType.LastCached,
@@ -1064,10 +1096,11 @@ data class ImmutableSearchList(
             sortByLong<ImmutableSearchResponse> { it.timeOfPageOpened ?: 0L }.rev()
         private val RevLastOpened =
             sortByLong<ImmutableSearchResponse> { it.timeOfPageOpened ?: 0L }
+        // "Recently updated": a new chapter downloaded or found by the library update checker
         private val LastNewChapterDownloaded =
-            sortByLong<ImmutableSearchResponse> { it.timeOfChapterDownloaded ?: 0L }.rev()
+            sortByLong<ImmutableSearchResponse> { it.timeOfLastUpdate }.rev()
         private val RevLastNewChapterDownloaded =
-            sortByLong<ImmutableSearchResponse> { it.timeOfChapterDownloaded ?: 0L }
+            sortByLong<ImmutableSearchResponse> { it.timeOfLastUpdate }
         private val LastCached = sortByLong<ImmutableSearchResponse> { it.timeOfCached }.rev()
         private val RevLastCached = sortByLong<ImmutableSearchResponse> { it.timeOfCached }
         private val ChapterCount = sortByLong<ImmutableSearchResponse> { it.chapters ?: 0L }.rev()

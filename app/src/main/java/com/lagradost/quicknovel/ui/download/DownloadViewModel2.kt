@@ -7,6 +7,7 @@ import com.lagradost.cloudstream4.state.ActionHandler
 import com.lagradost.cloudstream4.state.DebounceQuery
 import com.lagradost.cloudstream4.state.DefaultStateContainer
 import com.lagradost.cloudstream4.state.StateContainer
+import android.widget.Toast
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
@@ -19,6 +20,8 @@ import com.lagradost.quicknovel.BookDownloader2.downloadProgress
 import com.lagradost.quicknovel.BookDownloader2.downloadProgressChanged
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.CURRENT_TAB
+import com.lagradost.quicknovel.CommonActivity.showToast
+import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.DOWNLOAD_NORMAL_SORTING_METHOD
 import com.lagradost.quicknovel.DOWNLOAD_SETTINGS
 import com.lagradost.quicknovel.DOWNLOAD_SORTING_METHOD
@@ -42,6 +45,10 @@ import com.lagradost.quicknovel.ui.common.updateRow
 import com.lagradost.quicknovel.ui.common.updateRows
 import com.lagradost.quicknovel.ui.download.DownloadDialog.DeleteBookmark
 import com.lagradost.quicknovel.ui.download.DownloadDialog.DeleteItem
+import com.lagradost.quicknovel.updates.LibraryUpdateChecker
+import com.lagradost.quicknovel.updates.LibraryUpdateScheduler
+import com.lagradost.quicknovel.updates.LibraryUpdateStore
+import com.lagradost.quicknovel.updates.UpdateCheckProgress
 import com.lagradost.quicknovel.util.ResultCached
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
@@ -61,6 +68,8 @@ data class DownloadPageState(
     val activePage: Int = 0,
     /** null -> not shown */
     val dialog: DownloadDialog? = null,
+    /** Progress of a running new-chapter check, null when none is running */
+    val updateCheck: UpdateCheckProgress? = null,
 )
 
 @Immutable
@@ -84,6 +93,9 @@ sealed class DownloadPageAction {
     ) : DownloadPageAction()
 
     data class SelectPage(val page: Int) : DownloadPageAction()
+
+    /** Check the library for new chapters now */
+    object CheckForNewChapters : DownloadPageAction()
 }
 
 class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
@@ -150,6 +162,16 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
                 setKey(DOWNLOAD_SETTINGS, CURRENT_TAB, action.page)
                 updateState {
                     copy(activePage = action.page)
+                }
+            }
+
+            DownloadPageAction.CheckForNewChapters -> {
+                val context = BaseApplication.context ?: return
+                if (LibraryUpdateChecker.isRunning) {
+                    showToast(R.string.library_update_already_running, Toast.LENGTH_SHORT)
+                } else {
+                    showToast(R.string.library_update_started, Toast.LENGTH_SHORT)
+                    LibraryUpdateScheduler.runNow(context)
                 }
             }
 
@@ -439,6 +461,12 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
         BookDownloader2.refreshingChanged += this::onRefreshingChanged
         BookDownloader2.chapterReadChanged += this::onChapterChanged
         BookDownloader2.openChanged += this::onOpen
+        LibraryUpdateStore.changed += this::onLibraryUpdateChanged
+        viewModelScope.launch {
+            LibraryUpdateChecker.progress.collect { progress ->
+                updateState { copy(updateCheck = progress) }
+            }
+        }
     }
 
     override fun onCleared() {
@@ -449,6 +477,23 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
         BookDownloader2.refreshingChanged -= this::onRefreshingChanged
         BookDownloader2.chapterReadChanged -= this::onChapterChanged
         BookDownloader2.openChanged -= this::onOpen
+        LibraryUpdateStore.changed -= this::onLibraryUpdateChanged
+    }
+
+    /** The library update checker found new chapters for id, or they were seen */
+    private fun onLibraryUpdateChanged(id: Int) = viewModelScope.launch {
+        val stored = ImmutableSearchResponse.libraryUpdateState(id)
+        updateState {
+            copy(pages = pages.updateRows {
+                if (!data.containsKey(id)) return@updateRows this
+                update(id) {
+                    copy(
+                        newChapters = stored?.newChapters ?: 0,
+                        timeOfNewChapters = stored?.lastNewChaptersAt
+                    )
+                }
+            })
+        }
     }
 
     fun onOpen(id: Int) {

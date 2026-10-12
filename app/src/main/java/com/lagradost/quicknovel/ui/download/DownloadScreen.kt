@@ -28,6 +28,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -48,6 +49,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -73,6 +76,7 @@ import com.lagradost.quicknovel.ui.common.SortingMethodPair
 import com.lagradost.quicknovel.ui.common.SortingMethodType
 import com.lagradost.quicknovel.ui.common.normalSortingMethods
 import com.lagradost.quicknovel.ui.common.sortingMethods
+import com.lagradost.quicknovel.updates.UpdateCheckProgress
 import com.mihon.common.preference.AndroidPreferenceStore
 import com.mihon.presentation.settings.collectAsState
 import kotlinx.collections.immutable.PersistentList
@@ -207,6 +211,14 @@ fun DownloadScreen(
                                     onAction(DownloadPageAction.Refresh)
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.library_update_check_now)) },
+                                enabled = state.updateCheck == null,
+                                onClick = {
+                                    expanded = false
+                                    onAction(DownloadPageAction.CheckForNewChapters)
+                                }
+                            )
                         }
 
                         IconButton(onClick = {
@@ -240,6 +252,17 @@ fun DownloadScreen(
         }
 
         Column {
+            val updateCheck = state.updateCheck
+            if (updateCheck != null) {
+                UpdateCheckIndicator(
+                    updateCheck,
+                    Modifier.padding(
+                        start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+                        end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
+                        top = innerPadding.calculateTopPadding()
+                    )
+                )
+            }
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -248,7 +271,7 @@ fun DownloadScreen(
                     .padding(
                         start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                         end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                        top = innerPadding.calculateTopPadding()
+                        top = if (updateCheck == null) innerPadding.calculateTopPadding() else 0.dp
                     )
                     .weight(1.0f)
             ) { page ->
@@ -268,6 +291,26 @@ fun DownloadScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         }
+    }
+}
+
+/** Thin progress bar while the library is checked for new chapters */
+@Composable
+fun UpdateCheckIndicator(progress: UpdateCheckProgress, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.library_update_checking, progress.checked, progress.total)
+    if (progress.total <= 0) {
+        LinearProgressIndicator(
+            modifier = modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = description }
+        )
+    } else {
+        LinearProgressIndicator(
+            progress = { progress.checked.toFloat() / progress.total },
+            modifier = modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = description }
+        )
     }
 }
 
