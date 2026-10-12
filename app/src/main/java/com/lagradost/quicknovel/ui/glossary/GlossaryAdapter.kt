@@ -1,11 +1,13 @@
 package com.lagradost.quicknovel.ui.glossary
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.quicknovel.databinding.ItemGlossaryTermBinding
+import com.lagradost.quicknovel.translator.TermAliases
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
 
 class GlossaryAdapter(
@@ -23,10 +25,24 @@ class GlossaryAdapter(
     inner class ViewHolder(val binding: ItemGlossaryTermBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(term: GlossaryTerm) {
+            val ctx = binding.root.context
             binding.termChinese.text = term.source
             binding.termEnglish.text = term.english
-            binding.termCategory.text = term.category
-            binding.termDescription.text = term.description.ifBlank { "" }
+            binding.termCategory.text = AddTermDialogFragment.categoryLabel(ctx, GlossaryTerm.normalizeCategory(term.category))
+
+            binding.termGender.visibility = if (term.isCharacter) View.VISIBLE else View.GONE
+            binding.termGender.text = GlossaryTerm.genderBadge(term.gender)
+
+            binding.termAuto.visibility = if (term.autoAdded && !term.locked) View.VISIBLE else View.GONE
+            binding.termLock.visibility = if (term.locked) View.VISIBLE else View.GONE
+
+            val aliases = TermAliases.parse(term.aliases)
+            val preview = listOfNotNull(
+                term.effectiveNotes.takeIf { it.isNotBlank() },
+                aliases.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "aka ")
+            ).joinToString(" · ")
+            binding.termDescription.text = preview
+            binding.termDescription.visibility = if (preview.isEmpty()) View.GONE else View.VISIBLE
 
             binding.root.setOnLongClickListener {
                 onDelete(term)

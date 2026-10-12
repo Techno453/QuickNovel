@@ -15,6 +15,9 @@ interface GlossaryDao {
     @Query("SELECT * FROM glossary_terms WHERE novel_id = :novelId ORDER BY category, chinese")
     suspend fun getAllTermsSync(novelId: String): List<GlossaryTerm>
 
+    @Query("SELECT * FROM glossary_terms WHERE novel_id = :novelId AND chinese = :source ORDER BY id LIMIT 1")
+    suspend fun getBySource(novelId: String, source: String): GlossaryTerm?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertTerm(term: GlossaryTerm): Long
 
@@ -32,4 +35,10 @@ interface GlossaryDao {
 
     @Query("SELECT COUNT(*) FROM glossary_terms WHERE novel_id = :novelId")
     suspend fun countForNovel(novelId: String): Int
+
+    @Query("SELECT COUNT(*) FROM glossary_terms WHERE novel_id = :novelId AND category = 'character'")
+    suspend fun countCharacters(novelId: String): Int
+
+    @Query("UPDATE glossary_terms SET locked = 1, auto_added = 0 WHERE id IN (:ids)")
+    suspend fun lockTerms(ids: List<Long>)
 }

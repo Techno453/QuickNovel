@@ -331,4 +331,134 @@
     <string name="more_spacing">More Spacing</string>
     <string name="less_spacing">Less Spacing</string>
     <string name="unable_to_inflate">UI was unable to be created correctly, this is a MAJOR BUG and should be reported immediately %s</string>
+
+    <!-- AI translation: Story Bible (glossary, consistency checks, analysis) -->
+    <plurals name="glossary_deviations">
+        <item quantity="one">%d glossary deviation</item>
+        <item quantity="other">%d glossary deviations</item>
+    </plurals>
+    <plurals name="untranslated_fragments">
+        <item quantity="one">%d untranslated fragment</item>
+        <item quantity="other">%d untranslated fragments</item>
+    </plurals>
+    <plurals name="incomplete_chunks">
+        <item quantity="one">%d possibly incomplete passage</item>
+        <item quantity="other">%d possibly incomplete passages</item>
+    </plurals>
+    <plurals name="new_terms_to_review">
+        <item quantity="one">%d new term</item>
+        <item quantity="other">%d new terms</item>
+    </plurals>
+    <string name="translation_finished_title">Translation finished</string>
+    <string name="translation_finished_text">%1$d of %2$d chapters translated</string>
+    <string name="translation_no_issues">no consistency issues</string>
+
+    <string name="analyzing_novel">Analyzing novel</string>
+    <string name="analysis_fetching">Fetching chapter %1$d of %2$d</string>
+    <string name="analysis_extracting">Extracting characters and terms (%1$d/%2$d)</string>
+    <string name="analysis_done">Story Bible updated: %d new terms</string>
+    <string name="analysis_done_premise">Story Bible updated: %d new terms, premise updated</string>
+    <string name="analysis_failed">Analysis failed: %s</string>
+    <string name="analysis_no_chapters">Could not load any chapters to analyze</string>
+    <string name="analysis_cancelled">Analysis cancelled</string>
+    <string name="translator_busy">A translation or analysis is already running</string>
+    <string name="translator_no_api_key">Set your API key in Settings → Translation first</string>
+
+    <string name="glossary_search_hint">Search names and terms</string>
+    <string name="glossary_filter_all">All</string>
+    <string name="glossary_filter_unreviewed">Unreviewed auto-added</string>
+    <string name="glossary_cat_character">Characters</string>
+    <string name="glossary_cat_location">Locations</string>
+    <string name="glossary_cat_sect">Sects</string>
+    <string name="glossary_cat_rank">Ranks</string>
+    <string name="glossary_cat_technique">Techniques</string>
+    <string name="glossary_cat_artifact">Items</string>
+    <string name="glossary_cat_creature">Creatures</string>
+    <string name="glossary_cat_title">Titles</string>
+    <string name="glossary_cat_other">Other</string>
+    <string name="glossary_lock_all_shown">Lock all shown</string>
+    <string name="glossary_locked_count">Locked %d terms</string>
+    <string name="glossary_auto_marker">auto</string>
+    <string name="glossary_locked_desc">Locked</string>
+    <string name="glossary_empty">No glossary terms yet.\nTap + to add, analyze the novel, or load presets from the menu.</string>
+    <string name="glossary_empty_filtered">No matching terms</string>
+    <string name="glossary_review_new_terms">Review new terms</string>
+    <string name="glossary_add_term">Add term</string>
+    <string name="glossary_menu_analyze">Analyze novel…</string>
+    <string name="glossary_menu_style">Translation style…</string>
+    <string name="glossary_menu_review_auto">Review auto-added</string>
+    <string name="glossary_menu_presets">Load presets</string>
+    <string name="glossary_menu_export">Export JSON</string>
+    <string name="glossary_menu_import">Import JSON from clipboard</string>
+    <string name="glossary_presets_loaded">Imported %d common cultivation terms</string>
+    <string name="glossary_export_title">Export Story Bible JSON</string>
+    <string name="glossary_export_copy">Copy</string>
+    <string name="glossary_export_copied">Copied to clipboard</string>
+    <string name="glossary_export_saved">Story Bible exported</string>
+    <string name="glossary_export_failed">Could not write the file: %s</string>
+    <string name="glossary_import_title">Import Story Bible</string>
+    <string name="glossary_import_confirm">Import %d terms from the clipboard? Terms with the same source text are replaced.</string>
+    <string name="glossary_import_done">Imported %d terms</string>
+    <string name="glossary_import_invalid">The clipboard does not contain a glossary export (%s)</string>
+    <string name="glossary_import_empty">The clipboard is empty</string>
+    <string name="glossary_delete_title">Delete term</string>
+    <string name="glossary_delete_message">Delete \"%1$s → %2$s\"?</string>
+    <string name="glossary_delete">Delete</string>
+
+    <string name="term_dialog_add_title">Add term</string>
+    <string name="term_dialog_edit_title">Edit term</string>
+    <string name="term_source_hint">Source text (original language)</string>
+    <string name="term_english_hint">English rendering</string>
+    <string name="term_category">Category</string>
+    <string name="term_gender">Gender</string>
+    <string name="gender_male">♂ Male</string>
+    <string name="gender_female">♀ Female</string>
+    <string name="gender_neutral">⚲ Neutral</string>
+    <string name="gender_unknown">\? Unknown</string>
+    <string name="term_aliases_hint">Aliases: other source forms, comma-separated</string>
+    <string name="term_notes_hint">Notes: role, relationships, speech style</string>
+    <string name="term_locked">Locked (confirmed; never changed automatically)</string>
+    <string name="term_save">Save</string>
+    <string name="rename_apply_title">Update translated chapters?</string>
+    <string name="rename_apply_message">\"%1$s\" appears in %2$d already-translated chapters. Replace it with \"%3$s\" there too?</string>
+    <string name="rename_apply_yes">Apply to %d chapters</string>
+    <string name="rename_apply_no">Only the glossary</string>
+    <string name="rename_applied">Updated %d chapters</string>
+
+    <string name="pending_intro">Terms found during translation. Edit them if needed, then approve or reject:</string>
+    <string name="pending_approve">Approve</string>
+    <string name="pending_reject">Reject</string>
+    <string name="pending_approve_all">Approve all</string>
+    <string name="pending_reject_all">Reject all</string>
+    <string name="pending_reject_all_confirm">Reject all %d pending terms?</string>
+    <string name="pending_meta">Chapter %1$d · confidence %2$d%%</string>
+    <string name="pending_done">Done</string>
+
+    <string name="style_title">Translation style</string>
+    <string name="style_names">Names</string>
+    <string name="style_honorifics">Honorifics and forms of address</string>
+    <string name="style_notes_hint">Style notes for the translator (e.g. British spelling, keep \"Young Master\")</string>
+    <string name="style_premise_hint">Story premise (filled in by Analyze novel)</string>
+    <string name="style_name_pinyin">Pinyin for all names (Lin Feng, Qingyun Sect)</string>
+    <string name="style_name_meaning">Translate meaningful names (Azure Cloud Sect, Old Ghost)</string>
+    <string name="style_name_mixed">Mixed: Pinyin for people and places, meaning for titles and techniques</string>
+    <string name="style_name_family_given">Family name first (Sato Yuuma)</string>
+    <string name="style_name_given_family">Given name first (Yuuma Sato)</string>
+    <string name="style_hon_keep">Keep (-san, hyung, shixiong)</string>
+    <string name="style_hon_drop">Drop</string>
+    <string name="style_hon_adapt">Adapt to English (Senior Brother, Lord)</string>
+    <string name="style_saved">Translation style saved</string>
+
+    <string name="analyze_title">Analyze novel</string>
+    <string name="analyze_message">Reads the first chapters (without translating them) and builds the character sheet: names, gender, roles, relationships and speech style, plus places, factions, ranks, techniques, items and a short premise.</string>
+    <string name="analyze_chapters">Chapters to analyze: %d</string>
+    <string name="analyze_estimate">Est. cost: %1$s — %2$s</string>
+    <string name="analyze_start">Analyze</string>
+    <string name="analyze_loading">Loading the chapter list…</string>
+    <string name="analyze_no_source">Could not find this novel\'s chapter list. Open the novel page first, then try again.</string>
+    <string name="analyze_cancel">Cancel</string>
+
+    <string name="bible_status">Story Bible: %1$d characters, %2$d terms</string>
+    <string name="bible_analyze_hint">No characters yet. Analyze the first chapters so names and genders stay consistent.</string>
+    <string name="bible_analyze_button">Analyze first chapters…</string>
 </resources>

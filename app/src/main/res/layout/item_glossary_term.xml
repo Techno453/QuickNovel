@@ -1,32 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
     android:orientation="vertical"
-    android:padding="12dp"
-    android:background="?attr/selectableItemBackground">
+    android:paddingStart="16dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/term_gender"
+            android:layout_width="22dp"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="?attr/textColor"
+            android:textSize="15sp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/term_chinese"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textColor="?attr/textColor"
             android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="?attr/textColor" />
+            android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="→"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
+            android:text="→"
             android:textColor="?attr/textColor" />
 
         <TextView
@@ -34,16 +47,39 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="16sp"
-            android:textColor="?attr/textColor" />
+            android:textColor="?attr/textColor"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/term_auto"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/circle_shape"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:text="@string/glossary_auto_marker"
+            android:textColor="@android:color/white"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/term_lock"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@string/glossary_locked_desc"
+            android:src="@drawable/ic_baseline_lock_24"
+            android:visibility="gone"
+            app:tint="?attr/grayTextColor" />
 
         <TextView
             android:id="@+id/term_category"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:paddingStart="8dp"
-            android:textSize="12sp"
-            android:textColor="?attr/grayTextColor" />
+            android:textColor="?attr/grayTextColor"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <TextView
@@ -51,8 +87,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:textSize="12sp"
+        android:ellipsize="end"
+        android:maxLines="2"
         android:textColor="?attr/grayTextColor"
+        android:textSize="12sp"
         android:visibility="gone" />
 
 </LinearLayout>

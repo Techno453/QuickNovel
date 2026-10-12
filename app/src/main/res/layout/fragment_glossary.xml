@@ -6,56 +6,165 @@
     android:layout_height="match_parent"
     android:background="?attr/primaryBlackBackground">
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/glossary_list"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingBottom="80dp" />
+        android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/glossary_empty"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:text="No glossary terms yet.\nTap + to add or load presets from the menu."
-        android:textColor="?attr/grayTextColor"
-        android:visibility="gone" />
+        <!-- "Analyze novel" progress -->
+        <LinearLayout
+            android:id="@+id/analysis_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="20dp"
+                android:layout_height="20dp" />
+
+            <TextView
+                android:id="@+id/analysis_status_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:textColor="?attr/textColor"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/analysis_cancel"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/analyze_cancel" />
+        </LinearLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="12dp"
+            android:hint="@string/glossary_search_hint"
+            app:endIconMode="clear_text">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/glossary_search"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/glossary_filter_chips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                app:selectionRequired="true"
+                app:singleLine="true"
+                app:singleSelection="true" />
+        </HorizontalScrollView>
+
+        <!-- Shown while reviewing auto-added terms -->
+        <LinearLayout
+            android:id="@+id/review_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/review_bar_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="?attr/grayTextColor"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/lock_all_shown"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/glossary_lock_all_shown" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/glossary_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="120dp" />
+
+            <TextView
+                android:id="@+id/glossary_empty"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:padding="24dp"
+                android:text="@string/glossary_empty"
+                android:textColor="?attr/grayTextColor"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:orientation="vertical"
         android:gravity="end"
-        android:padding="16dp"
-        app:layout_anchorGravity="bottom|end">
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <LinearLayout
+            android:id="@+id/pending_terms_btn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
             android:layout_marginBottom="12dp"
-            android:id="@+id/pending_terms_btn"
             android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:padding="8dp">
 
             <TextView
                 android:id="@+id/pending_terms_badge"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:gravity="center"
-                android:textSize="12sp"
-                android:textColor="@android:color/white"
                 android:background="@drawable/circle_shape"
+                android:gravity="center"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
                 android:visibility="gone" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:text="Review New Terms"
+                android:text="@string/glossary_review_new_terms"
                 android:textColor="?attr/textColor" />
         </LinearLayout>
 
@@ -63,7 +172,7 @@
             android:id="@+id/add_term_fab"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:contentDescription="Add term"
+            android:contentDescription="@string/glossary_add_term"
             app:srcCompat="@drawable/ic_baseline_add_24" />
     </LinearLayout>
 

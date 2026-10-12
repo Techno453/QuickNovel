@@ -1,7 +1,9 @@
 package com.lagradost.quicknovel.ui.translate
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
+import com.lagradost.quicknovel.R
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.lagradost.quicknovel.ChapterData
@@ -15,8 +17,33 @@ data class TranslationProgress(
     val currentChapterName: String,
     val completed: Boolean = false,
     val error: String? = null,
-    val newTermsFound: Int = 0
-)
+    /** Pending + auto-added terms found so far (both are worth reviewing in the Glossary). */
+    val newTermsFound: Int = 0,
+    /** Story Bible terms missing from the output, summed over the chapters so far. */
+    val glossaryDeviations: Int = 0,
+    /** Untranslated CJK fragments left in the output. */
+    val untranslatedFragments: Int = 0,
+    /** Chunks with fewer than 70% of the source paragraphs. */
+    val paragraphWarnings: Int = 0,
+) {
+    val hasQualityIssues: Boolean
+        get() = glossaryDeviations > 0 || untranslatedFragments > 0 || paragraphWarnings > 0
+
+    /** "3 glossary deviations, 1 untranslated fragment" (or "no consistency issues"). */
+    fun qualitySummary(ctx: Context): String = qualitySummary(ctx, glossaryDeviations, untranslatedFragments, paragraphWarnings)
+
+    companion object {
+        fun qualitySummary(ctx: Context, deviations: Int, fragments: Int, paragraphWarnings: Int): String {
+            val res = ctx.resources
+            val parts = buildList {
+                if (deviations > 0) add(res.getQuantityString(R.plurals.glossary_deviations, deviations, deviations))
+                if (fragments > 0) add(res.getQuantityString(R.plurals.untranslated_fragments, fragments, fragments))
+                if (paragraphWarnings > 0) add(res.getQuantityString(R.plurals.incomplete_chunks, paragraphWarnings, paragraphWarnings))
+            }
+            return if (parts.isEmpty()) ctx.getString(R.string.translation_no_issues) else parts.joinToString(", ")
+        }
+    }
+}
 
 class TranslateViewModel(application: Application) : AndroidViewModel(application) {
     private val db = TranslatorDatabase.getInstance(application)

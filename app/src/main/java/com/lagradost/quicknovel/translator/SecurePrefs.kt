@@ -31,6 +31,19 @@ object SecurePrefs {
     private const val KEY_AI_SEARCH = "ai_search_queries"
     private const val KEY_TRANSLATE_ON_DEMAND = "translate_on_demand"
 
+    // Story Bible / consistency settings (UI to be wired into the settings screen).
+    const val KEY_AUTO_ADD_TERMS = "auto_add_discovered_terms"
+    const val KEY_STRICT_MODE = "strict_consistency_mode"
+    const val KEY_CARRY_STORY_CONTEXT = "carry_story_context"
+    const val KEY_ANALYZE_CHAPTER_COUNT = "analyze_chapter_count"
+    /** Suffixed with the source language: default_name_style_zh / _ja / _ko. */
+    const val KEY_DEFAULT_NAME_STYLE_PREFIX = "default_name_style_"
+    /** Suffixed with the source language: default_honorific_style_zh / _ja / _ko. */
+    const val KEY_DEFAULT_HONORIFIC_STYLE_PREFIX = "default_honorific_style_"
+
+    const val DEFAULT_ANALYZE_CHAPTERS = 5
+    const val MAX_ANALYZE_CHAPTERS = 20
+
     const val MODEL_GPT4O = LlmConfig.MODEL_GPT4O
     const val MODEL_GPT4O_MINI = LlmConfig.MODEL_GPT4O_MINI
 
@@ -43,6 +56,9 @@ object SecurePrefs {
     @Volatile private var translateSearch = true
     @Volatile private var aiSearch = false
     @Volatile private var translateOnDemand = false
+    @Volatile private var autoAddTerms = true
+    @Volatile private var strictMode = true
+    @Volatile private var carryStoryContext = true
 
     /** True if the encrypted store failed and plain SharedPreferences are in use. */
     @Volatile
@@ -59,6 +75,9 @@ object SecurePrefs {
                 translateSearch = created.getBoolean(KEY_TRANSLATE_SEARCH, true)
                 aiSearch = created.getBoolean(KEY_AI_SEARCH, false)
                 translateOnDemand = created.getBoolean(KEY_TRANSLATE_ON_DEMAND, false)
+                autoAddTerms = created.getBoolean(KEY_AUTO_ADD_TERMS, true)
+                strictMode = created.getBoolean(KEY_STRICT_MODE, true)
+                carryStoryContext = created.getBoolean(KEY_CARRY_STORY_CONTEXT, true)
                 prefs = created
             }
         }
@@ -180,5 +199,76 @@ object SecurePrefs {
     fun setTranslateOnDemandEnabled(context: Context, enabled: Boolean) {
         translateOnDemand = enabled
         edit(context) { putBoolean(KEY_TRANSLATE_ON_DEMAND, enabled) }
+    }
+
+    // ---- Story Bible / consistency ----
+
+    /** Insert confidently discovered names into the bible immediately (default on). */
+    fun isAutoAddTermsEnabled(context: Context?): Boolean {
+        ensureLoaded(context); return autoAddTerms
+    }
+
+    fun setAutoAddTermsEnabled(context: Context, enabled: Boolean) {
+        autoAddTerms = enabled
+        edit(context) { putBoolean(KEY_AUTO_ADD_TERMS, enabled) }
+    }
+
+    /** Re-request a chunk once when glossary / untranslated-text / paragraph checks fail (default on). */
+    fun isStrictModeEnabled(context: Context?): Boolean {
+        ensureLoaded(context); return strictMode
+    }
+
+    fun setStrictModeEnabled(context: Context, enabled: Boolean) {
+        strictMode = enabled
+        edit(context) { putBoolean(KEY_STRICT_MODE, enabled) }
+    }
+
+    /** Carry story context (premise, previous chapter summary, preceding English) between chapters (default on). */
+    fun isCarryStoryContextEnabled(context: Context?): Boolean {
+        ensureLoaded(context); return carryStoryContext
+    }
+
+    fun setCarryStoryContextEnabled(context: Context, enabled: Boolean) {
+        carryStoryContext = enabled
+        edit(context) { putBoolean(KEY_CARRY_STORY_CONTEXT, enabled) }
+    }
+
+    /** Engine options from the current settings. */
+    fun translationOptions(context: Context?): TranslationOptions = TranslationOptions(
+        strictMode = isStrictModeEnabled(context),
+        autoAddTerms = isAutoAddTermsEnabled(context),
+        carryStoryContext = isCarryStoryContextEnabled(context),
+    )
+
+    /** Default chapter count for "Analyze novel" (1–20, default 5). */
+    fun getAnalyzeChapterCount(context: Context?): Int =
+        (getPrefs(context)?.getInt(KEY_ANALYZE_CHAPTER_COUNT, DEFAULT_ANALYZE_CHAPTERS) ?: DEFAULT_ANALYZE_CHAPTERS)
+            .coerceIn(1, MAX_ANALYZE_CHAPTERS)
+
+    fun setAnalyzeChapterCount(context: Context, count: Int) =
+        edit(context) { putInt(KEY_ANALYZE_CHAPTER_COUNT, count.coerceIn(1, MAX_ANALYZE_CHAPTERS)) }
+
+    /** Global default name style for [lang] (see [TranslationStyle.nameStyleOptions]). */
+    fun getDefaultNameStyle(context: Context?, lang: String?): String {
+        val code = TranslationLanguages.normalize(lang) ?: TranslationLanguages.DEFAULT
+        val stored = getPrefs(context)?.getString(KEY_DEFAULT_NAME_STYLE_PREFIX + code, null)
+        return stored?.takeIf { it in TranslationStyle.nameStyleOptions(code) } ?: TranslationStyle.defaultNameStyle(code)
+    }
+
+    fun setDefaultNameStyle(context: Context, lang: String, style: String) {
+        val code = TranslationLanguages.normalize(lang) ?: return
+        edit(context) { putString(KEY_DEFAULT_NAME_STYLE_PREFIX + code, style) }
+    }
+
+    /** Global default honorific style ("keep" / "drop" / "adapt") for [lang]. */
+    fun getDefaultHonorificStyle(context: Context?, lang: String?): String {
+        val code = TranslationLanguages.normalize(lang) ?: TranslationLanguages.DEFAULT
+        val stored = getPrefs(context)?.getString(KEY_DEFAULT_HONORIFIC_STYLE_PREFIX + code, null)
+        return stored?.takeIf { it in TranslationStyle.HONORIFIC_OPTIONS } ?: TranslationStyle.defaultHonorificStyle(code)
+    }
+
+    fun setDefaultHonorificStyle(context: Context, lang: String, style: String) {
+        val code = TranslationLanguages.normalize(lang) ?: return
+        edit(context) { putString(KEY_DEFAULT_HONORIFIC_STYLE_PREFIX + code, style) }
     }
 }
