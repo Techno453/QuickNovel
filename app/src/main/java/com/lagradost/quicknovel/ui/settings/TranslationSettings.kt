@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -30,9 +31,12 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.translator.LlmConfig
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationEngine
+import com.lagradost.quicknovel.translator.TranslationLanguages
+import com.lagradost.quicknovel.translator.TranslationStyle
 import com.lagradost.quicknovel.util.GoogleTranslate
 import com.mihon.common.preference.PreferenceData
 import com.mihon.presentation.settings.Preference
+import com.mihon.presentation.settings.widget.PreferenceGroupHeader
 import com.mihon.presentation.settings.widget.TextPreferenceWidget
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CoroutineScope
@@ -79,6 +83,83 @@ object TranslationSettings {
         write: (Context, Boolean) -> Unit,
     ) = AccessorPreferenceData(key, default, { read(context) }, { write(context, it) })
 
+    private val STYLE_LANGUAGES = listOf(
+        TranslationLanguages.CHINESE,
+        TranslationLanguages.JAPANESE,
+        TranslationLanguages.KOREAN,
+    )
+
+    /** Short labels for list summaries; the dialogs show the longer descriptions. */
+    private val SHORT_STYLE_LABELS = mapOf(
+        TranslationStyle.NAME_PINYIN to "Pinyin",
+        TranslationStyle.NAME_MEANING to "Translated meaning",
+        TranslationStyle.NAME_MIXED to "Mixed",
+        TranslationStyle.NAME_FAMILY_GIVEN to "Family name first",
+        TranslationStyle.NAME_GIVEN_FAMILY to "Given name first",
+        TranslationStyle.HONORIFICS_KEEP to "Keep",
+        TranslationStyle.HONORIFICS_DROP to "Drop",
+        TranslationStyle.HONORIFICS_ADAPT to "Adapt to English",
+    )
+
+    @Composable
+    private fun styleLabel(style: String): String = when (style) {
+        TranslationStyle.NAME_PINYIN -> stringResource(R.string.style_name_pinyin)
+        TranslationStyle.NAME_MEANING -> stringResource(R.string.style_name_meaning)
+        TranslationStyle.NAME_MIXED -> stringResource(R.string.style_name_mixed)
+        TranslationStyle.NAME_FAMILY_GIVEN -> stringResource(R.string.style_name_family_given)
+        TranslationStyle.NAME_GIVEN_FAMILY -> stringResource(R.string.style_name_given_family)
+        TranslationStyle.HONORIFICS_KEEP -> stringResource(R.string.style_hon_keep)
+        TranslationStyle.HONORIFICS_DROP -> stringResource(R.string.style_hon_drop)
+        TranslationStyle.HONORIFICS_ADAPT -> stringResource(R.string.style_hon_adapt)
+        else -> style
+    }
+
+    /** Default name style + honorific style list rows for one source language. */
+    @Composable
+    private fun styleDefaults(
+        context: Context,
+        lang: String,
+        icon: Painter,
+    ): List<Preference.PreferenceItem<out Any?, out Any?>> {
+        val language = TranslationLanguages.displayName(lang)
+        val nameStyle = remember(lang) {
+            AccessorPreferenceData(
+                SecurePrefs.KEY_DEFAULT_NAME_STYLE_PREFIX + lang,
+                TranslationStyle.defaultNameStyle(lang),
+                { SecurePrefs.getDefaultNameStyle(context, lang) },
+                { SecurePrefs.setDefaultNameStyle(context, lang, it) },
+            )
+        }
+        val honorificStyle = remember(lang) {
+            AccessorPreferenceData(
+                SecurePrefs.KEY_DEFAULT_HONORIFIC_STYLE_PREFIX + lang,
+                TranslationStyle.defaultHonorificStyle(lang),
+                { SecurePrefs.getDefaultHonorificStyle(context, lang) },
+                { SecurePrefs.setDefaultHonorificStyle(context, lang, it) },
+            )
+        }
+        val nameEntries = TranslationStyle.nameStyleOptions(lang).associateWith { styleLabel(it) }
+        val honorificEntries = TranslationStyle.HONORIFIC_OPTIONS.associateWith { styleLabel(it) }
+        val shortLabel: @Composable (String, Map<String, String>) -> String? =
+            { value, _ -> SHORT_STYLE_LABELS[value] ?: value }
+        return listOf(
+            Preference.PreferenceItem.ListPreference(
+                icon = icon,
+                title = "$language names",
+                preference = nameStyle,
+                entries = nameEntries,
+                subtitleProvider = shortLabel,
+            ),
+            Preference.PreferenceItem.ListPreference(
+                icon = icon,
+                title = "$language honorifics",
+                preference = honorificStyle,
+                entries = honorificEntries,
+                subtitleProvider = shortLabel,
+            ),
+        )
+    }
+
     /** The "AI Translation" settings group. Add new SecurePrefs-backed items to the list below. */
     @Composable
     fun preferenceGroup(): Preference.PreferenceGroup {
@@ -116,6 +197,33 @@ object TranslationSettings {
                 SecurePrefs::isTranslateOnDemandEnabled, SecurePrefs::setTranslateOnDemandEnabled
             )
         }
+
+        val autoAddTerms = remember {
+            secureSwitch(
+                context, "translator_auto_add_terms", true,
+                SecurePrefs::isAutoAddTermsEnabled, SecurePrefs::setAutoAddTermsEnabled
+            )
+        }
+        val strictMode = remember {
+            secureSwitch(
+                context, "translator_strict_mode", true,
+                SecurePrefs::isStrictModeEnabled, SecurePrefs::setStrictModeEnabled
+            )
+        }
+        val carryContext = remember {
+            secureSwitch(
+                context, "translator_carry_context", true,
+                SecurePrefs::isCarryStoryContextEnabled, SecurePrefs::setCarryStoryContextEnabled
+            )
+        }
+        val analyzeChapters = remember {
+            AccessorPreferenceData(
+                "translator_analyze_chapters", SecurePrefs.DEFAULT_ANALYZE_CHAPTERS,
+                { SecurePrefs.getAnalyzeChapterCount(context) },
+                { SecurePrefs.setAnalyzeChapterCount(context, it) },
+            )
+        }
+        val styleItems = STYLE_LANGUAGES.flatMap { lang -> styleDefaults(context, lang, translateIcon) }
 
         val items: List<Preference.PreferenceItem<out Any?, out Any?>> = listOf(
             Preference.PreferenceItem.CustomPreference(
@@ -164,7 +272,36 @@ object TranslationSettings {
                 subtitle = "Translate untranslated chapters with the LLM when opened in the reader",
                 preference = onDemand,
             ),
-        )
+            Preference.PreferenceItem.CustomPreference(
+                title = "Consistency",
+                content = { PreferenceGroupHeader(title = "Consistency") },
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = translateIcon,
+                title = "Auto-add discovered names",
+                subtitle = "Add confidently detected names to the Story Bible right away instead of waiting for review",
+                preference = autoAddTerms,
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = translateIcon,
+                title = "Strict consistency mode",
+                subtitle = "Retry a passage once on glossary misses, leftover source text or dropped paragraphs",
+                preference = strictMode,
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = translateIcon,
+                title = "Carry story context between chapters",
+                subtitle = "Send the premise and previous chapter summary with each chapter",
+                preference = carryContext,
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                icon = translateIcon,
+                title = "Chapters to analyze",
+                subtitle = "Default for Analyze novel, which builds the character sheet",
+                preference = analyzeChapters,
+                valueRange = 1..SecurePrefs.MAX_ANALYZE_CHAPTERS,
+            ),
+        ) + styleItems
 
         return Preference.PreferenceGroup(
             title = GROUP_TITLE,
