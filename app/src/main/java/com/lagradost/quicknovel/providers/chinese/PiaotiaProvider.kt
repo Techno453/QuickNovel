@@ -209,6 +209,9 @@ object PiaotiaParser {
         }
     }
 
+    private val chapterTitleRegex = Regex("""^第[0-9０-９零〇一二三四五六七八九十百千两]+[章节回]""")
+    private val endMarkerRegex = Regex("""[（(]本章完[)）]""")
+
     fun parseChapter(html: String): String? {
         val doc = Jsoup.parse(html)
         val heading = doc.selectFirst("h1")?.text()?.trim().orEmpty()
@@ -217,9 +220,14 @@ object PiaotiaParser {
                     "#Commenddiv, #feit2, .top, iframe, ins"
         ).remove()
         val lines = doc.body().paragraphs().toMutableList()
-        // The chapter title is repeated as the first text line.
-        if (lines.isNotEmpty() && heading.isNotEmpty() && heading.endsWith(lines.first())) lines.removeAt(0)
-        return lines.filter { it.isNotBlank() }
+        // The chapter title is repeated as the first text line, sometimes with slightly different
+        // punctuation than the <h1>.
+        if (lines.isNotEmpty() && (heading.isNotEmpty() && heading.endsWith(lines.first()) ||
+                    lines.first().length < 50 && chapterTitleRegex.containsMatchIn(lines.first()))
+        ) {
+            lines.removeAt(0)
+        }
+        return lines.filter { it.isNotBlank() && !endMarkerRegex.matches(it) }
             .joinToString("\n\n") { "<p>${Entities.escape(it)}</p>" }
             .ifBlank { null }
     }

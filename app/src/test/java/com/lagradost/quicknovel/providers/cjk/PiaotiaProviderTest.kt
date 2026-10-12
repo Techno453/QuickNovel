@@ -89,6 +89,12 @@ class PiaotiaProviderTest {
     @Test
     fun live() {
         assumeTrue("live test; run with -Dlive=1", LiveTests.enabled)
-        runBlocking { LiveTests.smoke(api, "修仙") }
+        runBlocking {
+            LiveTests.smoke(api, "修仙")
+            // An exact title match makes the site 302 straight to the book page.
+            val exact = api.search("凡人修仙传")
+            println("[live] ${api.name}: exact-title search → ${exact.map { it.name to it.url }}")
+            assertTrue(exact.any { it.url == "https://www.piaotia.com/bookinfo/0/760.html" })
+        }
     }
 }

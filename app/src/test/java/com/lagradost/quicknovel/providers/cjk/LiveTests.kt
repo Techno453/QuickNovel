@@ -37,6 +37,7 @@ object LiveTests {
         assertNotNull("${api.name}: chapter ${chapter.url} returned null", html)
         val paragraphs = Jsoup.parseBodyFragment(html!!).select("p").map { it.text() }.filter { it.isNotBlank() }
         println("[live] ${api.name}: chapter '${chapter.name}' → ${paragraphs.size} paragraphs, ${html.length} chars")
+        println("[live]   first/last: '${paragraphs.firstOrNull()?.take(24)}' … '${paragraphs.lastOrNull()?.take(24)}'")
         assertTrue("${api.name}: chapter text too short", paragraphs.size >= 3)
 
         if (api.hasMainPage) {
