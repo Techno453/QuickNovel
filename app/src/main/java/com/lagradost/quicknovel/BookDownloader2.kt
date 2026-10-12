@@ -1176,14 +1176,11 @@ object ImageDownloader {
 
             val imageLoader = SingletonImageLoader.get(this)
 
-            val request = ImageRequest.Builder(this)
-                .data(url)
-                .apply {
-                    headers?.forEach { (key, value) ->
-                        extras[Extras.Key<String>(key)] = value
-                    }
-                }
-                .build()
+            // The same request as a card's, so the notification icon comes from the image cache.
+            val request = com.lagradost.quicknovel.util.ImageLoader.posterRequest(
+                this,
+                com.lagradost.quicknovel.ui.common.PosterModel.resolve(url, headers),
+            )
 
             val bitmap = runBlocking {
                 val result = imageLoader.execute(request)
@@ -2917,8 +2914,14 @@ object BookDownloader2 {
                         MainActivity.app.get(posterUrl, headers = load.posterHeaders ?: mapOf())
                     val bytes = get.okhttpResponse.body.bytes()
 
-                    pFile.parentFile?.mkdirs()
-                    pFile.writeBytes(bytes)
+                    // Library cards show this file before the url (docs/images.md), so an error
+                    // page must not be saved as the cover.
+                    if (get.okhttpResponse.isSuccessful && com.lagradost.quicknovel.ui.common.PosterModel.looksLikeImage(bytes)) {
+                        pFile.parentFile?.mkdirs()
+                        pFile.writeBytes(bytes)
+                    } else {
+                        removeKey(filepath) // try again on the next download
+                    }
                 }
             }
         } catch (t: Throwable) {
