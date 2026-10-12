@@ -119,22 +119,33 @@ object SecurePrefs {
     }
 
     private fun createPrefs(appContext: Context): SharedPreferences {
-        return try {
-            val masterKey = MasterKey.Builder(appContext)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            EncryptedSharedPreferences.create(
-                appContext,
-                PREFS_FILE,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (t: Throwable) {
-            Log.w(TAG, "EncryptedSharedPreferences unavailable, falling back to plain prefs", t)
-            usingFallback = true
-            appContext.getSharedPreferences(FALLBACK_PREFS_FILE, Context.MODE_PRIVATE)
-        }
+        val opened = KeyStoreChoice.open(
+            openEncrypted = {
+                val masterKey = MasterKey.Builder(appContext)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    appContext,
+                    PREFS_FILE,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            },
+            openPlain = { appContext.getSharedPreferences(FALLBACK_PREFS_FILE, Context.MODE_PRIVATE) },
+            onFallback = { t -> Log.w(TAG, "EncryptedSharedPreferences unavailable, falling back to plain prefs", t) },
+        )
+        usingFallback = opened.plainFallback
+        return opened.store
+    }
+
+    /**
+     * True when the encrypted store could not be created and keys are kept in plain
+     * SharedPreferences (unencrypted, app-private). Loads the store if needed.
+     */
+    fun isUsingPlainFallback(context: Context?): Boolean {
+        ensureLoaded(context)
+        return usingFallback
     }
 
     /**
@@ -286,6 +297,20 @@ object SecurePrefs {
     fun setApiKey(context: Context, key: String?) = setApiKey(context, activeConfig(context).providerId, key)
 
     fun hasApiKey(context: Context?): Boolean = getApiKey(context) != null
+
+    /** True if a key is stored for any provider (used to treat existing installs as set up). */
+    fun hasAnyApiKey(context: Context?): Boolean = LlmProviders.ALL.any { getApiKey(context, it.id) != null }
+
+    // ---- First-run setup ----
+
+    /** Set when the setup wizard was finished or skipped. */
+    const val KEY_SETUP_COMPLETED = "setup_completed"
+
+    fun isSetupCompleted(context: Context?): Boolean =
+        getPrefs(context)?.getBoolean(KEY_SETUP_COMPLETED, false) ?: false
+
+    fun setSetupCompleted(context: Context, completed: Boolean = true) =
+        edit(context) { putBoolean(KEY_SETUP_COMPLETED, completed) }
 
     // ---- Toggles (memory-cached) ----
 
@@ -511,4 +536,21 @@ object SecurePrefs {
         val code = TranslationLanguages.normalize(lang) ?: return
         edit(context) { putString(KEY_DEFAULT_HONORIFIC_STYLE_PREFIX + code, style) }
     }
+}
+
+/** The choice between the encrypted store and the plain fallback, kept free of Android for tests. */
+internal object KeyStoreChoice {
+    data class Opened<T>(val store: T, val plainFallback: Boolean)
+
+    /**
+     * Opens the encrypted store; if that throws (broken keystore, corrupted master key), reports it
+     * through [onFallback] and opens the plain store instead.
+     */
+    fun <T> open(openEncrypted: () -> T, openPlain: () -> T, onFallback: (Throwable) -> Unit = {}): Opened<T> =
+        try {
+            Opened(openEncrypted(), plainFallback = false)
+        } catch (t: Throwable) {
+            onFallback(t)
+            Opened(openPlain(), plainFallback = true)
+        }
 }
