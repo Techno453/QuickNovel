@@ -37,4 +37,17 @@ interface TranslationDao {
 
     @Query("SELECT COUNT(*) FROM translated_chapters WHERE novel_id = :novelId")
     suspend fun countForNovel(novelId: String): Int
+
+    @Query("UPDATE translated_chapters SET source_hash = :hash, stale = :stale WHERE novel_id = :novelId AND chapter_num = :chapterNum")
+    suspend fun setSourceState(novelId: String, chapterNum: Int, hash: String, stale: Boolean)
+
+    @Query("UPDATE translated_chapters SET stale = :stale WHERE novel_id = :novelId AND chapter_num = :chapterNum")
+    suspend fun setStale(novelId: String, chapterNum: Int, stale: Boolean)
+
+    @Query("SELECT chapter_num FROM translated_chapters WHERE novel_id = :novelId AND stale = 1 ORDER BY chapter_num")
+    suspend fun getStaleChapterNums(novelId: String): List<Int>
+
+    /** Stale chapters of [novelId], updated whenever translated_chapters changes. */
+    @Query("SELECT chapter_num FROM translated_chapters WHERE novel_id = :novelId AND stale = 1 ORDER BY chapter_num")
+    fun observeStaleChapterNums(novelId: String): kotlinx.coroutines.flow.Flow<List<Int>>
 }

@@ -30,6 +30,13 @@ Story Bible term (at most 2,000); output = 0.9 × chars × the o200k ratio (abou
 for 4,500 Chinese characters); × 1.15 with strict consistency mode on. It runs 25–50% above
 what the benchmark measured, so treat it as an upper bound.
 
+Actual spend is recorded per call from each reply's `usage` at the preset's list price (the
+spend ledger, see [translation-pipeline.md](translation-pipeline.md#spend-ledger-dashboard-and-caps)).
+OpenAI's Batch API bills 50% of list price for input and output (checked on the pricing page
+on 2026-10-11 for gpt-6-luna 0.05/0.25, gpt-6-sol, gpt-5.4-mini, gpt-4o-mini and gpt-4o), so the
+overnight option roughly halves the per-chapter cost of OpenAI models; OpenRouter and the other
+providers have no batch endpoint.
+
 User target: **at most $3–5 per 100 chapters** (≤ $0.03–0.05 per chapter).
 
 ## Cost per chapter (Chinese source), cheapest first

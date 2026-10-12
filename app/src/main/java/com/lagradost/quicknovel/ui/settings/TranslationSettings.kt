@@ -43,7 +43,12 @@ import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationLanguages
 import com.lagradost.quicknovel.translator.TranslationStyle
+import com.lagradost.quicknovel.translator.PowerPolicy
+import com.lagradost.quicknovel.translator.SpendLedger
+import com.lagradost.quicknovel.translator.SpendPricing
+import com.lagradost.quicknovel.ui.translate.SpendDialog
 import com.lagradost.quicknovel.ui.translate.TranslationForegroundService
+import androidx.compose.runtime.LaunchedEffect
 import com.lagradost.quicknovel.util.GoogleTranslate
 import com.mihon.common.preference.PreferenceData
 import com.mihon.presentation.settings.Preference
@@ -376,11 +381,130 @@ object TranslationSettings {
                 title = "Analysis model",
                 content = { AnalysisModelPreference(context, configVersion) },
             ),
-        ) + styleItems
+        ) + spendAndJobItems(context, translateIcon) + styleItems
 
         return Preference.PreferenceGroup(
             title = GROUP_TITLE,
             preferenceItems = items.toPersistentList(),
+        )
+    }
+
+    /** "Spending & long jobs": spend dashboard, caps, charging / battery conditions. */
+    @Composable
+    private fun spendAndJobItems(context: Context, icon: Painter): List<Preference.PreferenceItem<out Any?, out Any?>> {
+        val onlyWhileCharging = remember {
+            secureSwitch(
+                context, SecurePrefs.KEY_JOBS_ONLY_WHILE_CHARGING, false,
+                SecurePrefs::isJobsOnlyWhileCharging, SecurePrefs::setJobsOnlyWhileCharging
+            )
+        }
+        val pauseOnLow = remember {
+            secureSwitch(
+                context, SecurePrefs.KEY_JOBS_PAUSE_ON_LOW_BATTERY, true,
+                SecurePrefs::isJobsPauseOnLowBattery, SecurePrefs::setJobsPauseOnLowBattery
+            )
+        }
+        val lowPercent = remember {
+            AccessorPreferenceData(
+                SecurePrefs.KEY_JOBS_LOW_BATTERY_PERCENT, PowerPolicy.DEFAULT_LOW_BATTERY_PERCENT,
+                { SecurePrefs.getJobsLowBatteryPercent(context) },
+                { SecurePrefs.setJobsLowBatteryPercent(context, it) },
+            )
+        }
+        return listOf(
+            Preference.PreferenceItem.CustomPreference(
+                title = "Spending & long jobs",
+                content = { PreferenceGroupHeader(title = "Spending & long jobs") },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = "Spending",
+                content = { SpendingPreference(context) },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = "Monthly spend cap",
+                content = {
+                    CapPreference(
+                        context, "Monthly spend cap",
+                        "Jobs that would pass it are refused; running jobs stop when it is reached",
+                        SecurePrefs::getMonthlySpendCap, SecurePrefs::setMonthlySpendCap,
+                    )
+                },
+            ),
+            Preference.PreferenceItem.CustomPreference(
+                title = "Per-job cap",
+                content = {
+                    CapPreference(
+                        context, "Per-job cap",
+                        "Largest cost of one range job or overnight batch",
+                        SecurePrefs::getPerJobCap, SecurePrefs::setPerJobCap,
+                    )
+                },
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = icon,
+                title = "Long jobs only while charging",
+                subtitle = "Range translations and auto-translate ahead wait for a charger. The chapter you are reading is always translated",
+                preference = onlyWhileCharging,
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                icon = icon,
+                title = "Pause long jobs on low battery",
+                subtitle = "Range translations and auto-translate ahead pause below the threshold and resume when charging",
+                preference = pauseOnLow,
+            ),
+            Preference.PreferenceItem.SliderPreference(
+                icon = icon,
+                title = "Low battery threshold (%)",
+                subtitle = "Battery level at which long jobs pause",
+                preference = lowPercent,
+                valueRange = PowerPolicy.MIN_LOW_BATTERY_PERCENT..PowerPolicy.MAX_LOW_BATTERY_PERCENT,
+            ),
+        )
+    }
+
+    /** Opens the spend dashboard; the summary shows this month's total. */
+    @Composable
+    private fun SpendingPreference(context: Context) {
+        var show by remember { mutableStateOf(false) }
+        var month by remember { mutableStateOf<Double?>(null) }
+        LaunchedEffect(show) { if (!show) month = SpendLedger.monthTotal(context) }
+        val cap = SecurePrefs.getMonthlySpendCap(context)
+        TextPreferenceWidget(
+            title = "Spending",
+            subtitle = month?.let { m ->
+                "This month: ${SpendPricing.format(m)}" + if (cap > 0) " of ${SpendPricing.format(cap)}" else ""
+            } ?: "Totals per day, month, novel and model",
+            icon = painterResource(R.drawable.ic_baseline_translate_24),
+            onPreferenceClick = { show = true },
+        )
+        if (show) SpendDialog(onDismiss = { show = false })
+    }
+
+    /** A USD cap ("0" or blank = off). */
+    @Composable
+    private fun CapPreference(
+        context: Context,
+        title: String,
+        description: String,
+        read: (Context) -> Double,
+        write: (Context, Double) -> Unit,
+    ) {
+        var value by remember { mutableStateOf(read(context)) }
+        TextInputPreference(
+            title = title,
+            subtitle = (if (value > 0) SpendPricing.format(value) else "Off") + " · $description",
+            initialValue = if (value > 0) String.format(java.util.Locale.US, "%.2f", value) else "",
+            placeholder = "USD, e.g. 5 (empty = off)",
+            onSave = { text ->
+                val parsed = text.trim().removePrefix("$").replace(',', '.').ifBlank { "0" }.toDoubleOrNull()
+                if (parsed == null || parsed < 0) {
+                    showToast("Enter an amount in USD, e.g. 5 or 2.50")
+                } else {
+                    write(context, parsed)
+                    value = parsed
+                    showToast(if (parsed > 0) "$title: ${SpendPricing.format(parsed)}" else "$title off")
+                }
+            },
         )
     }
 

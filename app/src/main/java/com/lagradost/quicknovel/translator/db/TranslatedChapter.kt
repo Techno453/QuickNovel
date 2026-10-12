@@ -23,4 +23,11 @@ data class TranslatedChapter(
     @ColumnInfo(name = "paragraph_warnings") val paragraphWarnings: Int? = null,
     /** True if some passages were re-translated by the fallback model ([model] records the model(s) used). */
     @ColumnInfo(name = "used_fallback", defaultValue = "0") val usedFallback: Boolean = false,
+    /**
+     * SHA-256 hex of the normalised plain source text this translation was made from
+     * ([com.lagradost.quicknovel.translator.SourceHash]); "" = unknown (rows from before DB v6), treated as valid.
+     */
+    @ColumnInfo(name = "source_hash", defaultValue = "") val sourceHash: String = "",
+    /** The source changed since this translation was made (still readable; never re-translated automatically). */
+    @ColumnInfo(defaultValue = "0") val stale: Boolean = false,
 )

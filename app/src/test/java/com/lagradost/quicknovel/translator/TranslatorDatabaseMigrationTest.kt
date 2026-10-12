@@ -37,7 +37,55 @@ class TranslatorDatabaseMigrationTest {
         val migrations = TranslatorDatabase.ALL_MIGRATIONS
         assertEquals(1, migrations.first().startVersion)
         migrations.toList().zipWithNext().forEach { (a, b) -> assertEquals(a.endVersion, b.startVersion) }
-        assertEquals(5, migrations.last().endVersion)
+        assertEquals(6, migrations.last().endVersion)
+    }
+
+    @Test
+    fun migration5To6IsAdditive() {
+        val statements = mutableListOf<String>()
+        TranslatorDatabase.MIGRATION_5_6.migrate(recordingDb(statements))
+        assertEquals(TranslatorDatabase.MIGRATION_5_6_SQL, statements)
+        assertEquals(
+            listOf(
+                "ALTER TABLE translated_chapters ADD COLUMN source_hash TEXT NOT NULL DEFAULT ''",
+                "ALTER TABLE translated_chapters ADD COLUMN stale INTEGER NOT NULL DEFAULT 0",
+            ),
+            statements.take(2),
+        )
+        // Nothing is dropped, renamed or rewritten.
+        statements.forEach { sql ->
+            assertTrue(sql, sql.startsWith("ALTER TABLE") && sql.contains("ADD COLUMN") || sql.startsWith("CREATE "))
+        }
+        listOf("spend_entries", "batch_jobs", "batch_chapters", "index_spend_entries_timestamp").forEach { name ->
+            assertTrue(name, statements.any { it.contains("`$name`") })
+        }
+    }
+
+    /**
+     * The tables created by the migration must be exactly what Room creates for a fresh install
+     * (Room validates the schema on open). Compares against the KSP-generated
+     * TranslatorDatabase_Impl when it exists (it does after any build of the app module).
+     */
+    @Test
+    fun migration5To6MatchesRoomsGeneratedSchema() {
+        val generated = listOf(
+            "build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+            "app/build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+        ).map { java.io.File(it) }.firstOrNull { it.isFile }
+        org.junit.Assume.assumeTrue("KSP output not found", generated != null)
+        val impl = generated!!.readText()
+        TranslatorDatabase.MIGRATION_5_6_SQL.filter { it.startsWith("CREATE") }.forEach { sql ->
+            assertTrue("Room creates a different schema than:\n$sql", impl.contains(sql))
+        }
+        assertTrue(impl.contains("`source_hash` TEXT NOT NULL DEFAULT ''"))
+        assertTrue(impl.contains("`stale` INTEGER NOT NULL DEFAULT 0"))
+    }
+
+    @Test
+    fun translationsDefaultToAnUnknownHashAndNotStale() {
+        val row = com.lagradost.quicknovel.translator.db.TranslatedChapter("n", 1, "<p>x</p>")
+        assertEquals("", row.sourceHash)
+        assertFalse(row.stale)
     }
 
     @Test

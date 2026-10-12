@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 /**
  * Runs the "Analyze novel" pre-pass ([AnalysisRunner]) against the database, for the manual
@@ -111,7 +113,11 @@ object NovelAnalyzer {
         listener: Listener?,
     ): Outcome {
         val outcome = try {
-            run(ctx, novelId, sourceLang, count, fetch, listener)
+            // Recorded as analysis spend; a job's per-job meter (if any) keeps counting.
+            val outer = coroutineContext[SpendTag]
+            withContext(SpendTag(SpendKind.ANALYSIS, novelId, batchId = outer?.batchId, meter = outer?.meter)) {
+                run(ctx, novelId, sourceLang, count, fetch, listener)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -145,6 +151,8 @@ object NovelAnalyzer {
                 Log.w(TAG, "Analysis: could not load chapter $i", e)
                 null
             } ?: continue
+            // Fetched anyway: notice when a translated chapter's source has changed.
+            ChapterTranslationRepository.checkSourceHash(ctx, novelId, i, html)
             TranslationEngine.htmlToPlainText(html).takeIf { it.isNotBlank() }
                 ?.let { chapters += AnalysisRunner.Chapter(i, it) }
         }

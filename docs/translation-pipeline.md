@@ -1,6 +1,8 @@
-# Translation pipeline: analysis pre-pass and read-ahead
+# Translation pipeline: analysis, read-ahead, spend, battery, stale sources, overnight batches
 
-How a novel goes from "never translated" to "chapters translated ahead of the reader". Model
+How a novel goes from "never translated" to "chapters translated ahead of the reader", and what
+keeps it cheap: the spend ledger and caps, charging conditions for long jobs, source-hash cache
+invalidation and overnight Batch API pre-translation. Model
 choice and costs are in [translation-models.md](translation-models.md); the benchmark is in
 [translation-bench.md](translation-bench.md).
 
@@ -12,6 +14,11 @@ choice and costs are in [translation-models.md](translation-models.md); the benc
 | Chapters analyzed automatically | `auto_analyze_chapter_count` | 3 (1–20) | The manual Analyze novel keeps its own default (`analyze_chapter_count`, 5). |
 | Analysis model | `analysis_preset` | absent = same as the translation model | Any preset, e.g. GPT-6 Sol. If that provider has no API key, the translation model is used. Applies to manual and automatic analysis. |
 | Auto-translate ahead | `read_ahead_chapters` | 2 (choices 0, 1, 2, 3, 5, 10; 0 = off) | Keeps the next N chapters after the one being read translated. |
+| Monthly spend cap | `monthly_spend_cap_usd` | 0 = off (float, USD) | See [Spend ledger](#spend-ledger-dashboard-and-caps). |
+| Per-job cap | `per_job_cap_usd` | 0 = off (float, USD) | One range job or overnight batch. |
+| Long jobs only while charging | `jobs_only_while_charging` | off | See [Charging and battery](#charging-and-battery-conditions-for-long-jobs). |
+| Pause long jobs on low battery | `jobs_pause_on_low_battery` | on | |
+| Low battery threshold (%) | `jobs_low_battery_percent` | 15 (5–50) | |
 
 Code: `SecurePrefs` (keys and getters), `TranslationSettings` (Compose rows).
 
@@ -145,8 +152,199 @@ service as batch jobs.
   and, with on-demand on, translates them; read-ahead adds a queue that survives closing the
   reader and covers chapters the preloader has not reached. Both share the chapter lock.
 
+## Spend ledger, dashboard and caps
+
+**Recording.** `TranslationEngine` reads `usage.prompt_tokens` / `usage.completion_tokens` from
+every successful reply (translation, strict retries, fallback, summary merges, analysis, search,
+key verification) and reports a `UsageEvent` to `UsageSinks.global`, which the app sets at start
+(`BaseApplication.onCreate` → `SpendLedger.install`) to insert a row into `spend_entries`
+(DB v6): timestamp, novel and chapter (nullable), kind, provider, model, tokens, USD, `priced`,
+batch id. Plain JVM code (tests, the benchmark) has no sink, so nothing is recorded there.
+
+- **What a call was for** comes from a `SpendTag` coroutine context element set by the caller:
+  `translate` (reader on demand, range jobs, live re-dos of batch passages), `read_ahead`,
+  `analysis` (`NovelAnalyzer` wraps every run), `search` (AI search queries), `batch` (one row per
+  chapter of batch results), `other` (untagged: key verification).
+- **Price:** the preset's own `priceIn` / `priceOut`; for a custom model the built-in price table
+  (`CostEstimator.pricingFor`, matched by model id). Custom models have no user-entered price in
+  the app, so an unknown model is recorded with `usd = 0` and `priced = false` (the dashboard
+  counts them). A reply without `usage` is recorded with 0 tokens and `priced = false`.
+- **Batch results** are recorded per chapter from the per-line `usage` of the output file × the
+  list price × `SpendPricing.BATCH_DISCOUNT` (0.5). The batch object has no usage field; failed
+  lines are not billed and carry none.
+- Deleting a novel keeps its spend rows (money already spent).
+
+**Dashboard** (Settings → AI Translation → Spending, `ui/translate/SpendScreen.kt`, a full-screen
+Compose dialog): today / this month / all time (local calendar), per novel (top 10 + "everything
+else"), per model, the last 50 entries, and Clear history (with confirmation; this also resets
+the month for the cap). Opening it also polls overnight batches. The translate dialog shows
+"Spent this month: $x (of the $y cap)" under its estimate.
+
+**Caps** (`SpendCaps`, pure, `SpendCapsTest`): 0 = off.
+
+| When | Rule |
+|---|---|
+| Start of a range job (dialog) or a batch (dialog, then again in `BatchManager.submit` with the precise estimate) | refused if month's spend ≥ monthly cap, or month's spend + estimate > monthly cap, or estimate > per-job cap. The message names the numbers ("$4.50 spent this month + about $0.60 for this job = $5.10, cap $5.00"). An unknown-price estimate counts as $0. |
+| Range job, between chapters | stops when the month's spend reaches the monthly cap or the job's own spend (a `SpendMeter` in the job's `SpendTag`, including its analysis) reaches the per-job cap. The summary notification starts with the reason. |
+| Read-ahead, between chapters | clears its queue silently at the monthly cap (logged only). |
+| Batch results | live re-dos of failed passages only while under both caps (the processing has its own meter); otherwise the chapter is left for the normal path. |
+| Reader on-demand (chapter being read) | never blocked; its spend is recorded and counts towards the month. |
+
+Granularity is one chapter (a chapter in progress finishes), so a job can pass a cap by at most
+one chapter's cost.
+
+## Charging and battery conditions for long jobs
+
+`PowerPolicy` (pure, `PowerPolicyTest`) decides from `PowerState` (charging, level %, system
+low flag):
+
+- "only while charging" on and not charging → **Paused: waiting for charger**;
+- "pause on low battery" on, not charging and level ≤ threshold (default 15%) → **Paused:
+  battery low** (the system's ACTION_BATTERY_LOW only counts when the level is unknown, so a
+  lower user threshold is respected; while charging a low battery never pauses).
+
+`PowerMonitor` (owned by `TranslationForegroundService`) reads the sticky
+ACTION_BATTERY_CHANGED when the service starts and follows ACTION_POWER_CONNECTED /
+DISCONNECTED, ACTION_BATTERY_LOW / OKAY and level changes while the service runs. Range jobs
+and read-ahead call `awaitAllowed` between chapters: the notification shows the pause reason and
+the job resumes on its own when the condition clears (the policy is re-read every minute, so
+settings changes apply). On-demand translation of the chapter
+being read never goes through the service and is never paused. The overnight option for
+providers without a batch API starts a range job with `requireCharging` (the policy with
+"only while charging" forced on).
+
+## Source-hash cache invalidation
+
+Every stored translation now has `source_hash` = SHA-256 hex of the normalised plain source
+(`SourceHash`: HTML → text, NFC, whitespace runs collapsed, lines trimmed, blank lines dropped;
+`SourceHash.VERSION` = 1) and a `stale` flag (DB v6; rows from before have `""` and are treated
+as valid).
+
+- **Writing:** reader on-demand, read-ahead, range jobs and batch results store the hash of the
+  source they translated.
+- **Checking** (`ChapterTranslationRepository.checkSourceHash`), only where the source was fetched
+  anyway, never to check: the analysis pre-pass (chapters 0..N-1) and range jobs re-translating
+  stale chapters. A different hash marks the translation `stale` (still served; never
+  re-translated automatically); a matching hash clears the flag; an empty stored hash is filled
+  in (assumed valid).
+- **Re-translating:** the translate dialog shows "Re-translate N stale chapter(s) in this range"
+  when the range has some. Those chapters' sources are fetched and compared again first: if the
+  source is back to the stored hash, the translation is kept and the paid call skipped.
+  `translateIfMissing(retranslateStale = true)` does the same for single chapters.
+- **Reader:** the reader does not show the flag yet (another change owns the reader UI). It can
+  use `ChapterTranslationRepository.isStale(ctx, novelId, chapter)`,
+  `staleChapters(ctx, novelId)` or the live `observeStaleChapters(ctx, novelId): Flow<List<Int>>`
+  for a "source changed" hint, and should call `checkSourceHash(ctx, novelId, chapter, source)`
+  after its Reload action fetched the original (cheap: one hash and one DB read).
+
+## Overnight batch (OpenAI Batch API)
+
+"Translate the rest of this novel tonight at half price." Offered in the translate dialog as
+**Overnight (batch, ~50% off, ready within 24 h)** when the selected model's base URL is
+api.openai.com and an OpenAI key is set (`BatchManager.isAvailable`). For any other provider
+(OpenRouter, Gemini, DeepSeek, Qwen, custom) the option reads **Overnight (runs only while
+charging)**: a normal range job at the normal price that waits for a charger, and the dialog says
+so.
+
+### Flow
+
+1. **Submit** (`TranslationForegroundService` `ACTION_START_BATCH`, main job slot): automatic
+   analysis first if the novel has none (`NovelAnalyzer.ensureAnalyzed`, respecting its setting),
+   then fetch the sources of the range's chapters that are not translated and not already in an
+   unfinished batch (progress in the notification and on the result page's button).
+2. **Build** (`BatchRequestBuilder`, pure): snapshot of the Story Bible, premise and style; the
+   live chunker (`TranslationEngine.splitIntoChunks`, `CHUNKER_VERSION` = 1); one request per
+   chunk with the live system prompt (and the preset's prompt profile, extra body and temperature
+   rule), the snapshot glossary selection (`selectPromptTerms` with the chunk's own terms plus
+   characters seen in earlier chunks of the same chapter), and no previous-English tail or
+   previous-chapter summary. `custom_id = "<novelId>|<chapter>|<chunkIndex>"` (parsed from the
+   right, so a '|' in the novel id is safe). The chunk texts and the chapter's source hash are
+   stored in `batch_chapters`, so reassembly never re-derives the chunks.
+3. **Cap check** with the precise estimate (live per-chapter estimate on the real character
+   counts × 0.5), then `POST /v1/files` (purpose `batch`, JSONL), `POST /v1/batches`
+   (`endpoint: /v1/chat/completions`, `completion_window: 24h`). The job is stored in
+   `batch_jobs` (status, OpenAI ids, chapter range, request count, estimate) with every chapter
+   PENDING, and a notification says it is queued.
+4. **Poll** (`BatchPollWorker`, WorkManager): periodic every 15 minutes with a network
+   constraint while a batch is unfinished (cancelled when none are left), plus a one-off poll on
+   app start, when the translate dialog opens and when the Spending screen opens. All polls are
+   serialized. Status mapping (`BatchStatus.fromOpenAi`): validating → Queued, in_progress,
+   finalizing, cancelling, failed; completed / expired / cancelled with an output file →
+   PROCESSING (results still to store), then DONE / EXPIRED / CANCELLED; without an output file
+   → FAILED / EXPIRED / CANCELLED. A PREPARING row older than two hours without an OpenAI id
+   (killed process) becomes FAILED.
+5. **Store** (`BatchManager.processResults`): download the output and error files, parse
+   (`BatchOutputParser`), reassemble per chapter in chunk order (`BatchAssembler`: a success line
+   wins over an error line; `finish_reason` length / content filter, empty replies and HTTP errors
+   are failures; absent lines are missing). Then, **in chapter order** and under the per-chapter
+   lock, each PENDING chapter goes through `BatchChapterProcessor`, which runs the live chapter
+   loop (`TranslationEngine.assembleChapter`) with the batch replies: the `===TERMS===` tail is
+   parsed and merged into the **live** bible with BibleMerger (so later chapters see names found
+   in earlier ones, as far as the post-processing goes), and QualityChecks run per chunk.
+   - a missing / failed / cut-off / blocked / refused chunk is re-translated live (full live path
+     with the fallback model, at the normal price, tagged `translate` with the batch id); a live
+     re-do sees the previous chunk's English;
+   - a chunk that fails the checks in strict mode gets the live strict re-request with the
+     reminder; the better attempt is kept;
+   - a chapter with no successful line at all (expired / cancelled before it ran) is not re-done
+     live: it is marked NEEDS_LIVE and left to the normal path, so an expired batch never turns
+     into a surprise full-price run;
+   - when a passage cannot be produced (live re-do refused by a cap, failed, or no key) the
+     chapter is NEEDS_LIVE; otherwise it is stored (with its source hash and the .txt for the
+     offline epub) as STORED; a chapter translated meanwhile by another path is SKIPPED.
+   Each chapter's batch usage is recorded as `batch` spend at half price; the job's `actual_usd`
+   is everything recorded with its batch id (batch + live re-dos). A notification reports the
+   outcome. Processing is resumable: chapters keep their status, so a killed worker continues
+   on the next poll.
+6. **Status row:** the translate dialog shows the novel's latest batch (unfinished, or finished
+   in the last three days): status, n/m requests, chapters stored / left, estimate or cost,
+   **Cancel batch** (`POST /v1/batches/{id}/cancel`; finished passages are still stored and
+   billed) and **Translate the rest now** (fills in the batch's range for a normal job). Range
+   jobs skip chapters that are waiting in an unfinished batch; reader on-demand and read-ahead do
+   not wait for a batch (the reader comes first; the batch result for such a chapter is then
+   SKIPPED but was still billed).
+
+### Quality trade-off
+
+The live pipeline is sequential; a batch is not. Compared with a live range job, a batch request
+does not see:
+
+- names discovered earlier in the same run (in earlier chapters or earlier chunks of the same
+  chapter) — only the bible snapshot taken at submission. This is why the analysis runs first;
+  the post-processing still merges every chunk's discovered terms into the live bible and checks
+  each chunk against it, so a name first seen in the batch can show up as a glossary deviation
+  and trigger a strict re-request;
+- the previous chunk's English (the "preceding" context that keeps pronouns and tone
+  continuous across chunk boundaries) and the previous chapter's summary;
+- the strict-mode retry inside the batch: it happens afterwards, live, at full price, only for
+  chunks that failed the checks.
+
+Expect slightly more glossary deviations and pronoun slips at chunk and chapter boundaries for
+names introduced after the analysed chapters; for a novel that has been analysed (or partly
+translated) the difference should be small. Not measured yet: no batch has been run against the
+real API.
+
+### Limits
+
+50,000 requests and 200 MB per batch (about 15,000 chapters; not enforced in the app);
+OpenAI's per-model enqueued-token limit can reject large batches at validation (the batch then
+shows FAILED with OpenAI's message, e.g. `token_limit_exceeded`). Deleting a novel removes its
+finished batch rows but keeps unfinished ones, so their cost is still recorded when they end.
+
 ## Files
 
+- `translator/Spend.kt` (kinds, tags, meter, pricing, periods), `SpendCaps.kt`, `SpendLedger.kt`.
+- `translator/PowerPolicy.kt`, `ui/translate/PowerMonitor.kt`.
+- `translator/SourceHash.kt`; hash checks in `ChapterTranslationRepository`.
+- `translator/batch/`: `BatchModel.kt` (statuses, custom ids, outcomes), `BatchRequests.kt`
+  (builder, JSONL, cost, output parser, assembler), `BatchChapterProcessor.kt`,
+  `OpenAiBatchClient.kt`; `ui/translate/BatchManager.kt`, `BatchPollWorker.kt` (worker,
+  scheduler, notifications).
+- `ui/translate/SpendScreen.kt`; settings rows in `ui/settings/TranslationSettings.kt`.
+- DB v6 (`MIGRATION_5_6`, additive): `translated_chapters.source_hash` / `stale`,
+  `spend_entries` (+ index on timestamp), `batch_jobs`, `batch_chapters`.
+- Tests: `SpendCapsTest`, `SpendLedgerTest`, `PowerPolicyTest`, `SourceHashTest`, `BatchTest`,
+  `TranslatorDatabaseMigrationTest` (also compares the migration with Room's generated schema).
 - `translator/AuthorNotes.kt`, `AnalysisFilter.kt`, `AnalysisRunner.kt`: pure analysis logic.
 - `translator/NovelAnalyzer.kt`: DB + engine wiring, single-flight, analysis state.
 - `translator/OncePerKey.kt`: the single-flight gate.

@@ -68,7 +68,8 @@ class TranslateViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val progressListener: (TranslationProgress?) -> Unit = { p ->
         progress.postValue(p)
-        if (p?.completed == true || p?.error != null) {
+        // null = idle again (user cancel, or an overnight batch was handed to OpenAI).
+        if (p == null || p.completed || p.error != null) {
             isRunning = false
             currentNovelId?.let { id -> loadTranslatedNums(id) }
         }
@@ -102,7 +103,10 @@ class TranslateViewModel(application: Application) : AndroidViewModel(applicatio
         fromIndex: Int,
         toIndex: Int,
         novelAuthor: String? = null,
-        novelName: String? = null
+        novelName: String? = null,
+        requireCharging: Boolean = false,
+        retranslateStale: Boolean = false,
+        asBatch: Boolean = false,
     ) {
         // The service may be running only for read-ahead (low priority, yields to this job), so
         // check the main slot rather than whether the service is running.
@@ -121,7 +125,10 @@ class TranslateViewModel(application: Application) : AndroidViewModel(applicatio
             novelAuthor = novelAuthor,
             chapters = chapters,
             fromIndex = fromIndex,
-            toIndex = toIndex
+            toIndex = toIndex,
+            requireCharging = requireCharging,
+            retranslateStale = retranslateStale,
+            asBatch = asBatch,
         )
         if (!started) {
             isRunning = false

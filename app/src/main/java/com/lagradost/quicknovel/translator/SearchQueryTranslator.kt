@@ -79,8 +79,9 @@ object SearchQueryTranslator {
             if (config.apiKey.isNotBlank()) {
                 try {
                     val engine = TranslationEngine(config, lang)
-                    engine.translateShort(query, PromptTemplates.searchQuerySystemPrompt(lang))
-                        .takeIf { it.isNotBlank() }
+                    kotlinx.coroutines.withContext(SpendTag(SpendKind.SEARCH)) {
+                        engine.translateShort(query, PromptTemplates.searchQuerySystemPrompt(lang))
+                    }.takeIf { it.isNotBlank() }
                         ?.let { return it }
                 } catch (e: CancellationException) {
                     throw e
