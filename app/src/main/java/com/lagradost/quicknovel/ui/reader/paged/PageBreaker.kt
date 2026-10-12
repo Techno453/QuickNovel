@@ -75,4 +75,29 @@ object PageBreaker {
         newPage()
         return pages
     }
+
+    /**
+     * The page to show for a reading position ([chapter], [char]), given each page's chapter and
+     * first character ([pageChapters], [pageStarts] in reading order; -1 for a title or status
+     * page). Scroll mode saves the first character of the first fully visible line; scroll and
+     * page widths can differ, so that character may sit inside a page line.
+     *
+     * - A negative [char] (chapter start) gives the chapter's first page.
+     * - Otherwise the last page of the chapter starting at or before [char]: the page whose text
+     *   contains it.
+     * - A chapter without text pages (loading, failed) gives its first page; an unknown chapter -1.
+     */
+    fun pageFor(pageChapters: IntArray, pageStarts: IntArray, chapter: Int, char: Int): Int {
+        require(pageChapters.size == pageStarts.size) { "one start per page" }
+        val first = pageChapters.indexOfFirst { it == chapter }
+        if (first == -1) return -1
+        if (char < 0) return first
+        var best = first
+        var i = first
+        while (i < pageChapters.size && pageChapters[i] == chapter) {
+            if (pageStarts[i] in 0..char) best = i
+            i++
+        }
+        return best
+    }
 }

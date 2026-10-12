@@ -415,17 +415,29 @@ same pipeline as online novels: translate chapter / range, overnight batch, read
   file are marked stale.
 - **Reader:** imported chapters are translated on demand like online ones; long-press on the
   chapter title → Reload shows the original.
+- **Library card:** the download entry of an import always counts one "chapter" (the file), so
+  the card takes the chapter count from the import record (`ImportedLibraryCard.chapterCount`:
+  the record's count when it is above 0, else the download total). The record is written before
+  the library entry appears, so a new import shows its real count at once. Cards of imports
+  (EPUB, TXT, PDF) carry a small "Imported" label (next to the count in list view, on the
+  poster's top-right corner in grid view).
+- **Placeholder cover:** TXT imports and EPUBs without any cover image get a generated
+  `poster.jpg` at import time (`ImportedCover`: 408x600, the title in bold serif on a colour
+  picked from a 10-colour palette by the SHA-256 of the book id, `ImportedLibraryCard.coverColor`;
+  every palette colour has at least 4.5:1 contrast with the white title). Imports from before
+  this change have no file; their card draws the same placeholder in Compose and no image request
+  is made, so nothing is logged for the missing file.
 
 Files: `imported/ImportedBookId.kt`, `ImportedBooks.kt`, `EpubChapterPlan.kt`,
+`ImportedLibraryCard.kt`, `ImportedCover.kt`,
 `EpubChapters.kt`, `SourceLanguageDetector.kt`, `TextDecoding.kt`, `TxtChapterSplitter.kt`;
 `translator/ChapterTextSource.kt`; `ui/translate/NovelChapterSource.kt`. Tests:
-`ImportedBookIdTest`, `EpubChapterPlanTest`, `SourceLanguageDetectorTest`, `TextDecodingTest`,
+`ImportedBookIdTest`, `ImportedLibraryCardTest`, `EpubChapterPlanTest`, `SourceLanguageDetectorTest`, `TextDecodingTest`,
 `TxtChapterSplitterTest`, `ImportedChapterPipelineTest` (same fake engine and store, online id vs
 imported id: identical translate / skip / stale / re-translate behaviour).
 
 Limitations: language detection is by script only (a Japanese text written almost entirely in
-kanji can come out as `zh`; set it by hand); the library card still says "1 Chapter" for imports
-(existing behaviour); a TOC that points to anchors inside one file still gives an empty chapter,
+kanji can come out as `zh`; set it by hand); a TOC that points to anchors inside one file still gives an empty chapter,
 as in the reader before; translations are not written back into the TXT/EPUB copy.
 
 ## Files

@@ -46,6 +46,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +65,8 @@ import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.imported.ImportedBooks
+import com.lagradost.quicknovel.imported.ImportedLibraryCard
 import com.lagradost.quicknovel.compose.animatedOutline
 import com.lagradost.quicknovel.compose.AdaptiveAtLeast
 import com.lagradost.quicknovel.compose.centeredGutter
@@ -246,10 +251,10 @@ fun SearchResponseRow(
             }
 
     ) {
-        AsyncImage(
-            contentScale = ContentScale.Crop,
-            model = imageRequest,
-            contentDescription = response.name,
+        CardPoster(
+            response = response,
+            imageRequest = imageRequest,
+            titleSize = 9.sp,
             modifier = Modifier
                 .width(67.5.dp)
                 .fillMaxHeight()
@@ -335,13 +340,27 @@ fun SearchResponseRow(
                     response.latestChapterName
                 }
 
-            if (text != null) {
-                Text(
-                    text,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    lineHeight = 15.sp,
-                )
+            if (text != null || response.isImported) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (text != null) {
+                        Text(
+                            text,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            lineHeight = 15.sp,
+                        )
+                    }
+                    if (response.isImported) {
+                        ImportedLabel(
+                            modifier = Modifier
+                                .padding(start = if (text != null) 8.dp else 0.dp)
+                                .rounded()
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
             }
         }
 
@@ -563,15 +582,28 @@ fun SearchResponseItem(
                 .indication(interactionSource = interactionSource, indication = ripple()),
             contentAlignment = Alignment.BottomStart
         ) {
-            AsyncImage(
-                contentScale = ContentScale.Crop,
-                model = imageRequest,
-                contentDescription = response.name,
+            CardPoster(
+                response = response,
+                imageRequest = imageRequest,
+                titleSize = 14.sp,
                 // Placeholder tint so a missing or slow cover still shows the poster's shape.
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             )
+
+            if (response.isImported) {
+                ImportedLabel(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(5.dp)
+                        .rounded()
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    color = Color.White,
+                    fontSize = 11.sp,
+                )
+            }
 
             if (response.id != null) {
                 Row(modifier = Modifier.padding(5.dp)) {
@@ -618,6 +650,67 @@ fun SearchResponseItem(
         }
 
         PosterTitle(response)
+    }
+}
+
+/** Small "Imported" mark on library cards of imported EPUB / TXT / PDF books. */
+@Composable
+fun ImportedLabel(modifier: Modifier = Modifier, color: Color, fontSize: TextUnit = 12.sp) {
+    Text(
+        text = stringResource(R.string.imported_label),
+        color = color,
+        fontSize = fontSize,
+        lineHeight = fontSize,
+        maxLines = 1,
+        modifier = modifier,
+    )
+}
+
+/**
+ * A card's poster. An imported book whose cover file does not exist (TXT imports from before
+ * placeholder covers) shows its placeholder (title on the book's colour) instead of an image
+ * request that can only fail.
+ */
+@Composable
+fun CardPoster(
+    response: ImmutableSearchResponse,
+    imageRequest: coil3.request.ImageRequest,
+    titleSize: TextUnit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val coverMissing = if (response.isImported) {
+        remember(response.apiName, response.author, response.name) {
+            !response.importedCoverFile(context).exists()
+        }
+    } else false
+    if (!coverMissing) {
+        AsyncImage(
+            contentScale = ContentScale.Crop,
+            model = imageRequest,
+            contentDescription = response.name,
+            modifier = modifier,
+        )
+        return
+    }
+    val background = remember(response.author, response.name) {
+        Color(ImportedLibraryCard.coverColor(ImportedBooks.novelIdOf(response.name, response.author)))
+    }
+    Box(
+        modifier = modifier.background(background).padding(6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = response.name,
+            color = Color(ImportedLibraryCard.TEXT_COLOR),
+            fontSize = titleSize,
+            lineHeight = titleSize * 1.15f,
+            fontFamily = FontFamily.Serif,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 6,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

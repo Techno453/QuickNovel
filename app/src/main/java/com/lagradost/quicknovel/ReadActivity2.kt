@@ -214,6 +214,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         }
         settingsSheet = ReaderSettingsSheet(this, viewModel) { layout.tabletopLowerHeight }
         glossary = ReaderGlossaryController(this, viewModel)
+        val interaction = object : TextInteraction {
+            override fun onLongPress(span: TextSpan, offset: Int): Boolean =
+                glossary.lookupAt(span.text, offset, span.index)
+
+            override val selectionLookupEnabled: Boolean get() = glossary.isAvailable
+
+            override fun onSelectionLookup(span: TextSpan, start: Int, end: Int) =
+                glossary.lookupSelection(span.text, start, end, span.index)
+        }
         paged = PagedReaderController(
             this, binding, viewModel,
             config = { textAdapter.config },
@@ -224,17 +233,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
                     density = resources.displayMetrics.density
                 )
             },
-            onLongPress = { span, offset -> glossary.lookupAt(span.text, offset, span.index) }
+            interaction = interaction,
         )
-        textAdapter.interaction = object : TextInteraction {
-            override fun onLongPress(span: TextSpan, offset: Int): Boolean =
-                glossary.lookupAt(span.text, offset, span.index)
-
-            override val selectionLookupEnabled: Boolean get() = glossary.isAvailable
-
-            override fun onSelectionLookup(span: TextSpan, start: Int, end: Int) =
-                glossary.lookupSelection(span.text, start, end, span.index)
-        }
+        textAdapter.interaction = interaction
 
         layout.bind()
         bindTextConfig()

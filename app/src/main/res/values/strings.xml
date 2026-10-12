@@ -402,6 +402,7 @@
     <string name="glossary_review_new_terms">Review new terms</string>
     <string name="glossary_add_term">Add term</string>
     <string name="glossary_menu_analyze">Analyze novel…</string>
+    <string name="imported_label">Imported</string>
     <string name="imported_menu_language">Source language…</string>
     <string name="imported_language_unknown">The language of this book could not be detected. Which language is it?</string>
     <string name="imported_language_title">Language of this book (detected: %s)</string>

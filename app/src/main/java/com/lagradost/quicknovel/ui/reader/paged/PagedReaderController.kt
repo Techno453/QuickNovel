@@ -1,11 +1,19 @@
 package com.lagradost.quicknovel.ui.reader.paged
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Rect
+import android.os.Build
 import android.util.TypedValue
 import android.view.GestureDetector
+import android.view.ActionMode
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +22,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -42,6 +51,8 @@ import com.lagradost.quicknovel.ui.CONFIG_PADDING
 import com.lagradost.quicknovel.ui.CONFIG_SIZE
 import com.lagradost.quicknovel.ui.ScrollIndex
 import com.lagradost.quicknovel.ui.TextConfig
+import com.lagradost.quicknovel.ui.TextInteraction
+import com.lagradost.quicknovel.ui.reader.GlossaryLookup
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.UIHelper
 import io.noties.markwon.image.AsyncDrawableSpan
@@ -59,7 +70,10 @@ import kotlin.math.max
  * horizontal ViewPager2.
  *
  * - Taps: left third = previous page, right third = next page, middle third = toggle the bars.
- *   Swiping also turns pages. Long-press looks a word up in the glossary.
+ *   Swiping also turns pages. A tap on a link opens it (the span's own click handler, as in
+ *   scroll mode) and wins over the page turn.
+ * - Long-press selects the word; its handles extend the selection within the paragraph, and a
+ *   floating toolbar offers Copy and Glossary.
  * - Position: the reader's usual chapter + character offset ([ScrollIndex]); a chapter's title
  *   page is char -1. Switching between scroll and pages keeps the place.
  * - Re-pagination when the text area or the text settings change (fold/unfold, rotation,
@@ -74,8 +88,8 @@ class PagedReaderController(
     private val config: () -> TextConfig,
     /** Text area insets inside the pager: left, top, right, bottom (px). */
     private val insets: () -> Rect,
-    /** Long-press at a character of a paragraph; true if handled. */
-    private val onLongPress: (TextSpan, Int) -> Boolean,
+    /** Glossary hooks shared with the scroll view (long-press word / selection lookup). */
+    private val interaction: TextInteraction,
 ) {
     private val pager: ViewPager2 get() = binding.readPages
     private val adapter = PageAdapter()
@@ -122,6 +136,7 @@ class PagedReaderController(
             }
 
             override fun onPageSelected(position: Int) {
+                if (position != selectionPage) clearSelection()
                 updatePageNumber(position)
                 if (userDragging) {
                     report(position)
@@ -149,6 +164,7 @@ class PagedReaderController(
         pager.isVisible = active
         binding.readPageNumber.isVisible = active
         if (!active) {
+            clearSelection()
             job?.cancel()
             pages = emptyList()
             adapter.submitList(emptyList())
@@ -318,6 +334,7 @@ class PagedReaderController(
 
     private fun show(result: List<ReaderPage>, inset: Rect, cfg: TextConfig) {
         val restyle = inset != shownInsets || cfg != shownConfig
+        clearSelection()
         shownInsets = inset
         shownConfig = cfg
         pages = result
@@ -336,6 +353,96 @@ class PagedReaderController(
         }
     }
 
+    // ============================== selection ==============================
+
+    /** The page view holding the selection, its page, and the floating Copy / Glossary toolbar. */
+    private var selectionView: PageTextView? = null
+    private var selectionPage = -1
+    private var actionMode: ActionMode? = null
+
+    /** The long-pressed character and the word it selected (Glossary looks that up like scroll mode). */
+    private var pressedOffset = -1
+    private var pressedRange: PageSelection.Range? = null
+
+    private fun startSelection(view: PageTextView, span: TextSpan, offset: Int, position: Int) {
+        clearSelection()
+        val word = GlossaryLookup.wordAt(span.text, offset) ?: return
+        view.select(span, PageSelection.Range(word.first, word.last + 1))
+        val selected = view.selection ?: return
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        selectionView = view
+        selectionPage = position
+        pressedOffset = offset
+        pressedRange = selected.range
+        actionMode = view.startActionMode(SelectionCallback(view), ActionMode.TYPE_FLOATING)
+    }
+
+    /** Ends the selection mode (tap, page turn, re-pagination, Copy / Glossary, back). */
+    fun clearSelection() {
+        val view = selectionView ?: return
+        selectionView = null
+        selectionPage = -1
+        pressedRange = null
+        pressedOffset = -1
+        view.clearSelection()
+        actionMode?.let {
+            actionMode = null
+            it.finish()
+        }
+    }
+
+    private inner class SelectionCallback(private val view: PageTextView) : ActionMode.Callback2() {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            menu.add(Menu.NONE, android.R.id.copy, 0, android.R.string.copy)
+            if (interaction.selectionLookupEnabled) {
+                menu.add(Menu.NONE, R.id.reader_glossary_action, 1, R.string.reader_glossary_action)
+            }
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            val selected = view.selection ?: return false
+            when (item.itemId) {
+                android.R.id.copy -> {
+                    val text = view.selectedText() ?: return false
+                    val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    clipboard?.setPrimaryClip(ClipData.newPlainText(null, text.toString()))
+                    // Android 13+ confirms copies itself
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        Toast.makeText(activity, R.string.toast_copied, Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                R.id.reader_glossary_action -> {
+                    val span = selected.span
+                    if (selected.range == pressedRange && pressedOffset >= 0) {
+                        // the long-pressed word as it was: extend it to the longest glossary term
+                        interaction.onLongPress(span, pressedOffset)
+                    } else {
+                        interaction.onSelectionLookup(span, selected.range.start, selected.range.end)
+                    }
+                }
+
+                else -> return false
+            }
+            clearSelection()
+            return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+            if (actionMode === mode) {
+                actionMode = null
+                clearSelection()
+            }
+        }
+
+        override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
+            (view as? PageTextView)?.selectionRect(outRect)
+        }
+    }
+
     // ============================== pages ==============================
 
     private val requireCloudFlare: Boolean
@@ -347,10 +454,23 @@ class PagedReaderController(
     private inner class PageHolder(val root: FrameLayout) : RecyclerView.ViewHolder(root) {
         var page: ReaderPage? = null
 
+        private val text: PageTextView? get() = root.getChildAt(0) as? PageTextView
+
         private val gestures = GestureDetector(root.context, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
 
             override fun onSingleTapUp(e: MotionEvent): Boolean {
+                // a tap while selecting only ends the selection
+                if (selectionView != null) {
+                    clearSelection()
+                    return true
+                }
+                val textView = text
+                val link = textView?.linkAt(e.x, e.y)
+                if (link != null) {
+                    link.onClick(textView)
+                    return true
+                }
                 val w = root.width
                 when {
                     e.x < w / 3f -> previousPage()
@@ -361,14 +481,46 @@ class PagedReaderController(
             }
 
             override fun onLongPress(e: MotionEvent) {
-                val text = root.getChildAt(0) as? PageTextView ?: return
-                val (slice, offset) = text.hit(e.x, e.y) ?: return
-                onLongPress(slice.span, offset)
+                val textView = text ?: return
+                val (slice, offset) = textView.charUnder(e.x, e.y) ?: textView.hit(e.x, e.y) ?: return
+                startSelection(textView, slice.span, offset, bindingAdapterPosition)
             }
         })
 
         init {
-            root.setOnTouchListener { _, event -> gestures.onTouchEvent(event) }
+            root.setOnTouchListener { _, event -> onTouch(event) }
+        }
+
+        /** Handle drags first (they must not turn the page), then taps and long-presses. */
+        private fun onTouch(event: MotionEvent): Boolean {
+            val textView = text
+            if (textView != null && selectionView === textView && textView.selection != null) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        val handle = textView.handleAt(event.x, event.y)
+                        if (handle != null) {
+                            textView.beginDrag(handle, event.x, event.y)
+                            root.parent?.requestDisallowInterceptTouchEvent(true)
+                            actionMode?.hide(60_000L) // hidden while dragging, shown again on release
+                            return true
+                        }
+                    }
+
+                    MotionEvent.ACTION_MOVE -> if (textView.isDragging) {
+                        textView.dragTo(event.x, event.y)
+                        return true
+                    }
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> if (textView.isDragging) {
+                        textView.endDrag()
+                        root.parent?.requestDisallowInterceptTouchEvent(false)
+                        actionMode?.invalidateContentRect()
+                        actionMode?.hide(0)
+                        return true
+                    }
+                }
+            }
+            return gestures.onTouchEvent(event)
         }
 
         private fun onMiddleTap() {
