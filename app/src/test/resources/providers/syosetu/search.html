@@ -1,0 +1,1725 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="description" content="100万以上のWeb小説、ネット小説、オンライン小説、携帯小説を掲載している投稿型の小説サイトです。小説検索、小説評価、ルビ・縦書き対応、高機能小説執筆機能など">
+<meta name="keywords" content="Web小説, ネット小説,携帯小説,ケータイ小説,オンライン小説,縦書き小説,小説投稿,小説投稿サイト">
+<meta name="format-detection" content="telephone=no">
+<meta name="viewport" content="width=1088, maximum-scale=1.0, user-scalable=yes">
+<title>作品検索 | 小説を読もう！</title>
+<link rel="shortcut icon" href="https://static.syosetu.com/sub/yomouview/images/yomou.ico?psawph">
+<link rel="apple-touch-icon-precomposed" href="https://static.syosetu.com/sub/yomouview/images/apple-touch-icon-precomposed.png?ojjr8y">
+<link rel="alternate" type="application/atom+xml" href="https://api.syosetu.com/novelapi/api/?out=atom&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1" title="Atom">
+<link rel="stylesheet" href="https://static.syosetu.com/sub/yomouview/css/base_yomou-pc.css?tkz96u">
+<link rel="stylesheet" type="text/css" media="all" href="https://static.syosetu.com/sub/yomouview/css/p_common-pc.css?tk9bno" />
+<link rel="stylesheet" type="text/css" media="all" href="https://static.syosetu.com/sub/yomouview/css/trad/base.css?r0ln04" />
+<link rel="stylesheet" type="text/css" media="all" href="https://static.syosetu.com/sub/yomouview/css/trad/second.css?qugxcx" />
+<link rel="stylesheet" type="text/css" media="all" href="https://static.syosetu.com/sub/yomouview/css/trad/p_search_form.css?r2nexy" />
+<link rel="stylesheet" type="text/css" media="all" href="https://static.syosetu.com/sub/yomouview/css/trad/p_search_form_pc.css?r2nexy" />
+<link rel="stylesheet" type="text/css" media="all" href="https://static.syosetu.com/sub/yomouview/css/trad/search.css?tcc5gi" />
+<link rel="stylesheet" type="text/css" media="all" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css" />
+<script><!--
+var domain = 'syosetu.com';
+var isSmartPhone = false;
+//--></script>
+<script src="https://static.syosetu.com/view/js/lib/jquery/1.12.4/jquery.min.js?oks8j8"></script>
+<link rel="stylesheet" href="https://static.syosetu.com/view/css/lib/jqueryui/1.12.1/jquery-ui.min.css?oks8j8">
+<script src="https://static.syosetu.com/view/js/lib/jqueryui/1.12.1/jquery-ui.min.js?oks8j8"></script>
+<script src="https://static.syosetu.com/view/js/lib/jquery.hina.js?t4tsco"></script>
+<script src="https://static.syosetu.com/view/js/event/global_menu.js?tgnp1k"></script>
+<script src="https://static.syosetu.com/sub/yomouview/js/global_menu.js?psawph"></script>
+<script src="https://static.syosetu.com/sub/yomouview/js/check_text.js?owywu2"></script>
+<script src="https://static.syosetu.com/view/js/global.js?tk9bnu"></script>
+<script type="text/javascript" src="https://static.syosetu.com/sub/yomouview/js/event/search_search.js?sl4is4"></script>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1/i18n/jquery.ui.datepicker-ja.min.js"></script>
+<script type="text/javascript" src="https://static.syosetu.com/view/js/lib/readmore.min.js?o8fse1"></script>
+<script async src="https://imp-adedge.i-mobile.co.jp/smarttags/9402/yomou.syosetu.com/default.js"></script>
+<script>
+window.smarttag = window.smarttag || {cmd: []};
+</script>
+  <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+  <script async src="https://cpt.geniee.jp/hb/v1/219197/1959/wrapper.min.js"></script>
+</head>
+<body>
+<div class="l-header l-header--sticky js-follow-header-specific">
+<div class="p-header">
+<div class="p-header__body">
+<div class="p-header__inner">
+<h1 class="p-header__logo">
+<a href="https://yomou.syosetu.com/?ref=header"><img src="https://static.syosetu.com/view/images/common/logo_yomou.png?psawph" alt="小説を読もう！"></a>
+</h1>
+<div class="p-header__description">
+小説を読もう！は｢小説家になろう｣に投稿された<br><span class="p-header__description-data">Web小説<span class="p-header__count">1,341,303</span>作品を無料で読める・探せるサイトです。</span>
+</div>
+<div class="p-header__subnav">
+<ul class="p-header__subnav-list">
+<li class="p-header__subnav-item">
+<a href="https://syosetu.com/site/about/"><span class="p-icon p-icon--wakaba" aria-hidden="true"></span>初めての方へ</a>
+</li>
+<li class="p-header__subnav-item">
+<a href="https://syosetu.com/helpcenter/top/"><span class="p-icon p-icon--question" aria-hidden="true"></span>ヘルプセンター</a>
+</li>
+<li class="p-header__subnav-item">
+<a href="https://syosetu.com/login/input/"><span class="p-icon p-icon--login" aria-hidden="true"></span>ログイン</a>
+</li>
+<li class="p-header__subnav-item p-header__subnav-item--site">
+<a href="https://syosetu.com/"><img src="https://static.syosetu.com/view/images/common/logo_narou.png?psawph" alt="小説家になろう"></a>
+</li>
+</ul>
+<form class="c-form p-header__search js-quick-search" action="https://yomou.syosetu.com/search.php">
+<div class="c-form__input-group p-header__search-input">
+<div class="c-form__input-group-prepend">
+<select class="c-form__select" name="search_type">
+<option value="novel">作品</option>
+<option value="user">ユーザ</option>
+</select>
+</div>
+<input class="c-form__input-text" type="text" name="word" placeholder="作品を検索">
+<div class="c-form__input-group-append">
+<button class="c-form__input-group-button" type="submit" name="button"><span class="p-icon p-icon--search" aria-label="検索"></span></button>
+</div>
+</div>
+</form>
+</div>
+</div><!-- /.p-header__inner -->
+</div><!-- /.p-header__body -->
+<div class="p-main-nav">
+<ul class="p-main-nav__list">
+<li class="p-main-nav__item">
+<a href="https://syosetu.com/favnovelmain/list/?ref=header">
+<span class="p-icon p-icon--bookmark" aria-hidden="true"></span>
+<span class="p-main-nav__item-name">ブックマーク</span>
+</a>
+</li>
+<li class="p-main-nav__item">
+<a href="https://yomou.syosetu.com/rireki/list/?ref=header">
+<span class="p-icon p-icon--watch" aria-hidden="true"></span>
+<span class="p-main-nav__item-name">閲覧履歴</span>
+</a>
+</li>
+<li class="p-main-nav__item">
+<a href="https://yomou.syosetu.com/rank/top/?ref=header">
+<span class="p-icon p-icon--crown" aria-hidden="true"></span>
+<span class="p-main-nav__item-name">ランキング</span>
+</a>
+</li>
+<li class="p-main-nav__item">
+<a href="https://yomou.syosetu.com/search.php?ref=header">
+<span class="p-icon p-icon--search" aria-hidden="true"></span>
+<span class="p-main-nav__item-name">作品検索</span>
+</a>
+</li>
+<li class="p-main-nav__item">
+<a href="https://syosetu.com/commercialization/anime/?ref=header">
+<span class="p-icon p-icon--tv" aria-hidden="true"></span>
+<span class="p-main-nav__item-name">アニメ化作品</span>
+</a>
+</li>
+<li class="p-main-nav__item">
+<a href="https://syosetu.com/selectedbyuser/reply/?ref=header">
+<span class="p-icon p-icon--thumbs-up" aria-hidden="true"></span>
+<span class="p-main-nav__item-name">みんなのおすすめ</span>
+</a>
+</li>
+<li class="p-main-nav__item p-main-nav__item--useradd">
+<a href="https://syosetu.com/useradd/mailinput/">
+<span class="p-icon p-icon--user" aria-hidden="true"></span>
+<span class="p-main-nav__item-name">ユーザ登録</span>
+</a>
+</li>
+</ul>
+</div>
+</div><!-- /.p-header -->
+</div><!-- .l-header -->
+<div class="l-container">
+    <div id="trad" class="c-trad-contents">
+<div id="main_search" style="margin-top:10px;">
+<form action="/search.php" id="searchForm" class="searchForm_box">
+<div class="search_box">
+<div class="wordBox">
+<span class="search_label">検索</span><input name="word" placeholder="検索ワードを入力" type="text" value="転生" class="search_text js-select_keyword_apply" />
+<a class="btn-add display_keyword_box" id="select_word">検索ワードを選択</a>
+</div>
+<div class="notwordBox">
+<span class="search_label">除外</span><input name="notword" placeholder="除外ワードを入力" type="text" value="" class="search_text js-select_keyword_apply" />
+<a class="btn-add display_keyword_box" id="reject_word">除外ワードを選択</a>
+</div>
+<div id="select_keyword_box" class="tab_box">
+<ul class="select_word_tab word_tab" id="select_word_tab" >
+<li class="select pointer">おすすめキーワード&#9312;-作品内容</li>
+<li class="pointer">おすすめキーワード&#9313;-ジャンル別</li>
+<li class="pointer">リプレイ用キーワード</li>
+</ul>
+<div class="select_word_content word_content">
+<div id="keywordBox1" class="keyword_box" data-id="1">
+<h4 class="content-head_h4">おすすめキーワード&#9312;-作品内容</h4>
+<p class="search_description">ワードをチェックすると、検索ボックスに自動で入力されます。検索ワードは直接入力も可能です。</p>
+<table class="searchForm_table">
+<tr>
+<th>作品傾向</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="ギャグ" class="select_keyword norimono" data-type="word" /><span>ギャグ</span></label></li>
+<li><label><input type="checkbox" value="シリアス" class="select_keyword norimono" data-type="word" /><span>シリアス</span></label></li>
+<li><label><input type="checkbox" value="ほのぼの" class="select_keyword norimono" data-type="word" /><span>ほのぼの</span></label></li>
+<li><label><input type="checkbox" value="ダーク" class="select_keyword norimono" data-type="word" /><span>ダーク</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>登場キャラクター</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="男主人公" class="select_keyword norimono" data-type="word" /><span>男主人公</span></label></li>
+<li><label><input type="checkbox" value="女主人公" class="select_keyword norimono" data-type="word" /><span>女主人公</span></label></li>
+<li><label><input type="checkbox" value="人外" class="select_keyword norimono" data-type="word" /><span>人外</span></label></li>
+<li><label><input type="checkbox" value="魔王" class="select_keyword norimono" data-type="word" /><span>魔王</span></label></li>
+<li><label><input type="checkbox" value="勇者" class="select_keyword norimono" data-type="word" /><span>勇者</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>舞台</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="和風" class="select_keyword norimono" data-type="word" /><span>和風</span></label></li>
+<li><label><input type="checkbox" value="西洋" class="select_keyword norimono" data-type="word" /><span>西洋</span></label></li>
+<li><label><input type="checkbox" value="中華" class="select_keyword norimono" data-type="word" /><span>中華</span></label></li>
+<li><label><input type="checkbox" value="学園" class="select_keyword norimono" data-type="word" /><span>学園</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>時代設定</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="戦国" class="select_keyword norimono" data-type="word" /><span>戦国</span></label></li>
+<li><label><input type="checkbox" value="幕末" class="select_keyword norimono" data-type="word" /><span>幕末</span></label></li>
+<li><label><input type="checkbox" value="明治/大正" class="select_keyword norimono" data-type="word" /><span>明治/大正</span></label></li>
+<li><label><input type="checkbox" value="昭和" class="select_keyword norimono" data-type="word" /><span>昭和</span></label></li>
+<li><label><input type="checkbox" value="平成" class="select_keyword norimono" data-type="word" /><span>平成</span></label></li>
+<li><label><input type="checkbox" value="古代" class="select_keyword norimono" data-type="word" /><span>古代</span></label></li>
+<li><label><input type="checkbox" value="中世" class="select_keyword norimono" data-type="word" /><span>中世</span></label></li>
+<li><label><input type="checkbox" value="近世" class="select_keyword norimono" data-type="word" /><span>近世</span></label></li>
+<li><label><input type="checkbox" value="近代" class="select_keyword norimono" data-type="word" /><span>近代</span></label></li>
+<li><label><input type="checkbox" value="現代" class="select_keyword norimono" data-type="word" /><span>現代</span></label></li>
+<li><label><input type="checkbox" value="未来" class="select_keyword norimono" data-type="word" /><span>未来</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>要素</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="ロボット" class="select_keyword norimono" data-type="word" /><span>ロボット</span></label></li>
+<li><label><input type="checkbox" value="アンドロイド" class="select_keyword norimono" data-type="word" /><span>アンドロイド</span></label></li>
+<li><label><input type="checkbox" value="職業もの" class="select_keyword norimono" data-type="word" /><span>職業もの</span></label></li>
+<li><label><input type="checkbox" value="ハーレム" class="select_keyword norimono" data-type="word" /><span>ハーレム</span></label></li>
+<li><label><input type="checkbox" value="逆ハーレム" class="select_keyword norimono" data-type="word" /><span>逆ハーレム</span></label></li>
+<li><label><input type="checkbox" value="群像劇" class="select_keyword norimono" data-type="word" /><span>群像劇</span></label></li>
+<li><label><input type="checkbox" value="チート" class="select_keyword norimono" data-type="word" /><span>チート</span></label></li>
+<li><label><input type="checkbox" value="内政" class="select_keyword norimono" data-type="word" /><span>内政</span></label></li>
+<li><label><input type="checkbox" value="魔法" class="select_keyword norimono" data-type="word" /><span>魔法</span></label></li>
+<li><label><input type="checkbox" value="冒険" class="select_keyword norimono" data-type="word" /><span>冒険</span></label></li>
+<li><label><input type="checkbox" value="ミリタリー" class="select_keyword norimono" data-type="word" /><span>ミリタリー</span></label></li>
+<li><label><input type="checkbox" value="日常" class="select_keyword norimono" data-type="word" /><span>日常</span></label></li>
+<li><label><input type="checkbox" value="ハッピーエンド" class="select_keyword norimono" data-type="word" /><span>ハッピーエンド</span></label></li>
+<li><label><input type="checkbox" value="バッドエンド" class="select_keyword norimono" data-type="word" /><span>バッドエンド</span></label></li>
+<li><label><input type="checkbox" value="グルメ" class="select_keyword norimono" data-type="word" /><span>グルメ</span></label></li>
+<li><label><input type="checkbox" value="青春" class="select_keyword norimono" data-type="word" /><span>青春</span></label></li>
+<li><label><input type="checkbox" value="ゲーム" class="select_keyword norimono" data-type="word" /><span>ゲーム</span></label></li>
+<li><label><input type="checkbox" value="超能力" class="select_keyword norimono" data-type="word" /><span>超能力</span></label></li>
+<li><label><input type="checkbox" value="タイムトラベル" class="select_keyword norimono" data-type="word" /><span>タイムトラベル</span></label></li>
+<li><label><input type="checkbox" value="ダンジョン" class="select_keyword norimono" data-type="word" /><span>ダンジョン</span></label></li>
+<li><label><input type="checkbox" value="パラレルワールド" class="select_keyword norimono" data-type="word" /><span>パラレルワールド</span></label></li>
+<li><label><input type="checkbox" value="タイムリープ" class="select_keyword norimono" data-type="word" /><span>タイムリープ</span></label></li>
+</ul>
+</td>
+</tr>
+</table>
+</div>
+<div id="keywordBox2" class="keyword_box hide" data-id="2">
+<h4 class="content-head_h4">おすすめキーワード&#9313;-ジャンル別</h4>
+<p class="search_description">ワードをチェックすると、検索ボックスに自動で入力されます。検索ワードは直接入力も可能です。</p>
+<h4 class="content-head_h4">恋愛</h4>
+<table class="searchForm_table">
+<tr>
+<th>恋愛〔大ジャンル〕</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="異類婚姻譚" class="select_keyword norimono" data-type="word" /><span>異類婚姻譚</span></label></li>
+<li><label><input type="checkbox" value="身分差" class="select_keyword norimono" data-type="word" /><span>身分差</span></label></li>
+<li><label><input type="checkbox" value="年の差" class="select_keyword norimono" data-type="word" /><span>年の差</span></label></li>
+<li><label><input type="checkbox" value="悲恋" class="select_keyword norimono" data-type="word" /><span>悲恋</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>異世界</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ヒストリカル" class="select_keyword norimono" data-type="word" /><span>ヒストリカル</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="乙女ゲーム" class="select_keyword norimono" data-type="word" /><span>乙女ゲーム</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="悪役令嬢" class="select_keyword norimono" data-type="word" /><span>悪役令嬢</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>現実世界</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="オフィスラブ" class="select_keyword norimono" data-type="word" /><span>オフィスラブ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="スクールラブ" class="select_keyword norimono" data-type="word" /><span>スクールラブ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="古典恋愛" class="select_keyword norimono" data-type="word" /><span>古典恋愛</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+<h4 class="content-head_h4">ファンタジー</h4>
+<table class="searchForm_table">
+<tr>
+<th>ハイファンタジー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="オリジナル戦記" class="select_keyword norimono" data-type="word" /><span>オリジナル戦記</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>ローファンタジー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="伝奇" class="select_keyword norimono" data-type="word" /><span>伝奇</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+<h4 class="content-head_h4">文芸</h4>
+<table class="searchForm_table">
+<tr>
+<th>ヒューマンドラマ</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ハードボイルド" class="select_keyword norimono" data-type="word" /><span>ハードボイルド</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="私小説" class="select_keyword norimono" data-type="word" /><span>私小説</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="ホームドラマ" class="select_keyword norimono" data-type="word" /><span>ホームドラマ</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>歴史</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="IF戦記" class="select_keyword norimono" data-type="word" /><span>IF戦記</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="史実" class="select_keyword norimono" data-type="word" /><span>史実</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="時代小説" class="select_keyword norimono" data-type="word" /><span>時代小説</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="逆行転生" class="select_keyword norimono" data-type="word" /><span>逆行転生</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>推理</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ミステリー" class="select_keyword norimono" data-type="word" /><span>ミステリー</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="サスペンス" class="select_keyword norimono" data-type="word" /><span>サスペンス</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="探偵小説" class="select_keyword norimono" data-type="word" /><span>探偵小説</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>ホラー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="スプラッタ" class="select_keyword norimono" data-type="word" /><span>スプラッタ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="怪談" class="select_keyword norimono" data-type="word" /><span>怪談</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="サイコホラー" class="select_keyword norimono" data-type="word" /><span>サイコホラー</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>アクション</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="異能力バトル" class="select_keyword norimono" data-type="word" /><span>異能力バトル</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="ヒーロー" class="select_keyword norimono" data-type="word" /><span>ヒーロー</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="スパイ" class="select_keyword norimono" data-type="word" /><span>スパイ</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>コメディー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ラブコメ" class="select_keyword norimono" data-type="word" /><span>ラブコメ</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+<h4 class="content-head_h4">SF</h4>
+<table class="searchForm_table">
+<tr>
+<th>SF〔大ジャンル〕</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="近未来" class="select_keyword norimono" data-type="word" /><span>近未来</span></label></li>
+<li><label><input type="checkbox" value="人工知能" class="select_keyword norimono" data-type="word" /><span>人工知能</span></label></li>
+<li><label><input type="checkbox" value="電脳世界" class="select_keyword norimono" data-type="word" /><span>電脳世界</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>VRゲーム</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="VRMMO" class="select_keyword norimono" data-type="word" /><span>VRMMO</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>宇宙</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="スペースオペラ" class="select_keyword norimono" data-type="word" /><span>スペースオペラ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="エイリアン" class="select_keyword norimono" data-type="word" /><span>エイリアン</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>空想科学</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="サイバーパンク" class="select_keyword norimono" data-type="word" /><span>サイバーパンク</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="スチームパンク" class="select_keyword norimono" data-type="word" /><span>スチームパンク</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="ディストピア" class="select_keyword norimono" data-type="word" /><span>ディストピア</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="タイムマシン" class="select_keyword norimono" data-type="word" /><span>タイムマシン</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>パニック</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="怪獣" class="select_keyword norimono" data-type="word" /><span>怪獣</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="天災" class="select_keyword norimono" data-type="word" /><span>天災</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="バイオハザード" class="select_keyword norimono" data-type="word" /><span>バイオハザード</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="パンデミック" class="select_keyword norimono" data-type="word" /><span>パンデミック</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+</div>
+<div id="keywordBox3" class="keyword_box replay hide" data-id="3">
+<h4 class="content-head_h4">リプレイ用キーワード</h4>
+<p class="search_description">ワードをチェックすると、検索ボックスに自動で入力されます。検索ワードは直接入力も可能です。</p>
+<table class="searchForm_table">
+<tr>
+<th>リプレイ用<br />キーワード</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="SW2.0" class="select_keyword norimono" data-type="word" /><span>ソード・ワールド2.0</span></label>
+</li><li>
+<label><input type="checkbox" value="AR2E" class="select_keyword norimono" data-type="word" /><span>アリアンロッドRPG2E</span></label>
+</li><li>
+<label><input type="checkbox" value="ダブルクロス3rd" class="select_keyword norimono" data-type="word" /><span>ダブルクロス The 3rd Edition</span></label>
+</li><li>
+<label><input type="checkbox" value="MGR" class="select_keyword norimono" data-type="word" /><span>メタリックガーディアンRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="グランクレスト" class="select_keyword norimono" data-type="word" /><span>グランクレストRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="ガーデンオーダー" class="select_keyword norimono" data-type="word" /><span>ガーデンオーダー</span></label>
+</li><li>
+<label><input type="checkbox" value="ナイトウィザード" class="select_keyword norimono" data-type="word" /><span>ナイトウィザード The 3rd Edition</span></label>
+</li><li>
+<label><input type="checkbox" value="アルシャード" class="select_keyword norimono" data-type="word" /><span>アルシャードセイヴァーRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="NOVA" class="select_keyword norimono" data-type="word" /><span>トーキョーN◎VA THE AXLERATION</span></label>
+</li><li>
+<label><input type="checkbox" value="dragonarms" class="select_keyword norimono" data-type="word" /><span>ドラゴンアームズ改</span></label>
+</li><li>
+<label><input type="checkbox" value="モノトーン" class="select_keyword norimono" data-type="word" /><span>モノトーンミュージアムRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="BoA" class="select_keyword norimono" data-type="word" /><span>ブレイド・オブ・アルカナ</span></label>
+</li><li>
+<label><input type="checkbox" value="セブンフォートレス" class="select_keyword norimono" data-type="word" /><span>セブン＝フォートレス メビウス</span></label>
+</li><li>
+<label><input type="checkbox" value="エースキラージーン" class="select_keyword norimono" data-type="word" /><span>バトルガールプロデュースＲＰＧ エースキラージーン</span></label>
+</li><li>
+<label><input type="checkbox" value="MAG" class="select_keyword norimono" data-type="word" /><span>チェンジアクションＲＰＧ マージナルヒーローズ</span></label>
+</li><li>
+<label><input type="checkbox" value="片道勇者" class="select_keyword norimono" data-type="word" /><span>片道勇者TRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="アマデウス" class="select_keyword norimono" data-type="word" /><span>神話創世RPG アマデウス</span></label>
+</li><li>
+<label><input type="checkbox" value="DLH" class="select_keyword norimono" data-type="word" /><span>デッドラインヒーローズRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="ドラクルージュ" class="select_keyword norimono" data-type="word" /><span>常夜国騎士譚RPG ドラクルージュ</span></label>
+</li><li>
+<label><input type="checkbox" value="コロッサルハンター" class="select_keyword norimono" data-type="word" /><span>巨獣討伐RPG コロッサルハンター</span></label>
+</li><li>
+<label><input type="checkbox" value="スクハイ" class="select_keyword norimono" data-type="word" /><span>日常ホラーＲＰＧ  スクリームハイスクール</span></label>
+</li><li>
+<label><input type="checkbox" value="トワハイ" class="select_keyword norimono" data-type="word" /><span>Sci-FiミステリーＲＰＧ  トワイライトハイスクール</span></label>
+</li><li>
+<label><input type="checkbox" value="ＴＮＭ" class="select_keyword norimono" data-type="word" /><span>トーキョー・ナイトメア</span></label>
+</li><li>
+<label><input type="checkbox" value="アニマアニムス" class="select_keyword norimono" data-type="word" /><span>アニマアニムス</span></label>
+</li><li>
+<label><input type="checkbox" value="拳禅無双" class="select_keyword norimono" data-type="word" /><span>格闘アクションＲＰＧ  拳禅無双</span></label>
+</li><li>
+<label><input type="checkbox" value="ルイブレ" class="select_keyword norimono" data-type="word" /><span>転生サバイバルＲＰＧ  ルーインブレイカーズ</span></label>
+</li></ul>
+</td>
+</tr>
+</table>
+</div>
+</div><!-- select_word_content -->
+</div>
+<!-- select_keyword_box -->
+<div id="reject_keyword_box" class="tab_box">
+<ul class="reject_word_tab word_tab" id="reject_word_tab">
+<li class="select pointer">おすすめキーワード&#9312;-作品内容</li>
+<li class="pointer">おすすめキーワード&#9313;-ジャンル別</li>
+<li class="pointer">リプレイ用キーワード</li>
+</ul>
+<div class="reject_word_content word_content">
+<div id="keywordBox1" class="keyword_box" data-id="1">
+<h4 class="content-head_h4">おすすめキーワード&#9312;-作品内容</h4>
+<p class="search_description">ワードをチェックすると、検索除外ボックスに自動で入力されます。除外ワードは直接入力も可能です。</p>
+<table class="searchForm_table">
+<tr>
+<th>作品傾向</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="ギャグ" class="select_keyword norimono" data-type="notword" /><span>ギャグ</span></label></li>
+<li><label><input type="checkbox" value="シリアス" class="select_keyword norimono" data-type="notword" /><span>シリアス</span></label></li>
+<li><label><input type="checkbox" value="ほのぼの" class="select_keyword norimono" data-type="notword" /><span>ほのぼの</span></label></li>
+<li><label><input type="checkbox" value="ダーク" class="select_keyword norimono" data-type="notword" /><span>ダーク</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>登場キャラクター</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="男主人公" class="select_keyword norimono" data-type="notword" /><span>男主人公</span></label></li>
+<li><label><input type="checkbox" value="女主人公" class="select_keyword norimono" data-type="notword" /><span>女主人公</span></label></li>
+<li><label><input type="checkbox" value="人外" class="select_keyword norimono" data-type="notword" /><span>人外</span></label></li>
+<li><label><input type="checkbox" value="魔王" class="select_keyword norimono" data-type="notword" /><span>魔王</span></label></li>
+<li><label><input type="checkbox" value="勇者" class="select_keyword norimono" data-type="notword" /><span>勇者</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>舞台</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="和風" class="select_keyword norimono" data-type="notword" /><span>和風</span></label></li>
+<li><label><input type="checkbox" value="西洋" class="select_keyword norimono" data-type="notword" /><span>西洋</span></label></li>
+<li><label><input type="checkbox" value="中華" class="select_keyword norimono" data-type="notword" /><span>中華</span></label></li>
+<li><label><input type="checkbox" value="学園" class="select_keyword norimono" data-type="notword" /><span>学園</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>時代設定</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="戦国" class="select_keyword norimono" data-type="notword" /><span>戦国</span></label></li>
+<li><label><input type="checkbox" value="幕末" class="select_keyword norimono" data-type="notword" /><span>幕末</span></label></li>
+<li><label><input type="checkbox" value="明治/大正" class="select_keyword norimono" data-type="notword" /><span>明治/大正</span></label></li>
+<li><label><input type="checkbox" value="昭和" class="select_keyword norimono" data-type="notword" /><span>昭和</span></label></li>
+<li><label><input type="checkbox" value="平成" class="select_keyword norimono" data-type="notword" /><span>平成</span></label></li>
+<li><label><input type="checkbox" value="古代" class="select_keyword norimono" data-type="notword" /><span>古代</span></label></li>
+<li><label><input type="checkbox" value="中世" class="select_keyword norimono" data-type="notword" /><span>中世</span></label></li>
+<li><label><input type="checkbox" value="近世" class="select_keyword norimono" data-type="notword" /><span>近世</span></label></li>
+<li><label><input type="checkbox" value="近代" class="select_keyword norimono" data-type="notword" /><span>近代</span></label></li>
+<li><label><input type="checkbox" value="現代" class="select_keyword norimono" data-type="notword" /><span>現代</span></label></li>
+<li><label><input type="checkbox" value="未来" class="select_keyword norimono" data-type="notword" /><span>未来</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>要素</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="ロボット" class="select_keyword norimono" data-type="notword" /><span>ロボット</span></label></li>
+<li><label><input type="checkbox" value="アンドロイド" class="select_keyword norimono" data-type="notword" /><span>アンドロイド</span></label></li>
+<li><label><input type="checkbox" value="職業もの" class="select_keyword norimono" data-type="notword" /><span>職業もの</span></label></li>
+<li><label><input type="checkbox" value="ハーレム" class="select_keyword norimono" data-type="notword" /><span>ハーレム</span></label></li>
+<li><label><input type="checkbox" value="逆ハーレム" class="select_keyword norimono" data-type="notword" /><span>逆ハーレム</span></label></li>
+<li><label><input type="checkbox" value="群像劇" class="select_keyword norimono" data-type="notword" /><span>群像劇</span></label></li>
+<li><label><input type="checkbox" value="チート" class="select_keyword norimono" data-type="notword" /><span>チート</span></label></li>
+<li><label><input type="checkbox" value="内政" class="select_keyword norimono" data-type="notword" /><span>内政</span></label></li>
+<li><label><input type="checkbox" value="魔法" class="select_keyword norimono" data-type="notword" /><span>魔法</span></label></li>
+<li><label><input type="checkbox" value="冒険" class="select_keyword norimono" data-type="notword" /><span>冒険</span></label></li>
+<li><label><input type="checkbox" value="ミリタリー" class="select_keyword norimono" data-type="notword" /><span>ミリタリー</span></label></li>
+<li><label><input type="checkbox" value="日常" class="select_keyword norimono" data-type="notword" /><span>日常</span></label></li>
+<li><label><input type="checkbox" value="ハッピーエンド" class="select_keyword norimono" data-type="notword" /><span>ハッピーエンド</span></label></li>
+<li><label><input type="checkbox" value="バッドエンド" class="select_keyword norimono" data-type="notword" /><span>バッドエンド</span></label></li>
+<li><label><input type="checkbox" value="グルメ" class="select_keyword norimono" data-type="notword" /><span>グルメ</span></label></li>
+<li><label><input type="checkbox" value="青春" class="select_keyword norimono" data-type="notword" /><span>青春</span></label></li>
+<li><label><input type="checkbox" value="ゲーム" class="select_keyword norimono" data-type="notword" /><span>ゲーム</span></label></li>
+<li><label><input type="checkbox" value="超能力" class="select_keyword norimono" data-type="notword" /><span>超能力</span></label></li>
+<li><label><input type="checkbox" value="タイムトラベル" class="select_keyword norimono" data-type="notword" /><span>タイムトラベル</span></label></li>
+<li><label><input type="checkbox" value="ダンジョン" class="select_keyword norimono" data-type="notword" /><span>ダンジョン</span></label></li>
+<li><label><input type="checkbox" value="パラレルワールド" class="select_keyword norimono" data-type="notword" /><span>パラレルワールド</span></label></li>
+<li><label><input type="checkbox" value="タイムリープ" class="select_keyword norimono" data-type="notword" /><span>タイムリープ</span></label></li>
+</ul>
+</td>
+</tr>
+</table>
+</div>
+<div id="keywordBox2" class="keyword_box hide" data-id="2">
+<h4 class="content-head_h4">おすすめキーワード&#9313;-ジャンル別</h4>
+<p class="search_description">ワードをチェックすると、検索除外ボックスに自動で入力されます。除外ワードは直接入力も可能です。</p>
+<h4 class="content-head_h4">恋愛</h4>
+<table class="searchForm_table">
+<tr>
+<th>恋愛〔大ジャンル〕</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="異類婚姻譚" class="select_keyword norimono" data-type="notword" /><span>異類婚姻譚</span></label></li>
+<li><label><input type="checkbox" value="身分差" class="select_keyword norimono" data-type="notword" /><span>身分差</span></label></li>
+<li><label><input type="checkbox" value="年の差" class="select_keyword norimono" data-type="notword" /><span>年の差</span></label></li>
+<li><label><input type="checkbox" value="悲恋" class="select_keyword norimono" data-type="notword" /><span>悲恋</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>異世界</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ヒストリカル" class="select_keyword norimono" data-type="notword" /><span>ヒストリカル</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="乙女ゲーム" class="select_keyword norimono" data-type="notword" /><span>乙女ゲーム</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="悪役令嬢" class="select_keyword norimono" data-type="notword" /><span>悪役令嬢</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>現実世界</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="オフィスラブ" class="select_keyword norimono" data-type="notword" /><span>オフィスラブ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="スクールラブ" class="select_keyword norimono" data-type="notword" /><span>スクールラブ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="古典恋愛" class="select_keyword norimono" data-type="notword" /><span>古典恋愛</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+<h4 class="content-head_h4">ファンタジー</h4>
+<table class="searchForm_table">
+<tr>
+<th>ハイファンタジー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="オリジナル戦記" class="select_keyword norimono" data-type="notword" /><span>オリジナル戦記</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>ローファンタジー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="伝奇" class="select_keyword norimono" data-type="notword" /><span>伝奇</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+<h4 class="content-head_h4">文芸</h4>
+<table class="searchForm_table">
+<tr>
+<th>ヒューマンドラマ</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ハードボイルド" class="select_keyword norimono" data-type="notword" /><span>ハードボイルド</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="私小説" class="select_keyword norimono" data-type="notword" /><span>私小説</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="ホームドラマ" class="select_keyword norimono" data-type="notword" /><span>ホームドラマ</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>歴史</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="IF戦記" class="select_keyword norimono" data-type="notword" /><span>IF戦記</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="史実" class="select_keyword norimono" data-type="notword" /><span>史実</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="時代小説" class="select_keyword norimono" data-type="notword" /><span>時代小説</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="逆行転生" class="select_keyword norimono" data-type="notword" /><span>逆行転生</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>推理</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ミステリー" class="select_keyword norimono" data-type="notword" /><span>ミステリー</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="サスペンス" class="select_keyword norimono" data-type="notword" /><span>サスペンス</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="探偵小説" class="select_keyword norimono" data-type="notword" /><span>探偵小説</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>ホラー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="スプラッタ" class="select_keyword norimono" data-type="notword" /><span>スプラッタ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="怪談" class="select_keyword norimono" data-type="notword" /><span>怪談</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="サイコホラー" class="select_keyword norimono" data-type="notword" /><span>サイコホラー</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>アクション</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="異能力バトル" class="select_keyword norimono" data-type="notword" /><span>異能力バトル</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="ヒーロー" class="select_keyword norimono" data-type="notword" /><span>ヒーロー</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="スパイ" class="select_keyword norimono" data-type="notword" /><span>スパイ</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>コメディー</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="ラブコメ" class="select_keyword norimono" data-type="notword" /><span>ラブコメ</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+<h4 class="content-head_h4">SF</h4>
+<table class="searchForm_table">
+<tr>
+<th>SF〔大ジャンル〕</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="近未来" class="select_keyword norimono" data-type="notword" /><span>近未来</span></label></li>
+<li><label><input type="checkbox" value="人工知能" class="select_keyword norimono" data-type="notword" /><span>人工知能</span></label></li>
+<li><label><input type="checkbox" value="電脳世界" class="select_keyword norimono" data-type="notword" /><span>電脳世界</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>VRゲーム</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="VRMMO" class="select_keyword norimono" data-type="notword" /><span>VRMMO</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>宇宙</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="スペースオペラ" class="select_keyword norimono" data-type="notword" /><span>スペースオペラ</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="エイリアン" class="select_keyword norimono" data-type="notword" /><span>エイリアン</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>空想科学</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="サイバーパンク" class="select_keyword norimono" data-type="notword" /><span>サイバーパンク</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="スチームパンク" class="select_keyword norimono" data-type="notword" /><span>スチームパンク</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="ディストピア" class="select_keyword norimono" data-type="notword" /><span>ディストピア</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="タイムマシン" class="select_keyword norimono" data-type="notword" /><span>タイムマシン</span></label>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>パニック</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="怪獣" class="select_keyword norimono" data-type="notword" /><span>怪獣</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="天災" class="select_keyword norimono" data-type="notword" /><span>天災</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="バイオハザード" class="select_keyword norimono" data-type="notword" /><span>バイオハザード</span></label>
+</li>
+<li>
+<label><input type="checkbox" value="パンデミック" class="select_keyword norimono" data-type="notword" /><span>パンデミック</span></label>
+</li>
+</ul>
+</td>
+</tr>
+</table>
+</div>
+<div id="keywordBox3" class="keyword_box replay hide" data-id="3">
+<h4 class="content-head_h4">リプレイ用キーワード</h4>
+<p class="search_description">ワードをチェックすると、検索除外ボックスに自動で入力されます。除外ワードは直接入力も可能です。</p>
+<table class="searchForm_table">
+<tr>
+<th>リプレイ用<br />キーワード</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" value="SW2.0" class="select_keyword norimono" data-type="notword" /><span>ソード・ワールド2.0</span></label>
+</li><li>
+<label><input type="checkbox" value="AR2E" class="select_keyword norimono" data-type="notword" /><span>アリアンロッドRPG2E</span></label>
+</li><li>
+<label><input type="checkbox" value="ダブルクロス3rd" class="select_keyword norimono" data-type="notword" /><span>ダブルクロス The 3rd Edition</span></label>
+</li><li>
+<label><input type="checkbox" value="MGR" class="select_keyword norimono" data-type="notword" /><span>メタリックガーディアンRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="グランクレスト" class="select_keyword norimono" data-type="notword" /><span>グランクレストRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="ガーデンオーダー" class="select_keyword norimono" data-type="notword" /><span>ガーデンオーダー</span></label>
+</li><li>
+<label><input type="checkbox" value="ナイトウィザード" class="select_keyword norimono" data-type="notword" /><span>ナイトウィザード The 3rd Edition</span></label>
+</li><li>
+<label><input type="checkbox" value="アルシャード" class="select_keyword norimono" data-type="notword" /><span>アルシャードセイヴァーRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="NOVA" class="select_keyword norimono" data-type="notword" /><span>トーキョーN◎VA THE AXLERATION</span></label>
+</li><li>
+<label><input type="checkbox" value="dragonarms" class="select_keyword norimono" data-type="notword" /><span>ドラゴンアームズ改</span></label>
+</li><li>
+<label><input type="checkbox" value="モノトーン" class="select_keyword norimono" data-type="notword" /><span>モノトーンミュージアムRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="BoA" class="select_keyword norimono" data-type="notword" /><span>ブレイド・オブ・アルカナ</span></label>
+</li><li>
+<label><input type="checkbox" value="セブンフォートレス" class="select_keyword norimono" data-type="notword" /><span>セブン＝フォートレス メビウス</span></label>
+</li><li>
+<label><input type="checkbox" value="エースキラージーン" class="select_keyword norimono" data-type="notword" /><span>バトルガールプロデュースＲＰＧ エースキラージーン</span></label>
+</li><li>
+<label><input type="checkbox" value="MAG" class="select_keyword norimono" data-type="notword" /><span>チェンジアクションＲＰＧ マージナルヒーローズ</span></label>
+</li><li>
+<label><input type="checkbox" value="片道勇者" class="select_keyword norimono" data-type="notword" /><span>片道勇者TRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="アマデウス" class="select_keyword norimono" data-type="notword" /><span>神話創世RPG アマデウス</span></label>
+</li><li>
+<label><input type="checkbox" value="DLH" class="select_keyword norimono" data-type="notword" /><span>デッドラインヒーローズRPG</span></label>
+</li><li>
+<label><input type="checkbox" value="ドラクルージュ" class="select_keyword norimono" data-type="notword" /><span>常夜国騎士譚RPG ドラクルージュ</span></label>
+</li><li>
+<label><input type="checkbox" value="コロッサルハンター" class="select_keyword norimono" data-type="notword" /><span>巨獣討伐RPG コロッサルハンター</span></label>
+</li><li>
+<label><input type="checkbox" value="スクハイ" class="select_keyword norimono" data-type="notword" /><span>日常ホラーＲＰＧ  スクリームハイスクール</span></label>
+</li><li>
+<label><input type="checkbox" value="トワハイ" class="select_keyword norimono" data-type="notword" /><span>Sci-FiミステリーＲＰＧ  トワイライトハイスクール</span></label>
+</li><li>
+<label><input type="checkbox" value="ＴＮＭ" class="select_keyword norimono" data-type="notword" /><span>トーキョー・ナイトメア</span></label>
+</li><li>
+<label><input type="checkbox" value="アニマアニムス" class="select_keyword norimono" data-type="notword" /><span>アニマアニムス</span></label>
+</li><li>
+<label><input type="checkbox" value="拳禅無双" class="select_keyword norimono" data-type="notword" /><span>格闘アクションＲＰＧ  拳禅無双</span></label>
+</li><li>
+<label><input type="checkbox" value="ルイブレ" class="select_keyword norimono" data-type="notword" /><span>転生サバイバルＲＰＧ  ルーインブレイカーズ</span></label>
+</li></ul>
+</td>
+</tr>
+</table>
+</div>
+</div><!-- reject_word_content -->
+</div>
+<!-- reject_keyword_box -->
+<div class="cond">
+<span class="search_label_colon">検索条件設定：</span>
+<a id="select_genre_btn" class="btn-add">ジャンル選択</a>
+<a id="detail_config_btn" class="btn-add">詳細条件設定</a>
+<span class="search_label_history">履歴から検索：</span>
+<a class="btn-add js-search_conditions_btn">検索履歴</a>
+</div>
+<div class="genre_list" id="cross_genre_list">
+<h4 class="content-head_h4">ジャンル選択</h4>
+<p class="search_description">すべてのチェックを解除した場合、すべてのジャンルが検索対象となります。</p>
+<table class="searchForm_table">
+<tr>
+<th>
+恋愛
+</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" id="genre_101" value="101" data-parent="1" /><span>異世界</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_102" value="102" data-parent="1" /><span>現実世界</span></label>
+</li>
+</ul>
+</td>
+<td>
+<input type="button" class="btn-radius1" id="biggenre_1" value="すべて選択" data-biggenre="1" data-nolock="true" />
+</td>
+</tr>
+<tr>
+<th>
+ファンタジー
+</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" id="genre_201" value="201" data-parent="2" /><span>ハイファンタジー</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_202" value="202" data-parent="2" /><span>ローファンタジー</span></label>
+</li>
+</ul>
+</td>
+<td>
+<input type="button" class="btn-radius1" id="biggenre_2" value="すべて選択" data-biggenre="2" data-nolock="true" />
+</td>
+</tr>
+<tr>
+<th>
+文芸
+</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" id="genre_301" value="301" data-parent="3" /><span>純文学</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_302" value="302" data-parent="3" /><span>ヒューマンドラマ</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_303" value="303" data-parent="3" /><span>歴史</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_304" value="304" data-parent="3" /><span>推理</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_305" value="305" data-parent="3" /><span>ホラー</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_306" value="306" data-parent="3" /><span>アクション</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_307" value="307" data-parent="3" /><span>コメディー</span></label>
+</li>
+</ul>
+</td>
+<td>
+<input type="button" class="btn-radius1" id="biggenre_3" value="すべて選択" data-biggenre="3" data-nolock="true" />
+</td>
+</tr>
+<tr>
+<th>
+SF
+</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" id="genre_401" value="401" data-parent="4" /><span>VRゲーム</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_402" value="402" data-parent="4" /><span>宇宙</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_403" value="403" data-parent="4" /><span>空想科学</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_404" value="404" data-parent="4" /><span>パニック</span></label>
+</li>
+</ul>
+</td>
+<td>
+<input type="button" class="btn-radius1" id="biggenre_4" value="すべて選択" data-biggenre="4" data-nolock="true" />
+</td>
+</tr>
+<tr>
+<th>
+その他
+</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" id="genre_9901" value="9901" data-parent="99" /><span>童話</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_9902" value="9902" data-parent="99" /><span>詩</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_9903" value="9903" data-parent="99" /><span>エッセイ</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_9904" value="9904" data-parent="99" /><span>リプレイ</span></label>
+</li>
+<li>
+<label><input type="checkbox" id="genre_9999" value="9999" data-parent="99" /><span>その他</span></label>
+</li>
+</ul>
+</td>
+<td>
+<input type="button" class="btn-radius1" id="biggenre_99" value="すべて選択" data-biggenre="99" data-nolock="true" />
+</td>
+</tr>
+<tr>
+<th>
+ノンジャンル
+</th>
+<td>
+<ul class="checkbox_list">
+<li>
+<label><input type="checkbox" id="genre_9801" value="9801" data-parent="98" /><span>ノンジャンル</span></label>
+</li>
+</ul>
+</td>
+<td>
+<input type="button" class="btn-radius1" id="biggenre_98" value="すべて選択" data-biggenre="98" data-nolock="true" />
+</td>
+</tr>
+</table>
+<input type="hidden" name="genre" value="" />
+<div class="button_box">
+<input type="button" class="btn-allgenre_select" id="selectAllGenre" value="全ジャンルを選択" data-nolock="true" />
+<input type="button" class="btn-allgenre_reject" id="clearAllGenre" value="全ジャンルを解除" data-nolock="true" />
+</div>
+</div>
+<!-- genre_list -->
+<div class="detail_config_list i_padding" id="detail_config_list">
+<h4 class="content-head_h4">詳細条件設定</h4>
+<table class="searchForm_table">
+<tr>
+<th>作品種別の絞り込み</th>
+<td>
+<ul class="checkbox_list_noveltype">
+<li class="type_t"><label><input type="checkbox" id="noveltype_t" value="noveltype_t" /><span>短編</span></label></li>
+<li class="type_re">
+<label><input type="checkbox" id="noveltype_r" value="noveltype_r" /><span>連載</span></label>
+<ul>
+<li class="type_re_start_symbol">（</li>
+<li class="type_r">
+<label><input type="checkbox" id="novelend_not" value="novelend_not" /><span>連載中のみ</span></label>
+</li>
+<li class="type_e">
+<label><input type="checkbox" id="novelend" value="novelend_end" /><span>完結のみ</span></label>
+</li>
+<li>）</li>
+</ul>
+</li>
+</ul>
+<input type="hidden" name="type" value="" />
+</td>
+</tr>
+<tr>
+<th>検索範囲指定</th>
+<td class="area">
+<div class="conf_box">
+<span class="search_label_conf">読了時間</span>
+<select name="mintime" class="search_reach_select">
+<option value=""  selected="selected" >指定しない</option>
+<option value="5"  >5分以上</option>
+<option value="10"  >10分以上</option>
+<option value="30"  >30分以上</option>
+<option value="60"  >1時間以上</option>
+<option value="120"  >2時間以上</option>
+<option value="180"  >3時間以上</option>
+<option value="240"  >4時間以上</option>
+<option value="300"  >5時間以上</option>
+</select>～<select name="maxtime" class="search_reach_select">
+<option value=""  selected="selected" >指定しない</option>
+<option value="5"  >5分未満</option>
+<option value="10"  >10分未満</option>
+<option value="30"  >30分未満</option>
+<option value="60"  >1時間未満</option>
+<option value="120"  >2時間未満</option>
+<option value="180"  >3時間未満</option>
+<option value="240"  >4時間未満</option>
+<option value="300"  >5時間未満</option>
+</select>
+</div>
+<div class="conf_box">
+<span class="search_label_conf">文字数</span>
+<input type="text" name="minlen" value="" class="search_reach_select" />～<input type="text" name="maxlen" value="" class="search_reach_select" />
+</div>
+<div class="conf_box">
+<span class="search_label_conf">総合ポイント</span>
+<select name="min_globalpoint" class="search_reach_select">
+<option value=""  selected="selected" >指定しない</option>
+<option value="100"  >100pt以上</option>
+<option value="1000"  >1000pt以上</option>
+<option value="3000"  >3000pt以上</option>
+<option value="10000"  >1万pt以上</option>
+<option value="50000"  >5万pt以上</option>
+<option value="100000"  >10万pt以上</option>
+<option value="200000"  >20万pt以上</option>
+</select>～<select name="max_globalpoint" class="search_reach_select">
+<option value=""   selected="selected" >指定しない</option>
+<option value="100"   >100pt未満</option>
+<option value="1000"   >1000pt未満</option>
+<option value="3000"   >3000pt未満</option>
+<option value="10000"   >1万pt未満</option>
+<option value="50000"   >5万pt未満</option>
+<option value="100000"   >10万pt未満</option>
+<option value="200000"   >20万pt未満</option>
+</select>
+</div>
+<div class="conf_box clearfix">
+<span class="search_label_conf">最新掲載日<span class="text80">（年月日）</span></span>
+<input type="text" name="minlastup" value="" readonly="readonly" class="search_reach_select" placeholder="yyyy/mm/dd" />～<input type="text" name="maxlastup" value="" readonly="readonly" class="search_reach_select" placeholder="yyyy/mm/dd" />
+<input type="button" class="btn-radius1" id="releaseLastup" value="指定を解除" data-nolock="true" />
+</div>
+<div class="conf_box clearfix">
+<span class="search_label_conf">初回掲載日<span class="text80">（年月日）</span></span>
+<input type="text" name="minfirstup" value="" readonly="readonly" class="search_reach_select" placeholder="yyyy/mm/dd" />～<input type="text" name="maxfirstup" value="" readonly="readonly" class="search_reach_select" placeholder="yyyy/mm/dd" />
+<input type="button" class="btn-radius1" id="releaseFirstup" value="指定を解除" data-nolock="true" />
+</div>
+</td>
+</tr>
+<tr>
+<th>抽出条件の指定</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" name="sasie" value="1-" /><span>挿絵のある作品</span></label></li>
+<li><label><input type="checkbox" name="ispickup" value="1" /><span>小説PickUp！対象作品</span></label></li>
+<li class="disabled"><label><input type="checkbox" name="extraction_favnovel_chk" value="1" disabled=disabled /><span>ブックマークしている作品</span></label></li>
+<li class="disabled"><label><input type="checkbox" name="extraction_hyouka_chk" value="1" disabled=disabled /><span>評価をつけた作品</span></label></li>
+</ul>
+<span class="description">ブックマークしている作品、評価を付けた作品の抽出は<a href="https://syosetu.com/login/input/?redirectlink=https%3A%2F%2Fyomou.syosetu.com%2Fsearch.php%3Fsearch_type%3Dnovel%26word%3D%25E8%25BB%25A2%25E7%2594%259F%26order%3Dhyoka&redirecthash=03f6e843da27608855b463137a9025244005e09c">ログイン</a>してご利用下さい。</span>
+<span class="dc_search_label">作品に含まれる要素</span>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" name="isai" value="1" /><span>AI直接使用</span></label></li>
+<li><label><input type="checkbox" name="isr15" value="1" /><span>R15</span></label></li>
+<li><label><input type="checkbox" name="iszankoku" value="1" /><span>残酷な描写あり</span></label></li>
+<li><label><input type="checkbox" name="isbl" value="1" /><span>ボーイズラブ</span></label></li>
+<li><label><input type="checkbox" name="isgl" value="1" /><span>ガールズラブ</span></label></li>
+<li><label><input type="checkbox" name="istensei" value="1" /><span>異世界転生</span></label></li>
+<li><label><input type="checkbox" name="istenni" value="1" /><span>異世界転移</span></label></li>
+</ul>
+</td>
+</tr>
+<tr>
+<th>除外条件の指定</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" name="stop" value="1" /><span>長期連載停止中の作品</span></label></li>
+<li class="disabled"><label><input type="checkbox" name="exclude_favnovel_chk" value="1" disabled=disabled /><span>ブックマークしている作品</span></label></li>
+<li class="disabled"><label><input type="checkbox" name="exclude_hyouka_chk" value="1" disabled=disabled /><span>評価をつけた作品</span></label></li>
+</ul>
+<span class="description">ブックマークしている作品、評価を付けた作品の除外は<a href="https://syosetu.com/login/input/?redirectlink=https%3A%2F%2Fyomou.syosetu.com%2Fsearch.php%3Fsearch_type%3Dnovel%26word%3D%25E8%25BB%25A2%25E7%2594%259F%26order%3Dhyoka&redirecthash=03f6e843da27608855b463137a9025244005e09c">ログイン</a>してご利用下さい。</span>
+<span class="dc_search_label">作品に含まれる要素</span>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" name="notai" value="1" /><span>AI直接使用</span></label></li>
+<li><label><input type="checkbox" name="notr15" value="1" /><span>R15</span></label></li>
+<li><label><input type="checkbox" name="notzankoku" value="1" /><span>残酷な描写あり</span></label></li>
+<li><label><input type="checkbox" name="notbl" value="1" /><span>ボーイズラブ</span></label></li>
+<li><label><input type="checkbox" name="notgl" value="1" /><span>ガールズラブ</span></label></li>
+<li><label><input type="checkbox" name="nottensei" value="1" /><span>異世界転生</span></label></li>
+<li><label><input type="checkbox" name="nottenni" value="1" /><span>異世界転移</span></label></li>
+</ul>
+<!-- 除外条件 -->
+</td>
+</tr>
+<tr>
+<th>ワード検索範囲指定</th>
+<td>
+<ul class="checkbox_list">
+<li><label><input type="checkbox" value="1" name="title" /><span>作品タイトル</span></label></li>
+<li><label><input type="checkbox" value="1" name="ex" /><span>あらすじ</span></label></li>
+<li><label><input type="checkbox" value="1" name="keyword" /><span>キーワード</span></label></li>
+<li><label><input type="checkbox" value="1" name="wname" /><span>作者名</span></label></li>
+</ul>
+<span class="description">すべてのチェックを解除した場合、すべての項目がワード検索の対象となります。</span>
+</td>
+</tr><!-- ワード検索範囲指定 -->
+</table>
+</div>
+<!-- detail_config_list -->
+<div class="js-search_conditions_list search-history" data-token="aae011cc1cb9b2e2a9dffc4d85e0e223">
+<h4 class="content-head_h4 search-history_editmode">保存した検索条件
+</h4>
+<p class="search_description">
+この機能を利用するには<a href="https://syosetu.com/login/input/?redirectlink=https%3A%2F%2Fyomou.syosetu.com%2Fsearch.php%3Fsearch_type%3Dnovel%26word%3D%25E8%25BB%25A2%25E7%2594%259F%26order%3Dhyoka&redirecthash=03f6e843da27608855b463137a9025244005e09c">ログイン</a>が必要です。
+</p>
+<h4 class="content-head_h4 search-history_editmode js-enable_history_mode">検索履歴
+<a class="js-edit_search_history search-history_editmode-btn" data-editmode="false">編集</a>
+</h4>
+<p class="search_description js-search_history_description js-enable_history_mode">最近の検索履歴を5件まで表示しています。</p>
+<h4 class="content-head_h4 js-disable_history_mode">検索履歴</h4>
+<p class="search_description js-disable_history_mode">表示できる検索履歴はありません。</p>
+<div class="js-search_history_list js-enable_history_mode search-history_list">
+<div class="js-search_history_template" style="display: none;">
+<div class="js-search_history_item search-history_list-item">
+<div class="js-search_history_data search-history_list-content">
+<a class="js-readmore-searchconditions__ellipsis js-search_history_item_url search-history_list-link">
+<span class="js-search_history_conditions_keyword search-history_keyword"></span>
+<span class="js-search_history_conditions_detail search-history_detail"></span>
+</a>
+</div>
+<div class="js-edit_search_history_mode search-history_edit" style="display: none;">
+<a class="js-delete_search_history search-history_edit-btn search-history_edit-btn_delete" data-url="/search.php"></a>
+</div>
+</div>
+</div>
+</div>
+<h4 class="content-head_h4">検索履歴の設定</h4>
+<ul class="search-history_setting-note">
+<li>検索履歴の記録にはローカルストレージを使用しています。そのため、端末の他、ブラウザによっても表示される履歴が異なります。ローカルストレージを利用できない環境では検索履歴を記録することができません。</li>
+<li>プライベートブラウザを閉じた場合は検索履歴が消去されます。</li>
+<li>ログインしていない状態で検索した内容は、ログイン後の検索履歴にも表示されます。共有PCの場合は他者に見られる可能性がありますのでご注意ください。</li>
+</ul>
+<div class="js-enable_history_mode search-history_setting">
+<div class="search-history_setting-content">
+<p class="search-history_setting-title">記録設定の変更</p>
+<div class="search-history_setting-description">現在は「検索履歴を記録する」設定です。<br>設定を変更すると、現在の履歴はすべて削除されます。</div>
+<a class="js-disable_history search-history_setting-btn">検索履歴を記録しない[変更]</a>
+</div>
+<div class="search-history_setting-content">
+<p class="search-history_setting-title">検索履歴の全削除</p>
+<div class="search-history_setting-description">検索履歴の一括削除が行えます。<br>ボタンを押すと、実行前の確認が表示されます。</div>
+<a data-url="/search.php" class="js-alldelete_search_history search-history_setting-btn">検索履歴をすべて削除する</a>
+</div>
+</div>
+<div class="js-disable_history_mode search-history_setting">
+<div class="search-history_setting-content">
+<p class="search-history_setting-title">記録設定の変更</p>
+<div class="search-history_setting-description">現在は「検索履歴を記録しない」設定です。</div>
+<a class="js-enable_history search-history_setting-btn">検索履歴を記録する[変更]</a>
+</div>
+</div>
+</div><!-- /.search-history -->
+<input value="検索" type="submit" class="btn-search" data-nolock="true" />
+</div><!-- search_box -->
+<div class="link-anime">
+<span>小説家になろう掲載の</span><a href="https://syosetu.com/commercialization/anime/">アニメ化作品一覧はこちら</a>
+</div>
+<p class="order_box i_padding">
+<span class="search_label_colon">検索結果の並び替え：</span><select name="order" onchange="$(this.form).submit();">
+<option value="new">最新掲載順</option>
+<option value="weekly">週間ユニークアクセスが多い順</option>
+<option value="favnovelcnt">ブックマーク登録の多い順</option>
+<option value="reviewcnt">レビューの多い順</option>
+<option value="hyoka" selected="selected">総合ポイントの高い順</option>
+<option value="dailypoint">日間ポイントの高い順</option>
+<option value="weeklypoint">週間ポイントの高い順</option>
+<option value="monthlypoint">月間ポイントの高い順</option>
+<option value="quarterpoint">四半期ポイントの高い順</option>
+<option value="yearlypoint">年間ポイントの高い順</option>
+<option value="hyokacnt">評価者数の多い順</option>
+<option value="lengthdesc">文字数の多い順</option>
+<option value="generalfirstup">初回掲載順</option>
+<option value="old">更新が古い順</option>
+</select>
+</p>
+</form>
+<span style="font-size:150%; font-weight:bold;">転生</span> 検索結果：
+<b>124,297作品</b>
+<div class="pager">
+ [<b>-1-</b>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=2">2</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=3">3</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=4">4</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=5">5</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=6">6</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=7">7</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=8">8</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=9">9</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=10">10</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=11">11</a>]  &gt;&gt; <a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=2" class="nextlink">NEXT</a> 
+</div>
+<!--pager-->
+<div class="c-ad c-ad--bigbanner">
+<div data-cptid="1571603" style="display: block;">
+<script>
+  window.gnshbrequest.cmd.push(function() {
+window.gnshbrequest.applyPassback("1571603", "[data-cptid='1571603']");
+  });
+</script>
+</div>
+</div>
+<div class="series_search">
+<div class="series_search__lead">検索条件に一致するシリーズ&nbsp;&nbsp;<span class="series_search__lead-supplement">※一致率が高い3件を表示</span></div>
+<span class="series_search__series p-icon p-icon--angle-right">&nbsp;<a href="https://ncode.syosetu.com/s0685a/" target="_blank">トリックス☆スターズ（作者：えりまき ねぅ）</a></span>
+<span class="series_search__series p-icon p-icon--angle-right">&nbsp;<a href="https://ncode.syosetu.com/s0722a/" target="_blank">変化球型不憫系ひろいん。（作者：忍龍）</a></span>
+<span class="series_search__series p-icon p-icon--angle-right">&nbsp;<a href="https://ncode.syosetu.com/s1707a/" target="_blank">「隣の異世界」シリーズ（作者：尾黒）</a></span>
+</div>
+ <div class="searchkekka_box">
+<div class="novel_h"><a class="tl" target="_blank" href="https://ncode.syosetu.com/n9669bk/">無職転生　- 異世界行ったら本気だす -</a></div>
+作者：<a href="https://mypage.syosetu.com/288399/">理不尽な孫の手</a>／<a target="_blank" href="https://ncode.syosetu.com/novelview/infotop/ncode/n9669bk/">作品情報</a>／Nコード：N9669BK
+<table>
+<tr>
+<td class="left"><br /> <br />   完結済 <br />(全286エピソード) </td>
+<td>
+<div class="ex">３４丙丁戊己き辛壬癸甲乙丙丁戊かキーケこ、いう丁戊か庚く壬こあ、丙丁お己庚くけこあ乙うエオカキく壬こあい丙えおかきく。癸甲いう丁、己き辛け癸あいうえおか。くけこあ乙丙丁お己庚くけこあい。
+　己き辛け、甲乙うえ戊己きくけ癸甲いうえ戊己き辛けこ。
+【2015辛4癸3乙23:00　壬癸あいうえ】
+　辛壬癸あ乙丙丁おかきくけ癸甲乙うえ。
+　辛壬癸甲 - 戊己庚 -
+http://ncode.syosetu.com/n4251cr/</div>
+ジャンル：<a href="/search.php?genre=201">ハイファンタジー</a>〔ファンタジー〕<br /> キーワード： <a href="/search.php?word=R15">R15</a> <a href="/search.php?word=%E6%AE%8B%E9%85%B7%E3%81%AA%E6%8F%8F%E5%86%99%E3%81%82%E3%82%8A">残酷な描写あり</a> <a href="/search.php?word=%E7%95%B0%E4%B8%96%E7%95%8C%E8%BB%A2%E7%94%9F">異世界転生</a> <br /> 最終更新日：2015/04/03 23:00　<span class="marginleft">読了時間：約5,661分（2,830,123文字）</span>
+<br /> 週別ユニークユーザ： 326,843人　　レビュー数： 228件
+<span style="display:inline-block; background:#d7e9ef; margin-left:25px; padding:0 3px; border-radius:3px;">挿絵あり</span>
+<br />
+<span class="attention">
+総合ポイント：
+997,284
+pt
+</span>
+<br />
+ブックマーク： 286,143件
+<span class="marginleft">
+評価人数：  43,899  人 </span>
+<span class="marginleft">
+評価ポイント：
+424,998
+pt
+</span>
+</td>
+</tr>
+</table>
+</div>
+<!--searchkekka_box-->
+<div class="searchkekka_box">
+<div class="novel_h"><a class="tl" target="_blank" href="https://ncode.syosetu.com/n6316bn/">転生したらスライムだった件</a></div>
+作者：<a href="https://mypage.syosetu.com/311735/">伏瀬</a>／<a target="_blank" href="https://ncode.syosetu.com/novelview/infotop/ncode/n6316bn/">作品情報</a>／Nコード：N6316BN
+<table>
+<tr>
+<td class="left"><br /> <br />   完結済 <br />(全304エピソード) </td>
+<td>
+<div class="ex">甲乙丙丁お己き辛け癸あいう丁おかきくけこ、37丁おカキクケコ。乙丙え戊かき辛壬こ甲乙う丁おかきく、コアイウえおかきくけ！
+い？…お？庚くケコアイうえおか！！！こあい丙えおかきく、癸々い丙えおカキクケコアイ。
+戊己き辛け癸あい、丁戊か庚くけ。あいうえお己庚くけ癸甲いうえおかきく？
+あいう、おかきくけこ甲乙丙丁戊か庚辛壬コアイウエオカきく。
+※乙丙丁戊己き。
+　甲乙丙え、己きくけこあ乙丙。</div>
+ジャンル：<a href="/search.php?genre=201">ハイファンタジー</a>〔ファンタジー〕<br /> キーワード： <a href="/search.php?word=R15">R15</a> <a href="/search.php?word=%E6%AE%8B%E9%85%B7%E3%81%AA%E6%8F%8F%E5%86%99%E3%81%82%E3%82%8A">残酷な描写あり</a> <a href="/search.php?word=%E7%95%B0%E4%B8%96%E7%95%8C%E8%BB%A2%E7%94%9F">異世界転生</a> <a href="/search.php?word=%E3%82%B9%E3%83%A9%E3%82%A4%E3%83%A0">スライム</a> <a href="/search.php?word=%E3%83%81%E3%83%BC%E3%83%88">チート</a> <br /> 最終更新日：2020/07/04 00:00　<span class="marginleft">読了時間：約4,088分（2,043,550文字）</span>
+<br /> 週別ユニークユーザ： 47,757人　　レビュー数： 115件
+<span style="display:inline-block; background:#d7e9ef; margin-left:25px; padding:0 3px; border-radius:3px;">挿絵あり</span>
+<br />
+<span class="attention">
+総合ポイント：
+983,901
+pt
+</span>
+<br />
+ブックマーク： 341,440件
+<span class="marginleft">
+評価人数：  31,159  人 </span>
+<span class="marginleft">
+評価ポイント：
+301,021
+pt
+</span>
+</td>
+</tr>
+</table>
+</div>
+<!--searchkekka_box-->
+<div class="searchkekka_box">
+<div class="novel_h"><a class="tl" target="_blank" href="https://ncode.syosetu.com/n7787eq/">魔導具師ダリヤはうつむかない</a></div>
+作者：<a href="https://mypage.syosetu.com/1300935/">甘岸久弥</a>／<a target="_blank" href="https://ncode.syosetu.com/novelview/infotop/ncode/n7787eq/">作品情報</a>／Nコード：N7787EQ
+<table>
+<tr>
+<td class="left"><br /> <br />   連載中 <br />(全612エピソード) </td>
+<td>
+<div class="ex">「いうえお、キクケ。甲乙う丁戊かきくけこあ」 丁戊己庚、壬こ甲い丙丁戊かきく壬こあ。
+丁戊か庚辛け癸甲い丙丁お、きくけこあいうえ戊己庚。
+癸甲いうえおかきくけこあい、えお己きくけこあいう丁戊己庚。
+コアイう丁おか。くけ、あいうえおかきくけ。
+乙丙えお己庚辛壬こ甲乙うえ、己きくけこあいう丁お、庚くけこあいう丁お、庚くけこあいう丁おか。辛壬こあいう丁お、庚くけこあいう丁おかき、け。
+いうえ戊己き、壬癸甲乙丙丁お己庚く壬癸あ。丙丁戊か庚くけコアイう、戊己き辛けこアイウエ。
+庚辛壬こ甲乙丙えお己庚くけこ、乙うえ戊かき、けこあいう丁お己きくけ癸々。
+丁戊か庚辛けこあいうえお、きくけ癸甲いうえおか庚辛壬癸あ、丙え戊かきくけこあい丙丁お己き辛壬癸甲乙丙え戊己。辛壬こ甲い丙えおか2辛け、あいう丁戊かきくけこあ。
+※戊己庚辛壬癸あ乙丙えおかきくけ。甲乙丙丁お己きくけ。
+乙丙丁おかきく https://ncode.syosetu.com/n6477gw/
+戊己：MFコアイウ丁おか1～13甲、丙丁戊1庚、壬癸甲イウエ1～3辛、癸甲乙丙エオカ1辛　
+アイウエオカ：クケコアイウエオカ庚辛9癸、乙丙エオカキクケーア乙丙2戊、FWケコアイウエオカ庚、壬癸甲イウエ1～6辛、癸甲乙丙丁戊己3辛壬癸甲いう。おかきくけこアイウえおかきくけ。
+いうえおかきくけ癸あいうえ。</div>
+ジャンル：<a href="/search.php?genre=101">異世界</a>〔恋愛〕<br /> キーワード： <a href="/search.php?word=R15">R15</a> <a href="/search.php?word=%E6%AE%8B%E9%85%B7%E3%81%AA%E6%8F%8F%E5%86%99%E3%81%82%E3%82%8A">残酷な描写あり</a> <a href="/search.php?word=%E7%95%B0%E4%B8%96%E7%95%8C%E8%BB%A2%E7%94%9F">異世界転生</a> <a href="/search.php?word=%E5%A5%B3%E4%B8%BB%E4%BA%BA%E5%85%AC">女主人公</a> <a href="/search.php?word=%E3%83%8F%E3%83%83%E3%83%94%E3%83%BC%E3%82%A8%E3%83%B3%E3%83%89">ハッピーエンド</a> <a href="/search.php?word=%E5%A9%9A%E7%B4%84%E7%A0%B4%E6%A3%84">婚約破棄</a> <a href="/search.php?word=%E9%AD%94%E5%B0%8E%E5%85%B7">魔導具</a> <a href="/search.php?word=%E5%AE%B6%E9%9B%BB%E6%84%9B">家電愛</a> <a href="/search.php?word=%E9%AD%94%E5%89%A3">魔剣</a> <a href="/search.php?word=%E7%94%9F%E7%94%A3">生産</a> <a href="/search.php?word=%E7%89%A9%E4%BD%9C%E3%82%8A">物作り</a> <a href="/search.php?word=%E6%96%99%E7%90%86">料理</a> <a href="/search.php?word=%E9%85%92">酒</a> <br /> 最終更新日：2026/10/10 20:00　<span class="marginleft">読了時間：約5,624分（2,811,620文字）</span>
+<br /> 週別ユニークユーザ： 176,990人　　レビュー数： 90件
+<br />
+<span class="attention">
+総合ポイント：
+870,976
+pt
+</span>
+<br />
+ブックマーク： 188,847件
+<span class="marginleft">
+評価人数：  50,925  人 </span>
+<span class="marginleft">
+評価ポイント：
+493,282
+pt
+</span>
+</td>
+</tr>
+</table>
+</div>
+<!--searchkekka_box-->
+<div class="searchkekka_box">
+<div class="novel_h"><a class="tl" target="_blank" href="https://ncode.syosetu.com/n8733gf/">お気楽領主の楽しい領地防衛  〜生産系魔術で名もなき村を最強の城塞都市に〜</a></div>
+作者：<a href="https://mypage.syosetu.com/1041901/">赤池宗</a>／<a target="_blank" href="https://ncode.syosetu.com/novelview/infotop/ncode/n8733gf/">作品情報</a>／Nコード：N8733GF
+<table>
+<tr>
+<td class="left"><br /> <br />   連載中 <br />(全414エピソード) </td>
+<td>
+<div class="ex">【乙丙丁、カキクケコア、ウエオ己！】
+癸甲い丙えおか庚くけこアイウえ２己きくけこ甲、丙丁お己庚く壬癸甲いうえおかき辛け癸あい。
+戊々き辛壬こ甲乙うえ戊かきく壬癸あ乙う、戊己庚く壬癸あ乙うえおカキク。
+あいう、８己き辛け癸甲乙丙丁戊か庚くけ、甲乙うえお己庚くけこ甲乙丙丁戊か庚辛けこあいうえ戊己き辛けこあい、エオカき辛壬癸あ乙う丁おかきくけこあいうえおかき。
+癸あいうえお己き辛けこ甲々う丁戊か庚くけこ、イウエおかきくけ癸あ乙丙え戊己き辛け、あいう丁お己き辛け癸甲乙丙えお己庚くけこあ。
+えお、キクケコあ乙丙えおか庚くけ。
+イウエ戊かき辛壬こあいう丁おかき。
+癸あいうエオカキクケ癸甲いう３戊己庚・:*+.\(( °ω° ))/.:+
+くけこあいうえおかき☆*:.。. o(≧▽≦)o .。.:*☆
+癸甲乙丙丁戊己きく壬癸アイウエオ１庚！
+癸甲乙丙丁戊己きく壬癸アイウエオ１庚！
+癸甲乙丙丁戊己きく壬癸アイウエオ１庚！
+癸甲乙丙丁戊己きく壬癸甲イウエオカ１辛！
+甲乙丙丁戊己庚くけ癸甲イウエオカ1辛！
+甲乙丙丁オカキクケ２甲！
+丁戊己庚クケコアイ３丁！
+庚辛壬癸アイウエオ２庚！
+癸甲乙丙丁オカキクケ1甲！
+丁戊己庚クケコアイ2丁！
+庚辛壬癸アイウエオ5庚！!
+※イウエオかき辛壬こあいうえお！</div>
+ジャンル：<a href="/search.php?genre=201">ハイファンタジー</a>〔ファンタジー〕<br /> キーワード： <a href="/search.php?word=%E7%95%B0%E4%B8%96%E7%95%8C%E8%BB%A2%E7%94%9F">異世界転生</a> <a href="/search.php?word=%E3%82%AE%E3%83%A3%E3%82%B0">ギャグ</a> <a href="/search.php?word=%E3%82%B7%E3%83%AA%E3%82%A2%E3%82%B9">シリアス</a> <a href="/search.php?word=%E7%94%B7%E4%B8%BB%E4%BA%BA%E5%85%AC">男主人公</a> <a href="/search.php?word=%E8%A5%BF%E6%B4%8B">西洋</a> <a href="/search.php?word=%E4%B8%AD%E4%B8%96">中世</a> <a href="/search.php?word=%E3%83%81%E3%83%BC%E3%83%88">チート</a> <a href="/search.php?word=%E5%86%85%E6%94%BF">内政</a> <a href="/search.php?word=%E3%83%80%E3%83%B3%E3%82%B8%E3%83%A7%E3%83%B3">ダンジョン</a> <a href="/search.php?word=%E3%82%AA%E3%83%AA%E3%82%B8%E3%83%8A%E3%83%AB%E6%88%A6%E8%A8%98">オリジナル戦記</a> <a href="/search.php?word=%E6%9C%80%E5%BC%B7">最強</a> <a href="/search.php?word=%E6%88%90%E3%82%8A%E4%B8%8A%E3%81%8C%E3%82%8A">成り上がり</a> <a href="/search.php?word=%E8%B2%B4%E6%97%8F">貴族</a> <a href="/search.php?word=%E9%8C%AC%E9%87%91%E8%A1%93">錬金術</a> <a href="/search.php?word=%E5%A5%B4%E9%9A%B7">奴隷</a> <br /> 最終更新日：2026/10/10 19:00　<span class="marginleft">読了時間：約2,132分（1,065,836文字）</span>
+<br /> 週別ユニークユーザ： 115,899人　　レビュー数： 21件
+<br />
+<span class="attention">
+総合ポイント：
+857,540
+pt
+</span>
+<br />
+ブックマーク： 172,359件
+<span class="marginleft">
+評価人数：  54,466  人 </span>
+<span class="marginleft">
+評価ポイント：
+512,822
+pt
+</span>
+</td>
+</tr>
+</table>
+</div>
+<!--searchkekka_box-->
+<div class="searchkekka_box">
+<div class="novel_h"><a class="tl" target="_blank" href="https://ncode.syosetu.com/n3669fw/">【アニメ２０２６年７月放送！】ヘルモード　～やり込み好きのゲーマーは廃設定の異世界で無双する～</a></div>
+作者：<a href="https://mypage.syosetu.com/1015944/">ハム男</a>／<a target="_blank" href="https://ncode.syosetu.com/novelview/infotop/ncode/n3669fw/">作品情報</a>／Nコード：N3669FW
+<table>
+<tr>
+<td class="left"><br /> <br />   連載中 <br />(全915エピソード) </td>
+<td>
+<div class="ex">甲乙丙丁お３５辛けコアイーエオか。くけ癸あ乙うえ戊己きくケーアい丙丁おかきくけ、甲乙うエオカー辛壬こ甲乙う丁おか庚くけ。
+いうえ戊、『くけ癸あ乙うえおかきく』こあい丙え戊己きクケコあ乙うえ、カキクーコあ乙丙丁お己庚くけこあいうえお。
+くけ癸甲い丙丁戊カキクけこあ、うえお己庚辛壬コアイウエーかきく。
+アイウえ戊己き辛壬こあいう、おか庚辛けこあい丙え戊かきく。
+１０丙丁、２０辛壬コーイウエオカき辛け癸あいウーオカキクけこあい、
+おかきクーコあい丙えおかき辛壬こあ、ウエオか庚辛け癸あいうえおかきくけこ。
+ウエオ（２０２５甲７丙２０己庚辛）
+甲乙ウエオ⇒https://hellmode-anime.com/
+戊己キクケコア⇒https://x.com/hellmode_anime
+乙丙丁戊己：２０２６乙１丁
+己庚
+壬癸甲：ウーオ・キクーコアイ丙
+１１庚２０２５乙３丁１４庚辛壬！！
+丙丁オカキ⇒https://www.es-novel.jp/special/hellmode/
+アイウエ
+１０辛２０２４丙１２己１２壬癸甲！！
+オカキクケコ甲イウエ⇒https://www.comic-earthstar.jp/detail/hellmode/
+丁戊カキクケコ
+2020己03壬24乙　丁戊１庚(2021丙2戊8庚辛壬）
+2023己10壬28乙　丁戊５庚(2024丙4戊21辛壬癸）
+ウエーカ庚辛壬癸甲乙
+2024辛03甲　１００己庚
+2025丙03己　２００甲乙
+2026辛02甲　３００己庚
+2026丙09己　４００甲乙
+※戊己庚くけこあ乙うエオカキくけ癸甲乙うえ。
+『辛壬癸甲乙丙』『己庚辛壬癸甲』『丁戊己庚辛壬』『ＡＩ丁戊己庚』けこ。</div>
+ジャンル：<a href="/search.php?genre=201">ハイファンタジー</a>〔ファンタジー〕<br /> キーワード： <a href="/search.php?word=R15">R15</a> <a href="/search.php?word=%E6%AE%8B%E9%85%B7%E3%81%AA%E6%8F%8F%E5%86%99%E3%81%82%E3%82%8A">残酷な描写あり</a> <a href="/search.php?word=%E7%95%B0%E4%B8%96%E7%95%8C%E8%BB%A2%E7%94%9F">異世界転生</a> <a href="/search.php?word=%E7%94%B7%E4%B8%BB%E4%BA%BA%E5%85%AC">男主人公</a> <a href="/search.php?word=%E5%AD%A6%E5%9C%92">学園</a> <a href="/search.php?word=%E3%83%81%E3%83%BC%E3%83%88">チート</a> <a href="/search.php?word=%E3%83%80%E3%83%B3%E3%82%B8%E3%83%A7%E3%83%B3">ダンジョン</a> <a href="/search.php?word=%E8%BA%AB%E5%88%86%E5%B7%AE">身分差</a> <a href="/search.php?word=%E3%82%B5%E3%83%A9%E3%83%AA%E3%83%BC%E3%83%9E%E3%83%B3">サラリーマン</a> <a href="/search.php?word=%E5%8F%AC%E5%96%9A%E5%A3%AB">召喚士</a> <a href="/search.php?word=%E5%89%A3%E3%81%A8%E9%AD%94%E6%B3%95">剣と魔法</a> <a href="/search.php?word=%E3%83%AC%E3%83%99%E3%83%AB">レベル</a> <a href="/search.php?word=%E3%82%B9%E3%83%86%E3%83%BC%E3%82%BF%E3%82%B9">ステータス</a> <a href="/search.php?word=%E6%88%90%E3%82%8A%E3%81%82%E3%81%8C%E3%82%8A">成りあがり</a> <a href="/search.php?word=%E7%84%A1%E5%8F%8C">無双</a> <a href="/search.php?word=%E3%81%84%E3%81%9A%E3%82%8C%E4%B8%BB%E4%BA%BA%E5%85%AC%E6%9C%80%E5%BC%B7">いずれ主人公最強</a> <a href="/search.php?word=%E5%8B%87%E8%80%85%E3%81%A8%E9%AD%94%E7%8E%8B">勇者と魔王</a> <a href="/search.php?word=ESN%E5%A4%A7%E8%B3%9E%EF%BC%92">ESN大賞２</a> <br /> 最終更新日：2026/10/11 20:03　<span class="marginleft">読了時間：約7,813分（3,906,098文字）</span>
+<br /> 週別ユニークユーザ： 75,262人　　レビュー数： 70件
+<br />
+<span class="attention">
+総合ポイント：
+790,983
+pt
+</span>
+<br />
+ブックマーク： 155,785件
+<span class="marginleft">
+評価人数：  50,480  人 </span>
+<span class="marginleft">
+評価ポイント：
+479,413
+pt
+</span>
+</td>
+</tr>
+</table>
+</div>
+<!--searchkekka_box-->
+<div class="c-ad c-ad--bigbanner">
+<div data-cptid="1571610" style="display: block;">
+<script>
+  window.gnshbrequest.cmd.push(function() {
+window.gnshbrequest.applyPassback("1571610", "[data-cptid='1571610']");
+  });
+</script>
+</div>
+</div>
+<div class="pager">
+ [<b>-1-</b>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=2">2</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=3">3</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=4">4</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=5">5</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=6">6</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=7">7</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=8">8</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=9">9</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=10">10</a>] [<a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=11">11</a>]  &gt;&gt; <a href="?&amp;word=%E8%BB%A2%E7%94%9F&amp;search_type=novel&amp;order_former=search&amp;order=hyoka&amp;notnizi=1&amp;p=2" class="nextlink">NEXT</a> 
+</div>
+<!--pager-->
+<div class="searchdate_box">
+<p class="attenstion2">
+検索時間：1.0464251秒<br /><br /> 最新の情報と異なる場合があります。予めご了承ください。
+</p>
+</div>
+</div>
+<!--_search-->
+<div id="sub_search" style="margin-top:10px;">
+<div class="sub_box">
+<div class="title_h2">
+<div class="h2_help">サイト案内</div>
+</div>
+<ul class="list_g">
+<li><a href="https://yomou.syosetu.com/site/about/">「小説を読もう！」について</a></li>
+<li><a href="https://syosetu.com/site/about/">「小説家になろう」について</a></li>
+<li><a href="https://syosetu.com/site/group/">小説家になろうグループ</a></li>
+<li><a href="https://syosetu.com/useradd/mailinput/">ユーザ登録</a></li>
+</ul>
+</div>
+<div class="sub_box">
+<div class="title_h2">
+<div class="h2_search">特殊検索</div>
+</div>
+<ul class="list_g">
+<li><a href="https://yomou.syosetu.com/nolist/nopointlist/">未評価作品一覧</a></li>
+<li><a href="https://yomou.syosetu.com/nolist/noimpressionlist/">未感想作品一覧</a></li>
+<li><a href="https://yomou.syosetu.com/userlist/avgranklist/">平均点順作者一覧</a></li>
+<li><a href="https://yomou.syosetu.com/rireki/list/">閲覧履歴</a></li>
+</ul>
+</div>
+<div class="sub_box">
+<div class="title_h2">
+<div class="h2_help">ヘルプ</div>
+</div>
+<ul class="list_g">
+<li><a href="https://syosetu.com/helpcenter/helppage/helppageid/158">Ｎコードについて</a></li>
+<li><a href="https://syosetu.com/searchuser/search/">ユーザ検索</a></li>
+<li><a href="https://syosetu.com/helpcenter/top/">ヘルプセンター</a></li>
+</ul>
+</div>
+</div>
+<div id="sub_koukoku">
+<div id="sub_scraper" class="c-ad c-ad--skyscraper"><div data-cptid="1571609" style="display: block;">
+<script>
+  window.gnshbrequest.cmd.push(function() {
+window.gnshbrequest.applyPassback("1571609", "[data-cptid='1571609']");
+  });
+</script>
+</div>
+</div>
+</div>
+        </div><!-- #trad -->
+</div><!-- .l-container -->
+<!--  1115_全般_オーバーレイ_728*90 -->
+<!--  1115_全般_オーバーレイ_728*90 -->
+<div data-cptid="1616325" style="display: block;">
+<script>
+window.gnshbrequest.cmd.push(function() {
+window.gnshbrequest.applyPassback("1616325", "[data-cptid='1616325']");
+});
+</script>
+</div>
+<div class="l-footer">
+<div class="p-footer">
+<a class="p-footer__logo" href="https://yomou.syosetu.com/">
+<div class="p-footer__site-outline">小説家になろう投稿作品の読書サイト</div>
+<img src="https://static.syosetu.com/view/images/common/logo_yomou_w.png?psawph" alt="小説を読もう！">
+</a>
+<div class="p-footer__nav c-navlist c-navlist--dark">
+<div class="c-navlist__category">
+<div class="c-navlist__headline">小説家になろうについて</div>
+<ul class="c-navlist__list">
+<li class="c-navlist__list-item"><a href="https://syosetu.com/site/about/">サイト案内</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/site/guideline/">ガイドライン</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/site/rule/">利用規約</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/site/cheersprogramrule/">チアーズプログラム規約</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/site/privacy/">プライバシーポリシー</a></li>
+<li class="c-navlist__list-item"><a href="https://hinaproject.co.jp/">運営会社</a></li>
+</ul>
+</div>
+<div class="c-navlist__category">
+<div class="c-navlist__headline">お困りの方は</div>
+<ul class="c-navlist__list">
+<li class="c-navlist__list-item"><a href="https://syosetu.com/helpcenter/top/">ヘルプセンター</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/bbs/top/">質問板</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/inquire/top/">お問い合わせ</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/businessinquire/input/">企業・団体向け窓口</a></li>
+</ul>
+</div>
+<div class="c-navlist__category">
+<div class="c-navlist__headline">小説家になろうグループ</div>
+<ul class="c-navlist__list">
+<li class="c-navlist__list-item"><a href="https://syosetu.com/">小説家になろう</a></li>
+<li class="c-navlist__list-item"><a href="https://yomou.syosetu.com/">小説を読もう！</a></li>
+<li class="c-navlist__list-item"><a href="https://mitemin.net/">みてみん</a></li>
+<li class="c-navlist__list-item"><a href="https://dev.syosetu.com/">なろうデベロッパー</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/site/group/">なろうグループ一覧</a></li>
+<li class="c-navlist__list-item"><a href="https://mid.syosetu.com/">ミッドナイトノベルズ</a></li>
+</ul>
+</div>
+<div class="c-navlist__category">
+<div class="c-navlist__headline">作品を探す</div>
+<ul class="c-navlist__list">
+<li class="c-navlist__list-item"><a href="https://yomou.syosetu.com/search.php">作品検索</a></li>
+<li class="c-navlist__list-item"><a href="https://yomou.syosetu.com/search/keyword/">人気キーワード</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/pickup/list/">小説PickUp！</a></li>
+<li class="c-navlist__list-item"><a href="https://yomou.syosetu.com/reviewlist/list/">イチオシレビュー</a></li>
+<li class="c-navlist__list-item"><a href="https://syosetu.com/syuppan/list/">書報 (出版作品紹介)</a></li>
+<li class="c-navlist__list-item"><a href="https://yomou.syosetu.com/rireki/list/">閲覧履歴</a></li>
+<li class="c-navlist__list-item"><a href="https://yomou.syosetu.com/nolist/nopointlist/">未評価作品一覧</a></li>
+<li class="c-navlist__list-item"><a href="https://yomou.syosetu.com/nolist/noimpressionlist/">未感想作品一覧</a></li>
+</ul>
+</div>
+</div>
+</div><!-- p-footer -->
+<div class="p-copyright">
+<a class="p-copyright__copyright" href="https://hinaproject.co.jp/">HinaProject Inc.</a>
+</div>
+</div><!-- footer -->
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-1TH9CF4FPC"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-1TH9CF4FPC');
+  if(location.pathname.match(/^\/(bbs|bbstopic)\//)){
+    gtag('config', 'G-XHLVBYBZNK');
+  }
+</script>
+</body>
+</html>

@@ -15,16 +15,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * JVM tests for the pure parsing halves of the CJK providers, run against fixtures under
- * src/test/resources/providers (structure taken from the live sites, text replaced).
+ * JVM tests for the pure parsing halves of the CJK providers, run against the small hand-written
+ * `synthetic_*` fixtures under src/test/resources/providers (structure taken from the live sites,
+ * text invented) that pin edge cases. The recorded real pages are covered by *FixtureTest.
  */
 class ProviderParserTest {
-    private fun fixture(name: String): String =
-        javaClass.classLoader!!.getResourceAsStream("providers/$name")!!
-            .readBytes().toString(Charsets.UTF_8)
+    private fun fixture(name: String): String = ProviderFixtures.text(name)
 
-    private fun paragraphs(html: String): List<String> =
-        Jsoup.parseBodyFragment(html).select("p").map { it.text() }
+    private fun paragraphs(html: String): List<String> = ProviderFixtures.paragraphs(html)
 
     // ─── Kakuyomu ───────────────────────────────────────────────────────────────
 
@@ -32,7 +30,7 @@ class ProviderParserTest {
 
     @Test
     fun kakuyomuSearchKeepsApolloOrder() {
-        val results = KakuyomuParser.parseSearch(kakuyomu, fixture("kakuyomu_search.html"))
+        val results = KakuyomuParser.parseSearch(kakuyomu, fixture("kakuyomu/synthetic_search.html"))
         assertEquals(listOf("最初の作品", "二番目の作品"), results.map { it.name })
         assertEquals("https://kakuyomu.jp/works/1111", results[0].url)
         assertEquals(kakuyomu.name, results[0].apiName)
@@ -41,7 +39,7 @@ class ProviderParserTest {
 
     @Test
     fun kakuyomuWorkFlattensTableOfContents() {
-        val work = KakuyomuParser.parseWork(kakuyomu, fixture("kakuyomu_work.html"), "1111")
+        val work = KakuyomuParser.parseWork(kakuyomu, fixture("kakuyomu/synthetic_work.html"), "1111")
         assertNotNull(work)
         work!!
         assertEquals("最初の作品", work.title)
@@ -67,7 +65,7 @@ class ProviderParserTest {
 
     @Test
     fun kakuyomuEpisodeParagraphsAndRuby() {
-        val html = KakuyomuParser.parseEpisode(fixture("kakuyomu_episode.html"), "https://kakuyomu.jp/works/1111/episodes/7001")
+        val html = KakuyomuParser.parseEpisode(fixture("kakuyomu/synthetic_episode.html"), "https://kakuyomu.jp/works/1111/episodes/7001")
         assertNotNull(html)
         assertEquals(
             listOf("一行目の文章。", "漢字を読む。", "魔法《マジック》を使う。", "「ほんとに？」"),
@@ -82,7 +80,7 @@ class ProviderParserTest {
 
     @Test
     fun novelpiaSearchSkipsAdultWorks() {
-        val results = NovelpiaParser.parseSearch(novelpia, fixture("novelpia_search.json"))
+        val results = NovelpiaParser.parseSearch(novelpia, fixture("novelpia/synthetic_search.json"))
         assertEquals(listOf("테스트 소설 하나", "테스트 소설 둘"), results.map { it.name })
         assertEquals("https://novelpia.com/novel/141671", results[0].url)
         assertEquals("https://images.novelpia.com/imagebox/cover/aaaa_ori.wimg", results[0].posterUrl)
@@ -97,7 +95,7 @@ class ProviderParserTest {
 
     @Test
     fun novelpiaBrowseDeduplicatesMobileCopies() {
-        val results = NovelpiaParser.parseBrowse(novelpia, fixture("novelpia_browse.html"))
+        val results = NovelpiaParser.parseBrowse(novelpia, fixture("novelpia/synthetic_browse.html"))
         assertEquals(listOf("자유연재 작품", "두 번째 작품"), results.map { it.name })
         assertEquals("https://novelpia.com/novel/460634", results[0].url)
         assertEquals("https://images.novelpia.com/imagebox/cover/f42f_ori.wimg", results[0].posterUrl)
@@ -105,7 +103,7 @@ class ProviderParserTest {
 
     @Test
     fun novelpiaNovelPage() {
-        val doc = Jsoup.parse(fixture("novelpia_novel.html"), "https://novelpia.com/novel/441569")
+        val doc = Jsoup.parse(fixture("novelpia/synthetic_novel.html"), "https://novelpia.com/novel/441569")
         val info = NovelpiaParser.parseNovelPage(doc)
         assertNotNull(info)
         info!!
@@ -119,7 +117,7 @@ class ProviderParserTest {
 
     @Test
     fun novelpiaEpisodeListKeepsOnlyFreeEpisodes() {
-        val page = NovelpiaParser.parseEpisodeList(novelpia, fixture("novelpia_episode_list.html"), "441569")
+        val page = NovelpiaParser.parseEpisodeList(novelpia, fixture("novelpia/synthetic_episode_list.html"), "441569")
         assertEquals(2, page.totalRows)
         assertEquals(4, page.lastPage)
         assertEquals(1, page.freeEpisodes.size)
@@ -131,7 +129,7 @@ class ProviderParserTest {
 
     @Test
     fun novelpiaViewerDataStripsCoverAndWatermark() {
-        val html = NovelpiaParser.parseViewerData(fixture("novelpia_viewer.json"))
+        val html = NovelpiaParser.parseViewerData(fixture("novelpia/synthetic_viewer.json"))
         assertNotNull(html)
         html!!
         assertFalse(html.contains("cover"))
@@ -160,7 +158,7 @@ class ProviderParserTest {
 
     @Test
     fun biqugeChapterIsParagraphHtml() {
-        val html = BiqugeProvider.parseChapterHtml(fixture("biquge_chapter.html"), "https://www.69shuba.com/txt/1/2")
+        val html = BiqugeProvider.parseChapterHtml(fixture("69shuba/synthetic_chapter.html"), "https://www.69shuba.com/txt/1/2")
         assertNotNull(html)
         assertEquals(
             listOf("第一段文字。", "第二段文字，", "“第三段对话！”", "第四段内容。"),
