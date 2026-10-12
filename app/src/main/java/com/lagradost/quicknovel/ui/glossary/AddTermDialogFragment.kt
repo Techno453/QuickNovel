@@ -18,6 +18,9 @@ class AddTermDialogFragment : DialogFragment() {
 
     companion object {
         private const val ARG_TERM_ID = "term_id"
+        private const val ARG_PREFILL_ENGLISH = "prefill_english"
+        private const val ARG_PREFILL_SOURCE = "prefill_source"
+        private const val ARG_FIRST_CHAPTER = "first_chapter"
 
         /** Category order shown in pickers (characters first). */
         val CATEGORIES: List<String> = GlossaryTerm.CATEGORIES
@@ -57,6 +60,18 @@ class AddTermDialogFragment : DialogFragment() {
                 }
             }
         }
+
+        /**
+         * A new term prefilled from the reader: [english] (the selected text) and/or [source]
+         * (selected untranslated text); [firstChapter] is the chapter it was found in.
+         */
+        fun newPrefilled(english: String?, source: String?, firstChapter: Int?) = AddTermDialogFragment().apply {
+            arguments = Bundle().apply {
+                english?.let { putString(ARG_PREFILL_ENGLISH, it) }
+                source?.let { putString(ARG_PREFILL_SOURCE, it) }
+                firstChapter?.let { putInt(ARG_FIRST_CHAPTER, it) }
+            }
+        }
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -84,7 +99,10 @@ class AddTermDialogFragment : DialogFragment() {
         } else {
             binding.termGenderGroup.check(R.id.gender_unknown)
             binding.termLockedSwitch.isChecked = true // entered by the user = confirmed
+            arguments?.getString(ARG_PREFILL_SOURCE)?.let { binding.termChineseInput.setText(it) }
+            arguments?.getString(ARG_PREFILL_ENGLISH)?.let { binding.termEnglishInput.setText(it) }
         }
+        val firstChapter = arguments?.takeIf { it.containsKey(ARG_FIRST_CHAPTER) }?.getInt(ARG_FIRST_CHAPTER)
 
         return AlertDialog.Builder(ctx)
             .setTitle(if (existingTerm != null) R.string.term_dialog_edit_title else R.string.term_dialog_add_title)
@@ -100,7 +118,8 @@ class AddTermDialogFragment : DialogFragment() {
                 val aliases = TermAliases.fromCommaSeparated(binding.termAliasesInput.text.toString())
                 val locked = binding.termLockedSwitch.isChecked
 
-                val base = existingTerm ?: GlossaryTerm(novelId = viewModel.novelId, source = sourceTerm, english = english)
+                val base = existingTerm
+                    ?: GlossaryTerm(novelId = viewModel.novelId, source = sourceTerm, english = english, firstChapter = firstChapter)
                 val term = base.copy(
                     novelId = viewModel.novelId,
                     source = sourceTerm,

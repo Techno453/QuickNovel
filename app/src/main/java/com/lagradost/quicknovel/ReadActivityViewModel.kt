@@ -182,6 +182,10 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
         return book.canReload
     }
 
+    /** Translator novel id of the open book (zh/ja/ko sources), null before load or otherwise. */
+    fun translatorNovelIdOrNull(): String? =
+        if (this::book.isInitialized) book.translatorNovelId() else null
+
 
     var mlSettings
         get() = getKey<MLSettings>(EPUB_CURRENT_ML, book.title()) ?: MLSettings("en", "en", TranslatorAgents.OFFLINE)

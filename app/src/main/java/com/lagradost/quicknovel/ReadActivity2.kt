@@ -22,8 +22,10 @@ import com.lagradost.quicknovel.ui.CONFIG_FONT
 import com.lagradost.quicknovel.ui.CONFIG_FONT_BOLD
 import com.lagradost.quicknovel.ui.TextAdapter
 import com.lagradost.quicknovel.ui.TextConfig
+import com.lagradost.quicknovel.ui.TextInteraction
 import com.lagradost.quicknovel.ui.UiText
 import com.lagradost.quicknovel.ui.reader.ReaderChromeController
+import com.lagradost.quicknovel.ui.reader.ReaderGlossaryController
 import com.lagradost.quicknovel.ui.reader.ReaderLayoutController
 import com.lagradost.quicknovel.ui.reader.ReaderScrollController
 import com.lagradost.quicknovel.ui.reader.ReaderSettingsSheet
@@ -41,6 +43,7 @@ import java.lang.ref.WeakReference
  * - [ReaderScrollController]: the scrolling text list, position, TTS lock, overscroll, volume paging
  * - [ReaderTtsController]: TTS buttons, status, sleep timer, media actions
  * - [ReaderSettingsSheet]: the settings bottom sheet
+ * - [ReaderGlossaryController]: long-press / selection glossary lookup
  */
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayoutController.Host {
     companion object {
@@ -60,6 +63,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
     private lateinit var scroll: ReaderScrollController
     private lateinit var tts: ReaderTtsController
     private lateinit var settingsSheet: ReaderSettingsSheet
+    private lateinit var glossary: ReaderGlossaryController
 
     private val textAdapter: TextAdapter get() = scroll.textAdapter
 
@@ -194,6 +198,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         layout = ReaderLayoutController(this, binding, viewModel, this)
         tts = ReaderTtsController(this, binding, viewModel) { line -> scroll.updateTTSLine(line) }
         settingsSheet = ReaderSettingsSheet(this, viewModel) { layout.tabletopLowerHeight }
+        glossary = ReaderGlossaryController(this, viewModel)
+        textAdapter.interaction = object : TextInteraction {
+            override fun onLongPress(span: TextSpan, offset: Int): Boolean =
+                glossary.lookupAt(span.text, offset, span.index)
+
+            override val selectionLookupEnabled: Boolean get() = glossary.isAvailable
+
+            override fun onSelectionLookup(span: TextSpan, start: Int, end: Int) =
+                glossary.lookupSelection(span.text, start, end, span.index)
+        }
 
         layout.bind()
         bindTextConfig()
@@ -264,6 +278,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
     private fun bindToolbar() {
         observe(viewModel.title) { title ->
             binding.readToolbar.title = title
+            // the book is loaded: load its Story Bible for the long-press lookup
+            glossary.prepare()
         }
 
         observe(viewModel.chapterTile) { title ->
