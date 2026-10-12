@@ -252,6 +252,19 @@ class StoryBibleTest {
         assertEquals("Price is \$5", NameReplacer.replace("Price is X", "X", "\$5"))
     }
 
+    @Test
+    fun renameKeepsPossessiveAndPluralSuffixes() {
+        val text = "The spirit stones glowed. One spirit stone. Lin Feng’s spirit stone's edge. Lin Fengs?"
+        assertEquals(3, NameReplacer.countOccurrences(text, "spirit stone"))
+        assertEquals(
+            "The spirit crystals glowed. One spirit crystal. Lin Feng’s spirit crystal's edge. Lin Fengs?",
+            NameReplacer.replace(text, "spirit stone", "spirit crystal"),
+        )
+        // A plural-looking suffix on a name is kept too; the possessive apostrophe forms survive.
+        assertEquals("Lin Fen’s blade and the Lin Fens", NameReplacer.replace("Lin Feng’s blade and the Lin Fengs", "Lin Feng", "Lin Fen"))
+        assertEquals("same", NameReplacer.replace("same", "x", "x"))
+    }
+
     // ---------------- JSON export / import ----------------
 
     @Test

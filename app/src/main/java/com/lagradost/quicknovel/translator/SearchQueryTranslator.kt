@@ -17,8 +17,8 @@ import java.util.concurrent.ConcurrentHashMap
  * The result is a short list of candidate queries ([QueryCandidates]), not one string: an
  * English title like "Above the sky" has a published original (高天之上) that a literal
  * translation (天空之上) never matches. Sources try the candidates in order:
- * 1. the known original title, when "Use AI for search queries" is on and an API key is set
- *    (first line of the model's reply);
+ * 1. the known original title, when "Use AI for search queries" is on (default) and an API key
+ *    is set (first line of the model's reply);
  * 2. the original titles from the key-free title index ([TitleIndex]: NovelUpdates "Associated
  *    Names" and the Novel Buddy search API's alternative names), for a Latin-script query, up to
  *    [MAX_INDEX_NAMES] in the target language's script;

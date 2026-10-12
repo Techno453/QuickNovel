@@ -262,6 +262,11 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   injects rocket-loader; plain requests with a browser UA get the real pages, so the provider
   does not opt into `usesCloudFlareKiller` (the `/cdn-cgi/` false positive would trigger on every
   page). (It timed out from here in an earlier check; it was reachable on 2026-10-12.)
+- Covers: most listed novels have none; the site puts its own `/images/default_no_thumbnail.jpg`
+  in the card (48 of 64 cards on the weekly ranking on 2026-10-12). `CzbooksParser.coverOrNull`
+  maps that picture to no cover, so the card shows its title and the poster memo fills in the
+  novel page's cover once the book is opened. Real covers are on `img.czbooks.net` and load
+  without a referer.
 - Search `GET /s/<q>` (first page). Novel `GET /n/{id}`: title, author, cover, 連載狀態, synopsis,
   category + the first 12 reader hashtags as tags, and the whole `ul#chapter-list` in reading
   order. Chapter `GET /n/{id}/{cid}?chapterNumber=n`, text in `div.content`. Chapter 0 is often

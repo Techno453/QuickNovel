@@ -213,6 +213,32 @@ being read never goes through the service and is never paused. The overnight opt
 providers without a batch API starts a range job with `requireCharging` (the policy with
 "only while charging" forced on).
 
+## Glossary edits and stored translations
+
+A stored translation is plain text; changing a glossary entry does not re-run it. Two things
+make an edit reach existing chapters:
+
+- **Rename in place** (`ui/glossary/GlossaryViewModel.saveTerm` → `RenameOffers.shouldOffer`,
+  `applyRename`). When the English rendering of any entry changes (any category, locked or not)
+  and already-translated chapters contain the old rendering, the Glossary screen asks "Update
+  translated chapters?" with the count. Accepting replaces the old rendering with the new one in
+  the translator database (what the reader shows) and in the chapter `.txt` files (the offline
+  epub, regenerated on next open) through `NameReplacer`: whole words, case-sensitive, and a
+  possessive or plural suffix stays attached ("Lin Feng's" → "Lin Fen's", "spirit stones" →
+  "spirit crystals"). It is a text swap, not a re-translation: wording around the term is kept.
+  Before 2026-10-12 the offer only appeared for locked character entries.
+- **Future translations** read the glossary at translation time, so the new rendering applies
+  to every chapter translated afterwards, and to any chapter re-translated (stale source, batch
+  redo, or "Show original" → translate again).
+
+What the glossary matches: on the source side an entry's source and aliases are matched as
+substrings of the chunk (`QualityChecks.termsInSource`, longest first), so a Korean noun with a
+particle (이안은, 이안이) or a Japanese noun with okurigana after it still counts; a verb or an
+adjective whose stem changes needs the other forms as aliases. On the English side the model is
+told to use the EXACT rendering and inflects it itself; the glossary check (`containsRendering`)
+accepts a possessive or plural of the rendering and nothing else, so a conjugated verb rendering
+is reported as a violation (a counter in the quality stats, not a retry).
+
 ## Source-hash cache invalidation
 
 Every stored translation now has `source_hash` = SHA-256 hex of the normalised plain source

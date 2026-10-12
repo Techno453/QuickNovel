@@ -83,7 +83,7 @@ object SecurePrefs {
     @Volatile private var translationEnabled = true
     @Volatile private var gtranslateTitles = false
     @Volatile private var translateSearch = true
-    @Volatile private var aiSearch = false
+    @Volatile private var aiSearch = true
     @Volatile private var translateOnDemand = false
     @Volatile private var autoAddTerms = true
     @Volatile private var strictMode = true
@@ -104,7 +104,7 @@ object SecurePrefs {
                 translationEnabled = created.getBoolean(KEY_TRANSLATION_ENABLED, true)
                 gtranslateTitles = created.getBoolean(KEY_GTRANSLATE_TITLES, false)
                 translateSearch = created.getBoolean(KEY_TRANSLATE_SEARCH, true)
-                aiSearch = created.getBoolean(KEY_AI_SEARCH, false)
+                aiSearch = created.getBoolean(KEY_AI_SEARCH, true)
                 translateOnDemand = created.getBoolean(KEY_TRANSLATE_ON_DEMAND, false)
                 autoAddTerms = created.getBoolean(KEY_AUTO_ADD_TERMS, true)
                 strictMode = created.getBoolean(KEY_STRICT_MODE, true)

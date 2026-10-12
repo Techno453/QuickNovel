@@ -17,6 +17,7 @@ import com.lagradost.quicknovel.translator.db.NovelContext
 import com.lagradost.quicknovel.translator.db.PendingTerm
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import com.lagradost.quicknovel.ui.translate.NovelChapterSource
+import com.lagradost.quicknovel.ui.translate.TranslatedChapterFiles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -49,6 +50,14 @@ data class GlossaryFilter(
 
 /** A locked character was renamed; offer to update stored translations. */
 data class RenameOffer(val oldEnglish: String, val newEnglish: String, val chapterCount: Int)
+
+/** Pure rule for offering a rename after a glossary edit (unit-tested). */
+object RenameOffers {
+    /** True when [term] is an edit of [previous] whose English rendering changed to something non-blank. */
+    fun shouldOffer(previous: GlossaryTerm?, term: GlossaryTerm): Boolean =
+        previous != null && previous.english.isNotBlank() && term.english.isNotBlank() &&
+                previous.english.trim() != term.english.trim()
+}
 
 class GlossaryViewModel(application: Application) : AndroidViewModel(application) {
     private val db = TranslatorDatabase.getInstance(application)
@@ -116,18 +125,17 @@ class GlossaryViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * Saves a new or edited term. When the English name of a locked character changes and older
-     * translations contain the old name, [renameOffer] is posted.
+     * Saves a new or edited term. When its English rendering changes (any category, locked or
+     * not) and older translations contain the old rendering, [renameOffer] is posted: the stored
+     * chapters can then be updated in place ([applyRename]) instead of being re-translated.
      */
     fun saveTerm(term: GlossaryTerm, previous: GlossaryTerm?) {
         viewModelScope.launch(Dispatchers.IO) {
             glossaryDao.upsertTerm(term)
-            if (previous != null && (previous.locked || term.locked) && term.isCharacter &&
-                previous.english.isNotBlank() && previous.english != term.english
-            ) {
+            if (RenameOffers.shouldOffer(previous, term)) {
                 val count = translationDao.getAllForNovel(novelId)
-                    .count { NameReplacer.countOccurrences(it.englishText, previous.english) > 0 }
-                if (count > 0) renameOffer.postValue(RenameOffer(previous.english, term.english, count))
+                    .count { NameReplacer.countOccurrences(it.englishText, previous!!.english) > 0 }
+                if (count > 0) renameOffer.postValue(RenameOffer(previous!!.english, term.english, count))
             }
         }
     }
@@ -136,7 +144,10 @@ class GlossaryViewModel(application: Application) : AndroidViewModel(application
         renameOffer.value = null
     }
 
-    /** Replaces the old name in stored translations; returns the number of chapters changed. */
+    /**
+     * Replaces the old rendering in the stored translations (what the reader shows) and in the
+     * chapter .txt files (the offline epub); returns the number of chapters changed.
+     */
     suspend fun applyRename(offer: RenameOffer): Int = withContext(Dispatchers.IO) {
         var changed = 0
         for (chapter in translationDao.getAllForNovel(novelId)) {
@@ -145,6 +156,11 @@ class GlossaryViewModel(application: Application) : AndroidViewModel(application
                 translationDao.updateText(novelId, chapter.chapterNum, updated)
                 changed++
             }
+        }
+        val apiName = novelId.substringBefore('/')
+        val novelName = novelId.substringAfter('/', "")
+        if (novelName.isNotEmpty()) {
+            TranslatedChapterFiles.replaceInFiles(getApplication(), apiName, novelName, offer.oldEnglish, offer.newEnglish)
         }
         changed
     }

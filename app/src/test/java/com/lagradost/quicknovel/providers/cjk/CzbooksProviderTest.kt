@@ -87,6 +87,21 @@ class CzbooksProviderTest {
         assertEquals(4, list.size)
         assertEquals("囚蝶", list[0].name)
         assertEquals("https://czbooks.net/n/cr327h", list[0].url)
+        // The site's "no thumbnail" picture is not a cover: the card shows its title instead.
+        assertEquals("https://img.czbooks.net/thumbnail/0a686e84c09a89a1ab0ca4048da7cfcb.jpeg?1790059615", list[0].posterUrl)
+        assertEquals(listOf(null, null, null), list.drop(1).map { it.posterUrl })
+    }
+
+    @Test
+    fun placeholderCoverIsNoCover() {
+        val html = "<div class=\"thumbnail\"><img src=\"https://czbooks.net/images/default_no_thumbnail.jpg\"></div>" +
+                "<div class=\"thumbnail\"><img src=\"/images/default_no_thumbnail.jpg\"></div>" +
+                "<div class=\"thumbnail\"><img src=\"https://img.czbooks.net/thumbnail/abc.jpg?1\"></div>"
+        val imgs = Jsoup.parse(html, "https://czbooks.net/").select(".thumbnail img")
+        assertEquals(null, CzbooksParser.coverOrNull(imgs[0]))
+        assertEquals(null, CzbooksParser.coverOrNull(imgs[1]))
+        assertEquals("https://img.czbooks.net/thumbnail/abc.jpg?1", CzbooksParser.coverOrNull(imgs[2]))
+        assertEquals(null, CzbooksParser.coverOrNull(null))
     }
 
     @Test

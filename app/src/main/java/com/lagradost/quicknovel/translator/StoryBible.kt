@@ -87,16 +87,21 @@ object TermAliases {
             .sortedByDescending { it.length }
 }
 
-/** Whole-word, case-sensitive name replacement for applying a rename to stored translations. */
+/**
+ * Whole-word, case-sensitive replacement of a glossary rendering in stored translations. A
+ * possessive or plural suffix the text attached to the old rendering stays on the new one:
+ * "Lin Feng's" → "Lin Fen's", "spirit stones" → "spirit crystals".
+ */
 object NameReplacer {
-    private fun pattern(name: String) = Regex("""(?<![\p{L}\p{N}])${Regex.escape(name)}(?![\p{L}\p{N}])""")
+    private fun pattern(name: String) =
+        Regex("""(?<![\p{L}\p{N}])${Regex.escape(name)}(['’]s|['’]|s)?(?![\p{L}\p{N}])""")
 
     fun countOccurrences(text: String, name: String): Int =
         if (name.isBlank()) 0 else pattern(name).findAll(text).count()
 
-    /** Replaces whole-word occurrences of [old] with [new]; possessives ("Lin Feng's") are kept. */
+    /** Replaces whole-word occurrences of [old] with [new], keeping a possessive or plural suffix. */
     fun replace(text: String, old: String, new: String): String =
-        if (old.isBlank() || old == new) text else text.replace(pattern(old), Regex.escapeReplacement(new))
+        if (old.isBlank() || old == new) text else pattern(old).replace(text) { m -> new + m.groupValues[1] }
 }
 
 /** What to do with the terms a chunk reported. */

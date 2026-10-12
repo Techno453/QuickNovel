@@ -40,8 +40,9 @@ cover widths). On wide windows it sits under the search field, centred with it.
 `SearchQueryTranslator.candidatesFor(query, lang)` returns the queries a CJK source tries, in this
 order:
 
-1. **Known original title (AI).** Only when "Use AI for search queries" is on and an API key is
-   set. The **Title lookup model** setting chooses the model (Settings → AI translation → Titles,
+1. **Known original title (AI).** Only when "Use AI for search queries" is on (default on since
+   3.9.3; it was off before, so the model was never asked) and an API key is set. Without a key
+   the step is skipped silently. The **Title lookup model** setting chooses the model (Settings → AI translation → Titles,
    synopses and search). It is separate from the translation model and defaults to GPT-6 Sol.
    Without a key for that model's provider, the translation model is used. The search prompt asks
    for up to three lines: the published original title if the model knows the novel, then a

@@ -167,10 +167,20 @@ object CzbooksParser {
             if (!seen.add(id)) return@mapNotNull null
             val title = li.selectFirst(".novel-item-title")?.text()?.trim()?.ifEmpty { null } ?: return@mapNotNull null
             api.newSearchResponse(title, novelUrl(id), fix = false) {
-                posterUrl = li.selectFirst(".novel-item-thumbnail img")?.absUrl("src")?.ifBlank { null }
+                posterUrl = coverOrNull(li.selectFirst(".novel-item-thumbnail img"))
                 latestChapter = li.selectFirst(".novel-item-newest-chapter a")?.text()?.trim()?.ifEmpty { null }
             }
         }
+    }
+
+    /**
+     * The cover URL of an `img`, or null for the site's own "no thumbnail" picture
+     * (`/images/default_no_thumbnail.jpg`), which most listed novels carry: a card without a
+     * cover shows its title, and the poster memo fills in the novel page's cover once opened.
+     */
+    fun coverOrNull(img: org.jsoup.nodes.Element?): String? {
+        val url = img?.absUrl("src")?.ifBlank { null } ?: return null
+        return if (url.contains("default_no_thumbnail")) null else url
     }
 
     data class Novel(
@@ -213,7 +223,7 @@ object CzbooksParser {
         return Novel(
             title = title,
             author = detail.selectFirst(".info .author a")?.text()?.trim()?.ifEmpty { null },
-            cover = detail.selectFirst(".thumbnail img")?.absUrl("src")?.ifBlank { null },
+            cover = coverOrNull(detail.selectFirst(".thumbnail img")),
             synopsis = detail.selectFirst(".description")?.let { ReaderHtml.lines(it) }
                 ?.joinToString("\n")?.ifBlank { null },
             tags = tags,
