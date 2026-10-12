@@ -4,7 +4,6 @@ import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.content.DialogInterface
 import android.content.res.ColorStateList
-import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -60,6 +59,7 @@ import com.lagradost.quicknovel.ui.translate.TranslationProgress
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
+import com.lagradost.quicknovel.util.AdaptiveLayout
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
 import com.lagradost.quicknovel.util.UIHelper.getStatusBarHeight
 import com.lagradost.quicknovel.util.UIHelper.hideKeyboard
@@ -141,15 +141,8 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
     }
 
     override fun fixLayout(view: View) {
-        val compactView = false //activity?.getGridIsCompact() ?: return
-        val spanCountLandscape = if (compactView) 2 else 6
-        val spanCountPortrait = if (compactView) 1 else 3
-        val orientation = resources.configuration.orientation
-        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            binding?.relatedList?.spanCount = spanCountLandscape
-        } else {
-            binding?.relatedList?.spanCount = spanCountPortrait
-        }
+        // columns from the available width, not the orientation (foldables, split screen)
+        binding?.relatedList?.setAdaptiveColumns(AdaptiveLayout.POSTER_MIN_CELL_DP, minCount = 3)
         binding?.resultHolder?.post { // BUG FIX
             updateScrollHeight()
         }
@@ -182,23 +175,37 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
     }
 
+    /** Height the result page actually has: the scroll view, not the whole display, so that
+     * split screen, tabletop/Flex mode and fold/unfold get the right sizes. */
+    private fun availableHeight(): Int {
+        val binding = binding ?: return 0
+        val measured = binding.resultMainscroll.height
+        if (measured > 0) return measured
+        return context?.resources?.displayMetrics?.heightPixels ?: 0
+    }
+
     private fun updateScrollHeight() {
         val binding = binding ?: return
-        val displayMetrics = context?.resources?.displayMetrics ?: return
-        val total = displayMetrics.heightPixels - binding.resultDownloadCard.height
+        val available = availableHeight()
+        if (available <= 0) return
 
+        // The card must be at least as tall as the page so it can be scrolled up to the top.
+        // A min height (instead of the old "padding = height - card height") does not depend on
+        // its own previous value, so calling this repeatedly is stable.
         binding.resultNovelHolder.apply {
-            setPadding(
-                paddingLeft,
-                paddingTop,
-                paddingRight,
-                maxOf(0, total)
-            )
+            if (paddingBottom != 0) setPadding(paddingLeft, paddingTop, paddingRight, 0)
         }
-        val parameter = binding.chapterList.layoutParams
-        parameter.height =
-            displayMetrics.heightPixels - binding.viewsAndRating.height - binding.resultTabs.height - binding.resultScrollPadding.paddingTop
+        if (binding.resultDownloadCard.minimumHeight != available) {
+            binding.resultDownloadCard.minimumHeight = available
+        }
 
+        val parameter = binding.chapterList.layoutParams
+        val chapterHeight = maxOf(
+            0,
+            available - binding.viewsAndRating.height - binding.resultTabs.height - binding.resultScrollPadding.paddingTop
+        )
+        if (parameter.height == chapterHeight) return
+        parameter.height = chapterHeight
         binding.chapterList.layoutParams = parameter
         //ViewGroup.LayoutParams(binding.chapterList.layoutParams.width,displayMetrics.heightPixels)
         /*binding.hiddenView.apply {
@@ -588,6 +595,14 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
 
         activity?.window?.decorView?.clearFocus()
         hideKeyboard()
+
+        // Re-size the card and chapter list whenever the page height changes: fold/unfold,
+        // split screen resizing, tabletop posture, IME, ...
+        binding.resultMainscroll.addOnLayoutChangeListener { v, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) {
+                v.post { updateScrollHeight() }
+            }
+        }
 
         if (viewModel.loadResponse.value == null || !viewModel.isGetLoaded)
             viewModel.initState(apiName, url)
