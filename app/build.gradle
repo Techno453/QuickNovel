@@ -150,3 +150,17 @@ dependencies {
     // Encrypted prefs for OpenAI API key
     implementation(libs.security.crypto)
 }
+
+// Translation benchmark (app/src/test/.../bench/TranslationBench, docs/translation-bench.md):
+// forward -Dbench / -Dbench.* to the test JVM, never treat a bench run as up to date, and show
+// its console output. Without BENCH=1 / -Dbench=1 the bench test is skipped.
+tasks.withType(Test).configureEach {
+    System.properties.each { k, v ->
+        def key = k.toString()
+        if (key == 'bench' || key.startsWith('bench.')) systemProperty key, v.toString()
+    }
+    if (System.getProperty('bench') != null || System.getenv('BENCH') != null) {
+        outputs.upToDateWhen { false }
+        testLogging.showStandardStreams = true
+    }
+}

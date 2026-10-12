@@ -68,6 +68,9 @@ class TranslationApiException(
  *
  * @param baseUrl e.g. https://api.openai.com/v1 (the "/chat/completions" path is appended)
  * @param sourceLang ISO 639-1 source language (zh/ja/ko) — selects prompts and chunking.
+ * @param extraBody extra top-level request fields merged into every request body (e.g.
+ *   `reasoning_effort`, OpenRouter's `reasoning`); a null value removes that field (e.g.
+ *   `"temperature" to null` for models that reject it). See [LlmConfig.parseExtraBody].
  */
 class TranslationEngine(
     private val apiKey: String,
@@ -75,6 +78,7 @@ class TranslationEngine(
     baseUrl: String = LlmConfig.DEFAULT_BASE_URL,
     private val sourceLang: String = TranslationLanguages.DEFAULT,
     private val client: OkHttpClient = defaultClient,
+    private val extraBody: Map<String, Any?> = emptyMap(),
 ) {
     private val endpoint = LlmConfig.chatCompletionsUrl(baseUrl)
     private val mapper = jacksonObjectMapper()
@@ -655,6 +659,7 @@ class TranslationEngine(
             put("messages", messages)
             if (sendTemperature) put("temperature", temperature)
             if (maxTokens != null) put("max_tokens", maxTokens)
+            for ((key, value) in extraBody) if (value == null) remove(key) else put(key, value)
         }
         return Request.Builder()
             .url(endpoint)

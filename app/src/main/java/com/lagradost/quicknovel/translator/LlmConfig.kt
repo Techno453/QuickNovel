@@ -1,5 +1,7 @@
 package com.lagradost.quicknovel.translator
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+
 /**
  * Pure (Android-free) configuration helpers for the OpenAI-compatible chat completions backend.
  */
@@ -36,4 +38,19 @@ object LlmConfig {
     fun chatCompletionsUrl(baseUrl: String): String = normalizeBaseUrl(baseUrl) + "/chat/completions"
 
     fun isDefaultBaseUrl(baseUrl: String?): Boolean = normalizeBaseUrl(baseUrl) == DEFAULT_BASE_URL
+
+    /**
+     * Parses a JSON object of extra request-body fields for [TranslationEngine] (e.g.
+     * `{"reasoning_effort":"none"}` or `{"reasoning":{"enabled":false},"temperature":null}`).
+     * Blank or invalid input yields an empty map.
+     */
+    fun parseExtraBody(json: String?): Map<String, Any?> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            (jacksonObjectMapper().readValue(json, Map::class.java) as? Map<String, Any?>).orEmpty()
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
 }
