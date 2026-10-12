@@ -1,6 +1,11 @@
 package com.mihon.presentation.settings
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -10,6 +15,9 @@ import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.
 import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component2
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.dp
+import com.lagradost.quicknovel.compose.centeredGutter
 import com.mihon.material.AppBar
 import com.mihon.material.Scaffold
 
@@ -37,13 +45,24 @@ fun PreferenceScaffold(
             )
         },
         content = { contentPadding ->
-            PreferenceScreen(
-                modifier = Modifier.focusRequester(bottom).focusProperties {
-                    up = top
-                },
-                items = itemsProvider(),
-                contentPadding = contentPadding,
-            )
+            // Centre the list and cap it at MaxContentWidth on wide windows (foldables, tablets),
+            // keeping the scrollable area full width.
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val gutter = centeredGutter(0.dp)
+                val direction = LocalLayoutDirection.current
+                PreferenceScreen(
+                    modifier = Modifier.focusRequester(bottom).focusProperties {
+                        up = top
+                    },
+                    items = itemsProvider(),
+                    contentPadding = PaddingValues(
+                        start = contentPadding.calculateStartPadding(direction) + gutter,
+                        top = contentPadding.calculateTopPadding(),
+                        end = contentPadding.calculateEndPadding(direction) + gutter,
+                        bottom = contentPadding.calculateBottomPadding(),
+                    ),
+                )
+            }
         },
     )
 }

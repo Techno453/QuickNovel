@@ -5,6 +5,7 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.lagradost.quicknovel.util.AdaptiveLayout
 import kotlin.math.abs
 
 class GrdLayoutManager(val context: Context, val spanCoun: Int) : GridLayoutManager(context, spanCoun) {
@@ -134,6 +135,45 @@ class AutofitRecyclerView @JvmOverloads constructor(context: Context, attrs: Att
 
     val itemWidth: Int
         get() = measuredWidth / manager.spanCount
+
+    private var adaptiveMinCellPx = 0
+    private var adaptiveSpacingPx = 0
+    private var adaptiveMinCount = 1
+
+    /**
+     * Derive the span count from the measured width instead of the orientation, so foldables,
+     * split screen and tablets get a sensible number of columns. Re-evaluated on every size change.
+     */
+    fun setAdaptiveColumns(minCellDp: Int, minCount: Int = 1, spacingDp: Int = 4) {
+        val density = resources.displayMetrics.density
+        adaptiveMinCellPx = (minCellDp * density).toInt()
+        adaptiveSpacingPx = (spacingDp * density).toInt()
+        adaptiveMinCount = minCount
+        if (width > 0) updateAdaptiveSpan(width, post = false)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w != oldw) updateAdaptiveSpan(w, post = true)
+    }
+
+    private fun updateAdaptiveSpan(w: Int, post: Boolean) {
+        if (adaptiveMinCellPx <= 0 || w <= 0) return
+        val count = AdaptiveLayout.columnCount(
+            availablePx = w - paddingLeft - paddingRight,
+            minCellPx = adaptiveMinCellPx,
+            spacingPx = adaptiveSpacingPx,
+            minCount = adaptiveMinCount
+        )
+        if (count == manager.spanCount) return
+        val apply = {
+            spanCount = count
+            // item sizes are derived from itemWidth at bind time
+            adapter?.let { it.notifyItemRangeChanged(0, it.itemCount) }
+        }
+        // onSizeChanged runs inside a layout pass, so defer the relayout
+        if (post) post { apply() } else apply()
+    }
 
     init {
         if (attrs != null) {
