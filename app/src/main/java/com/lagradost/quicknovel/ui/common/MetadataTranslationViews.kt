@@ -84,6 +84,7 @@ object MetadataTranslationViews {
         titleView: TextView,
         synopsisView: TextView,
         maxSynopsis: Int,
+        lang: String? = MetadataTranslations.langOf(apiName),
     ) {
         var translatedTitle: String? = null
         var translatedSynopsis: String? = null
@@ -109,7 +110,7 @@ object MetadataTranslationViews {
         }
         render()
 
-        if (MetadataTranslations.langOf(apiName) == null) return
+        if (lang == null) return
         val toggle = toggleAbove(synopsisView)
         toggle?.setOnClickListener {
             showOriginal = !showOriginal
@@ -118,7 +119,7 @@ object MetadataTranslationViews {
         }
         owner.lifecycleScope.launch {
             if (!withContext(Dispatchers.IO) { MetadataTranslations.anyEnabled(titleView.context) }) return@launch
-            val translated = MetadataTranslations.novel(apiName, name, synopsis) ?: return@launch
+            val translated = MetadataTranslations.novel(apiName, name, synopsis, lang) ?: return@launch
             translatedTitle = translated.title
             translatedSynopsis = translated.synopsis
             if (translatedTitle != null || translatedSynopsis != null) {

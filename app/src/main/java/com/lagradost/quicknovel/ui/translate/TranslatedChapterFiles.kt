@@ -22,6 +22,8 @@ object TranslatedChapterFiles {
         chapterName: String,
         englishHtml: String,
     ) {
+        // Imported books keep their own EPUB; the reader serves their translations from the DB.
+        if (apiName == BookDownloader2Helper.IMPORT_SOURCE) return
         try {
             val sApiName = BookDownloader2Helper.sanitizeFilename(apiName)
             val sAuthor = BookDownloader2Helper.sanitizeFilename(novelAuthor ?: "")

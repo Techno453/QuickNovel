@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.BookDownloader2Helper
 import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.translator.ChapterTextSource
 import com.lagradost.quicknovel.DataStore.setKey
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_SIZE
 import com.lagradost.quicknovel.MainActivity
@@ -464,12 +465,12 @@ class TranslationForegroundService : Service() {
             val ctx = applicationContext
             val title = getString(R.string.analyzing_novel)
             try {
-                val api = Apis.getApiFromNameOrNull(apiName)
-                val sourceLang = TranslationLanguages.normalize(api?.api?.lang) ?: TranslationLanguages.DEFAULT
+                val source = chapterSource(novelId, apiName, chapters)
+                val sourceLang = source.lang ?: TranslationLanguages.DEFAULT
                 val count = requestedCount.coerceIn(1, SecurePrefs.MAX_ANALYZE_CHAPTERS).coerceAtMost(chapters.size)
                 NovelAnalyzer.analyze(
                     ctx, novelId, sourceLang, count,
-                    fetch = { i -> loadChapterSource(api, chapters[i]) },
+                    fetch = { i -> source.load(i) },
                     listener = analysisListener(novelId) { detail, current, total ->
                         postNotification(buildNotification(detail, current, total, title = title, plainText = true))
                     },
@@ -532,8 +533,8 @@ class TranslationForegroundService : Service() {
                 val db = TranslatorDatabase.getInstance(ctx)
                 val translationDao = db.translationDao()
 
-                val api = Apis.getApiFromNameOrNull(apiName)
-                val sourceLang = TranslationLanguages.normalize(api?.api?.lang) ?: TranslationLanguages.DEFAULT
+                val source = chapterSource(novelId, apiName, chapters)
+                val sourceLang = source.lang ?: TranslationLanguages.DEFAULT
                 val config = SecurePrefs.engineConfig(ctx).copy(apiKey = apiKey)
                 val model = config.model
                 val fallbackConfig = SecurePrefs.fallbackEngineConfig(ctx)
@@ -571,7 +572,7 @@ class TranslationForegroundService : Service() {
                     fallbackModel = engine.fallbackModelId,
                 )
 
-                val sources = SourceCache { i -> chapters.getOrNull(i)?.let { loadChapterSource(api, it) } }
+                val sources = SourceCache { i -> source.load(i) }
                 val policy = { SecurePrefs.powerPolicy(ctx).let { if (requireCharging) it.requireCharging() else it } }
 
                 withContext(SpendTag(SpendKind.TRANSLATE, novelId, meter = meter)) {
@@ -636,7 +637,7 @@ class TranslationForegroundService : Service() {
                                     sources.take(chapterIdx)
                                     return@withChapterLock null // translated meanwhile (reader / read-ahead)
                                 }
-                                val sourceHtml = sources.take(chapterIdx) ?: loadChapterSource(api, chapter)
+                                val sourceHtml = sources.take(chapterIdx) ?: source.load(chapterIdx)
                                     ?: throw ChapterUnavailableException()
                                 val hash = SourceHash.of(sourceHtml)
                                 if (cached != null && SourceHash.compare(cached.sourceHash, hash) == SourceHash.Check.MATCH) {
@@ -741,9 +742,9 @@ class TranslationForegroundService : Service() {
             val ctx = applicationContext
             val title = getString(R.string.batch_preparing_title)
             try {
-                val api = Apis.getApiFromNameOrNull(apiName)
-                val sourceLang = TranslationLanguages.normalize(api?.api?.lang) ?: TranslationLanguages.DEFAULT
-                val sources = SourceCache { i -> chapters.getOrNull(i)?.let { loadChapterSource(api, it) } }
+                val source = chapterSource(novelId, apiName, chapters)
+                val sourceLang = source.lang ?: TranslationLanguages.DEFAULT
+                val sources = SourceCache { i -> source.load(i) }
                 val meter = SpendMeter()
                 // The batch cannot discover names as it goes: build the Story Bible first.
                 withContext(SpendTag(SpendKind.ANALYSIS, novelId, meter = meter)) {
@@ -760,7 +761,7 @@ class TranslationForegroundService : Service() {
                 }
                 val result = BatchManager.submit(
                     ctx, novelId, apiName, novelName, novelAuthor, sourceLang, chapters, fromIndex, toIndex,
-                    fetch = { i -> sources.take(i) ?: chapters.getOrNull(i)?.let { loadChapterSource(api, it) } },
+                    fetch = { i -> sources.take(i) ?: source.load(i) },
                     onProgress = { current, total ->
                         val text = getString(R.string.batch_fetching, current, total)
                         TranslationState.postProgress(TranslationProgress(0, 0, text, analyzing = true))
@@ -877,13 +878,13 @@ class TranslationForegroundService : Service() {
         if (ChapterTranslationRepository.getCached(ctx, item.novelId, item.chapter) != null) return
         val entry = NovelChapterSource.resolve(item.novelId) ?: return
         val chapter = entry.chapters.getOrNull(item.chapter) ?: return
-        val api = Apis.getApiFromNameOrNull(entry.apiName)
-        val lang = TranslationLanguages.normalize(api?.api?.lang) ?: return
+        val source = chapterSource(item.novelId, entry.apiName, entry.chapters)
+        val lang = source.lang ?: return
         val config = SecurePrefs.engineConfig(ctx).takeIf { it.apiKey.isNotBlank() } ?: run {
             queue.clear()
             return
         }
-        val sources = SourceCache { i -> entry.chapters.getOrNull(i)?.let { loadChapterSource(api, it) } }
+        val sources = SourceCache { i -> source.load(i) }
 
         var lastNotify = 0L
         fun notify(text: String, fraction: Float, force: Boolean = false) {
@@ -906,11 +907,22 @@ class TranslationForegroundService : Service() {
         notify(chapter.name, 0f, force = true)
         ChapterTranslationRepository.translateIfMissing(
             ctx, item.novelId, item.chapter, lang, config,
-            fetchSource = { sources.take(item.chapter) ?: loadChapterSource(api, chapter) },
+            fetchSource = { sources.take(item.chapter) ?: source.load(item.chapter) },
             onProgress = { f -> notify(chapter.name, f) },
             spendKind = SpendKind.READ_AHEAD,
         )
         sources.clear()
+    }
+
+    /**
+     * Where a job reads its chapters: the imported book's stored EPUB, or the provider (each
+     * chapter fetched with [loadChapterSource]). Everything else in the jobs is the same for both.
+     */
+    private fun chapterSource(novelId: String, apiName: String, chapters: List<ChapterData>): ChapterTextSource {
+        val api by lazy { Apis.getApiFromNameOrNull(apiName) }
+        return NovelChapterSource.textSource(applicationContext, novelId, apiName, chapters) { chapter ->
+            loadChapterSource(api, chapter)
+        }
     }
 
     /** Loads the chapter's source text, solving a Cloudflare challenge once if needed. */

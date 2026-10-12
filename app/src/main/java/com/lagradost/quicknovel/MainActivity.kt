@@ -43,6 +43,8 @@ import com.lagradost.quicknovel.APIRepository.Companion.providersActive
 import com.lagradost.quicknovel.BookDownloader2.openQuickStream
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
+import com.lagradost.quicknovel.imported.ImportedBookId
+import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.BookDownloader2Helper.checkWrite
 import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
 import com.lagradost.quicknovel.BookDownloader2Helper.requestRW
@@ -392,6 +394,22 @@ class MainActivity : AppCompatActivity() {
         viewModel.initState(apiName, url)
     }
 
+    /** The result page of an imported EPUB/TXT book (chapter list, translate actions, chips). */
+    private fun openImportedResult(name: String, author: String?) {
+        val ctx = applicationContext
+        ioSafe {
+            val record = ImportedBooks.ensureRecord(ctx, name, author)
+            if (record == null) {
+                showToast(R.string.error_loading_novel)
+                return@ioSafe
+            }
+            runOnUiThread {
+                hidePreviewPopupDialog()
+                loadResult(ImportedBookId.resultUrl(record.novelId), IMPORT_SOURCE)
+            }
+        }
+    }
+
     fun importUri(uri: Uri) = safe {
         val ctx: Context = this
 
@@ -411,6 +429,8 @@ class MainActivity : AppCompatActivity() {
             try {
                 if (mimeType == "application/pdf" || fileName?.endsWith(".pdf") == true) {
                     BookDownloader2.downloadPDFWorkThread(uri, ctx)
+                } else if (mimeType == "text/plain" || fileName?.endsWith(".txt", ignoreCase = true) == true) {
+                    BookDownloader2.importTxtWorkThread(uri, ctx)
                 } else {
                     BookDownloader2.downloadWorkThread(uri, ctx)
                 }
@@ -440,7 +460,7 @@ class MainActivity : AppCompatActivity() {
         safe {
             epubPathPicker.launch(
                 arrayOf(
-                    //"text/plain",
+                    "text/plain",
                     //"text/str",
                     //"application/octet-stream",
                     "application/pdf",
@@ -453,7 +473,7 @@ class MainActivity : AppCompatActivity() {
         safe {
             epubPathsPicker.launch(
                 arrayOf(
-                    //"text/plain",
+                    "text/plain",
                     //"text/str",
                     //"application/octet-stream",
                     "application/pdf",
@@ -801,11 +821,13 @@ class MainActivity : AppCompatActivity() {
                             if(!d.isImported) {
                                 loadResult(d.url, viewModel.apiName)
                                 hidePreviewPopupDialog()
+                            } else if (d.apiName == IMPORT_SOURCE) {
+                                openImportedResult(d.name, d.author)
                             }
                         }
 
-                        readMore.isVisible =
-                            viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
+                        // Imported EPUB/TXT books open their detail page (chapters, translation)
+                        readMore.isVisible = viewModel.apiName != IMPORT_SOURCE_PDF
                         bookmark.isVisible =
                             viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
 
@@ -818,6 +840,8 @@ class MainActivity : AppCompatActivity() {
                                 if(!d.isImported) {
                                     loadResult(d.url, viewModel.apiName)
                                     hidePreviewPopupDialog()
+                                } else if (d.apiName == IMPORT_SOURCE) {
+                                    openImportedResult(d.name, d.author)
                                 }
                             }
                         }
@@ -828,6 +852,8 @@ class MainActivity : AppCompatActivity() {
                             if(!d.isImported) {
                                 loadResult(d.url, viewModel.apiName)
                                 hidePreviewPopupDialog()
+                            } else if (d.apiName == IMPORT_SOURCE) {
+                                openImportedResult(d.name, d.author)
                             }
                         }
 

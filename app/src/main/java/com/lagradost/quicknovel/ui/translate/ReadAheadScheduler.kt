@@ -56,8 +56,8 @@ object ReadAheadScheduler {
             if (queue.hasPending) TranslationForegroundService.stopReadAhead(ctx)
             return
         }
-        val apiName = NovelChapterSource.apiNameOf(novelId) ?: return
-        if (TranslationLanguages.langOfApi(apiName) == null) return
+        // A zh/ja/ko provider, or an imported book with a detected / chosen language.
+        if (NovelChapterSource.langOf(novelId) == null) return
         if (!SecurePrefs.hasApiKey(ctx)) return
 
         val translated = TranslatorDatabase.getInstance(ctx).translationDao().getTranslatedChapterNums(novelId).toHashSet()

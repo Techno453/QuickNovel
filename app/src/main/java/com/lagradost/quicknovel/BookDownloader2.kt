@@ -114,6 +114,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import com.lagradost.quicknovel.imported.ImportedBooks
+import com.lagradost.quicknovel.imported.TextDecoding
+import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
@@ -1368,7 +1371,7 @@ object BookDownloader2 {
             val file = FileHelper.epub.openFile(context, name, false)
             val uri = file?.uri
             if (uri != null) {
-                openEpub(activity, uri, apiName = apiName, novelName = name)
+                openEpub(activity, uri, apiName = apiName, novelName = name, importedNovelId = importedNovelId(apiName, name, author))
             } else {
                 generating.invoke()
                 generateAndReadEpub(activity, author, name, apiName, synopsis)
@@ -1410,7 +1413,7 @@ object BookDownloader2 {
             activity,
             fileStream
         )
-        openEpub(activity, file.uri, apiName = apiName, novelName = name)
+        openEpub(activity, file.uri, apiName = apiName, novelName = name, importedNovelId = importedNovelId(apiName, name, author))
     }
 
     /**
@@ -1418,11 +1421,19 @@ object BookDownloader2 {
      * reader can derive the translator novel id and serve translated chapters from the
      * TranslatorDatabase.
      */
+    /** Intent extra: translator novel id of an imported book ([ImportedBooks]). */
+    const val EXTRA_IMPORTED_NOVEL_ID = "importedNovelId"
+
+    /** Translator id of an imported EPUB/TXT book, null for anything else. */
+    private fun importedNovelId(apiName: String, name: String, author: String?): String? =
+        if (apiName == IMPORT_SOURCE) ImportedBooks.novelIdOf(name, author) else null
+
     fun openEpub(
         activity: Activity,
         uri: Uri,
         apiName: String? = null,
         novelName: String? = null,
+        importedNovelId: String? = null,
     ) {
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(activity)
 
@@ -1439,6 +1450,7 @@ object BookDownloader2 {
                 myIntent.putExtra("apiName", apiName)
                 myIntent.putExtra("novelName", novelName)
             }
+            if (importedNovelId != null) myIntent.putExtra(EXTRA_IMPORTED_NOVEL_ID, importedNovelId)
             activity.startActivity(myIntent)
             return
         }
@@ -1496,6 +1508,8 @@ object BookDownloader2 {
         readEpubMutex.withLock {
             val downloaded = getKey(DOWNLOAD_EPUB_SIZE, id.toString(), 0)!!
             val shouldUpdate = downloadedCount - downloaded != 0
+            // Books imported before they could be translated get their record on first open.
+            if (apiName == IMPORT_SOURCE) context?.let { ImportedBooks.ensureRecord(it, name, author) }
             readEpub(
                 author = author,
                 name = name,
@@ -2510,19 +2524,12 @@ object BookDownloader2 {
         //If it doesn’t have a cover, it’s most likely another file that was converted into EPUB, so all the metadata will be wrong. That’s why I use the file name instead of the metadata.
         val name = if (book.coverImage?.data != null) book.metadata.firstTitle
         else {
-            contentResolver.query(data, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (cursor.moveToFirst())
-                    cursor.getString(nameIndex).substringBeforeLast(".")
-                else null
-            } ?: book.metadata.firstTitle
+            displayNameWithoutExtension(context, data) ?: book.metadata.firstTitle
         }
 
         val sApiName = BookDownloader2Helper.sanitizeFilename(apiName)
         val sAuthor = BookDownloader2Helper.sanitizeFilename(author ?: "")
         val sName = BookDownloader2Helper.sanitizeFilename(name)
-
-        val id = generateId(apiName, author, name)
 
         val load = EpubResponse(
             url = "",
@@ -2536,54 +2543,114 @@ object BookDownloader2 {
                 book.metadata.descriptions?.firstOrNull { description -> description != null && description.isNotBlank() }
         }
 
-        try {
-            setPrefixData(load, apiName, 1L, 0L)
+        finishImport(context, load, ImportedBooks.FORMAT_EPUB, writeCover = {
+            var coverBytes = book.coverImage?.data
 
-            try {
-                var coverBytes = book.coverImage?.data
-
-                //This is for epubs imported from PDFs that don’t have correct metadata.
-                if (coverBytes == null) {
-                    zipFile.entries().asSequence()
-                        .find { entry ->
-                            entry.size >= MIN_IMAGE_SIZE &&
-                                    listOf(".jpg", ".jpeg", ".png").any {
-                                        entry.name.endsWith(
-                                            it,
-                                            ignoreCase = true
-                                        )
-                                    }
-                        }?.let { entry ->
-                            val rawBytes = zipFile.getInputStream(entry).use { it.readBytes() }
-                            // Downsample the image before assigning it to coverBytes
-                            coverBytes = getSafeByteArray(rawBytes)
-                        }
-                }
-
-
-
-                if (coverBytes != null) {
-                    // Store the image and override it
-                    val filepath = BookDownloader2Helper.getFilenameIMG(sApiName, sAuthor, sName)
-                    val pFile = File(filesDir, filepath)
-                    pFile.parentFile?.mkdirs()
-                    pFile.writeBytes(coverBytes)
-                }
-
-            } catch (t: Throwable) {
-                logError(t)
+            //This is for epubs imported from PDFs that don’t have correct metadata.
+            if (coverBytes == null) {
+                zipFile.entries().asSequence()
+                    .find { entry ->
+                        entry.size >= MIN_IMAGE_SIZE &&
+                                listOf(".jpg", ".jpeg", ".png").any {
+                                    entry.name.endsWith(
+                                        it,
+                                        ignoreCase = true
+                                    )
+                                }
+                    }?.let { entry ->
+                        val rawBytes = zipFile.getInputStream(entry).use { it.readBytes() }
+                        // Downsample the image before assigning it to coverBytes
+                        coverBytes = getSafeByteArray(rawBytes)
+                    }
             }
 
-            val file =
-                File(filesDir.toString() + getDirectory(sApiName, sAuthor, sName), LOCAL_EPUB)
-
-            file.parentFile?.mkdirs()
-
+            if (coverBytes != null) {
+                // Store the image and override it
+                val filepath = BookDownloader2Helper.getFilenameIMG(sApiName, sAuthor, sName)
+                val pFile = File(filesDir, filepath)
+                pFile.parentFile?.mkdirs()
+                pFile.writeBytes(coverBytes)
+            }
+        }) { file ->
             contentResolver.openInputStream(data)?.use { input ->
                 file.outputStream().use { output ->
                     input.copyTo(output)
                 }
             } ?: throw IOException("No file found")
+        }
+    }
+
+    /**
+     * Imports a .txt book: decoded ([TextDecoding]), split into chapters ([TxtChapterSplitter])
+     * and stored as a generated EPUB, so the library, reader and translation pipeline treat it
+     * like an imported EPUB. The title is the file name.
+     */
+    @WorkerThread
+    @Throws
+    suspend fun importTxtWorkThread(data: Uri, context: Context) {
+        val bytes = context.contentResolver.openInputStream(data)?.use { it.readBytes() }
+            ?: throw IOException("No file found")
+        val decoded = TextDecoding.decode(bytes)
+        val name = displayNameWithoutExtension(context, data) ?: "Imported text"
+        val epubBytes = ImportedBooks.txtToEpub(name, decoded.text)
+        Log.i("Import", "TXT $name decoded as ${decoded.charset}")
+
+        val load = EpubResponse(
+            url = "",
+            name = name,
+            apiName = IMPORT_SOURCE,
+            downloadLinks = emptyList(),
+            downloadExtractLinks = emptyList(),
+        )
+        finishImport(context, load, ImportedBooks.FORMAT_TXT, writeCover = {}) { file ->
+            file.writeBytes(epubBytes)
+        }
+    }
+
+    private fun displayNameWithoutExtension(context: Context, data: Uri): String? =
+        context.contentResolver.query(data, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && cursor.moveToFirst())
+                cursor.getString(nameIndex)?.substringBeforeLast(".")
+            else null
+        }
+
+    /**
+     * The common end of an import: library entry, cover, the book file (`local_epub.epub`),
+     * "done" state and notification, then the translator record ([ImportedBooks.register]).
+     */
+    private suspend fun finishImport(
+        context: Context,
+        load: EpubResponse,
+        format: String,
+        writeCover: () -> Unit,
+        writeBook: (File) -> Unit,
+    ) {
+        val apiName = IMPORT_SOURCE
+        val author = load.author
+        val name = load.name
+        val id = generateId(apiName, author, name)
+        try {
+            setPrefixData(load, apiName, 1L, 0L)
+
+            try {
+                writeCover()
+            } catch (t: Throwable) {
+                logError(t)
+            }
+
+            val file = File(
+                context.filesDir.toString() + getDirectory(
+                    BookDownloader2Helper.sanitizeFilename(apiName),
+                    BookDownloader2Helper.sanitizeFilename(author ?: ""),
+                    BookDownloader2Helper.sanitizeFilename(name)
+                ), LOCAL_EPUB
+            )
+
+            file.parentFile?.mkdirs()
+            writeBook(file)
+            // A re-import replaces the book: regenerate the reader's copy on the next open.
+            setKey(DOWNLOAD_EPUB_SIZE, id.toString(), 0)
 
             setSuffixData(load, apiName)
             changeDownload(id) {
@@ -2600,6 +2667,13 @@ object BookDownloader2 {
             }
         } finally {
             currentDownloads -= id
+        }
+        try {
+            ImportedBooks.register(context, name, author, format)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            logError(t)
         }
     }
 

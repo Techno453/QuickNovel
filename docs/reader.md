@@ -95,18 +95,33 @@ Bible. Nothing changes in the reading view and terms are not highlighted.
 - **No match.** The sheet says the word is not in the Story Bible and offers **Add to glossary**,
   prefilled with the word (possessive stripped) and the current chapter.
 
+## Imported books
+
+Imported EPUB and TXT books open as `RegularBook` with their translator id (`Imported/...`, passed
+as the `importedNovelId` intent extra). Chapters are split by `EpubChapters`, the same plan the
+translation pipeline uses, so chapter *i* matches the result page and the DB. When AI translation is
+enabled for the reader and the book's language is known (detected or set on the result page), chapters are translated
+on demand through `ChapterTranslationRepository.getOrTranslate` like online chapters, in scroll and
+paged mode, with glossary long-press. Long-press on the chapter title → Reload shows the original.
+Details: [translation-pipeline.md](translation-pipeline.md#imported-books-epub--txt).
+
 ## Chapter list status chips
 
-On the result page, chapters of translated novels show a chip:
+On the result page, chapters of translated novels (online zh/ja/ko sources and imported books
+with a known language) show a chip:
 
 - **Translated**: a stored translation exists.
-- **Source changed**: the stored translation is stale.
-- **Queued**: the read-ahead queue holds the chapter.
+- **Source changed**: the stored translation is stale (`translated_chapters.stale`, set by
+  `ChapterTranslationRepository` when the `SourceHash` check says CHANGED).
+- **Queued**: the read-ahead queue holds the chapter, or it is in an overnight batch that has
+  not finished (`BatchManager.chaptersInUnfinishedBatches`).
 
-`ChapterStatusSource` / `TranslatorChapterStatusSource` provide the statuses. The adapter
-refreshes them every 4 s while the list is visible and updates bound rows in place. Stale chapters
-and batch-queued / in-progress chapters are TODOs until the translator exposes them; until then
-nothing shows as stale, and only read-ahead shows as queued.
+Queued wins over stale, stale over translated. `ChapterStatusSource` / `TranslatorChapterStatusSource`
+provide the statuses; the lookups sit behind `ChapterStatusQueries` (translator DAO, batch jobs,
+read-ahead queue) so the merging is unit tested with fakes (`ChapterStatusSourceTest`). A failing
+lookup only drops its own chips. The adapter refreshes them every 4 s while the list is visible and
+updates bound rows in place. A batch chapter stays "Queued" until its batch job has finished
+processing, even if it was stored a moment earlier.
 
 ## CJK text
 

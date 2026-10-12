@@ -134,8 +134,9 @@ object MetadataTranslations {
     }
 
     /** English title and synopsis of an opened novel (preview sheet, result page). */
-    suspend fun novel(apiName: String, name: String, synopsis: String?): MetadataTranslator.Translated? {
-        val lang = langOf(apiName) ?: return null
+    /** [lang] overrides the API lookup for books without a source API (imported EPUB/TXT). */
+    suspend fun novel(apiName: String, name: String, synopsis: String?, lang: String? = langOf(apiName)): MetadataTranslator.Translated? {
+        lang ?: return null
         return translator.novel(TranslatorNovelId.from(apiName, name), lang, name, synopsis)
     }
 }
