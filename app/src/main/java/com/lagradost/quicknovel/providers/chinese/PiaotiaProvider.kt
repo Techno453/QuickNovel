@@ -38,13 +38,22 @@ class PiaotiaProvider : MainAPI() {
     override val hasMainPage = true
     override val rateLimitTime = 1000L
 
-    override val orderBys = listOf(
-        "Latest update (by category)" to "",
-        "Most viewed" to "allvisit",
-        "Most viewed this month" to "monthvisit",
-        "Most recommended" to "allvote",
-        "Most favourited" to "goodnum",
-        "Newest" to "postdate",
+    /**
+     * Listings, most popular first (verified 2026-10): "top:<type>" = the all-genre toplists
+     * `/booktop{type}/0/{page}.html`, "full" = completed works
+     * (`/modules/article/articlelist.php?fullflag=1&page=n`), "sort" = latest updates of one genre
+     * `/booksort{genre}/0/{page}.html`. The genre ([tags]) only applies to "sort".
+     */
+    override val mainCategories = listOf(
+        "Most viewed this week (周排行)" to "top:weekvisit",
+        "Most viewed this month (月排行)" to "top:monthvisit",
+        "Most viewed of all time (总排行)" to "top:allvisit",
+        "Most recommended this week (周推荐)" to "top:weekvote",
+        "Most recommended of all time" to "top:allvote",
+        "Most favourited" to "top:goodnum",
+        "Completed works (全本)" to "full",
+        "New works" to "top:postdate",
+        "Latest updates in genre" to "sort",
     )
 
     override val tags = listOf(
@@ -81,13 +90,19 @@ class PiaotiaProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val url = if (orderBy.isNullOrBlank()) {
-            "$mainUrl/booksort${tag.orEmpty()}/0/$page.html"
-        } else {
-            "$mainUrl/booktop$orderBy/0/$page.html"
-        }
+        val url = listingUrl(mainCategory, tag, page)
         val (html, finalUrl) = fetch(url)
         return HeadMainPageResponse(url, PiaotiaParser.parseGrid(this, Jsoup.parse(html, finalUrl)))
+    }
+
+    /** URL of a [mainCategories] listing (null = the first one) for [genre] and [page]. */
+    internal fun listingUrl(listing: String?, genre: String?, page: Int): String {
+        val value = listing ?: mainCategories.first().second
+        return when {
+            value.startsWith("top:") -> "$mainUrl/booktop${value.removePrefix("top:")}/0/$page.html"
+            value == "full" -> "$mainUrl/modules/article/articlelist.php?fullflag=1" + if (page > 1) "&page=$page" else ""
+            else -> "$mainUrl/booksort${genre.orEmpty()}/0/$page.html"
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {

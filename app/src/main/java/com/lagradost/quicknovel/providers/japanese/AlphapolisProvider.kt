@@ -45,14 +45,18 @@ class AlphapolisProvider : MainAPI() {
     override val hasMainPage = true
     override val rateLimitTime = 1500L
 
-    override val orderBys = listOf(
-        "24h points" to "24hpt",
-        "Weekly points" to "weekly",
-        "Monthly points" to "monthly",
-        "Recently updated" to "episode_recent",
-        "Newest" to "recent",
-        "Recently completed" to "completed",
+    /**
+     * Listings (`/novel/index?sort=`), most popular first: the site's own 24-hour points
+     * ranking is its default. Genres ([tags]) apply to every listing.
+     */
+    override val mainCategories = listOf(
+        "24-hour ranking" to "24hpt",
+        "Weekly ranking" to "weekly",
+        "Monthly ranking" to "monthly",
         "Most favourited" to "favorite",
+        "Recently completed" to "completed",
+        "Latest updates" to "episode_recent",
+        "New works" to "recent",
     )
 
     override val tags = listOf(
@@ -91,13 +95,18 @@ class AlphapolisProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
+        val url = listingUrl(mainCategory, tag, page)
+        return HeadMainPageResponse(url, AlphapolisParser.parseList(this, getText(url)))
+    }
+
+    /** URL of a [mainCategories] listing (null = the first one) for [genre] and [page]. */
+    internal fun listingUrl(listing: String?, genre: String?, page: Int): String {
         val params = buildList {
-            add("sort=${orderBy ?: "24hpt"}")
-            if (!tag.isNullOrBlank()) add("category_ids=$tag")
+            add("sort=${listing?.ifBlank { null } ?: mainCategories.first().second}")
+            if (!genre.isNullOrBlank()) add("category_ids=$genre")
             if (page > 1) add("page=$page")
         }.joinToString("&")
-        val url = "$mainUrl/novel/index?$params"
-        return HeadMainPageResponse(url, AlphapolisParser.parseList(this, getText(url)))
+        return "$mainUrl/novel/index?$params"
     }
 
     override suspend fun search(query: String): List<SearchResponse> {

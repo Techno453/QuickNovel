@@ -41,15 +41,22 @@ class IxdzsProvider : MainAPI() {
     override val hasMainPage = true
     override val rateLimitTime = 800L
 
+    /**
+     * Listings, most popular first (verified 2026-10). "path:<p>" are the all-genre ranking and
+     * completed pages (`/hot/`, `/hot/month/`, `/hot/day/`, `/end/`, paged with `?page=n`);
+     * "genre:<status>-<order>" is the per-genre list `/sort/{genre}/index-0-{status}-{order}-{page}.html`
+     * (status 0 all / 1 ongoing / 2 completed, order 0 latest update / 1 popular). The genre
+     * ([tags]) only applies to the "In genre" listings.
+     */
     override val mainCategories = listOf(
-        "All" to "0",
-        "Ongoing (连载中)" to "1",
-        "Completed (已完结)" to "2",
-    )
-
-    override val orderBys = listOf(
-        "Latest update" to "0",
-        "Popular" to "1",
+        "Popular: all time (总榜)" to "path:/hot/",
+        "Popular: this month (月榜)" to "path:/hot/month/",
+        "Popular: today (日榜)" to "path:/hot/day/",
+        "Completed works (全本)" to "path:/end/",
+        "In genre: popular" to "genre:0-1",
+        "In genre: completed, popular" to "genre:2-1",
+        "In genre: ongoing, popular" to "genre:1-1",
+        "In genre: latest updates" to "genre:0-0",
     )
 
     override val tags = listOf(
@@ -108,8 +115,21 @@ class IxdzsProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val url = "$mainUrl/sort/${tag ?: "1"}/index-0-${mainCategory ?: "0"}-${orderBy ?: "0"}-$page.html"
+        val url = listingUrl(mainCategory, tag, page)
         return HeadMainPageResponse(url, IxdzsParser.parseList(this, fetch(url)))
+    }
+
+    /** URL of a [mainCategories] listing (null = the first one) for [genre] and [page]. */
+    internal fun listingUrl(listing: String?, genre: String?, page: Int): String {
+        val value = listing ?: mainCategories.first().second
+        if (value.startsWith("path:")) {
+            val path = value.removePrefix("path:")
+            return "$mainUrl$path" + if (page > 1) "?page=$page" else ""
+        }
+        val (status, order) = value.removePrefix("genre:").split('-').let {
+            (it.getOrNull(0) ?: "0") to (it.getOrNull(1) ?: "1")
+        }
+        return "$mainUrl/sort/${genre ?: tags.first().second}/index-0-$status-$order-$page.html"
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
