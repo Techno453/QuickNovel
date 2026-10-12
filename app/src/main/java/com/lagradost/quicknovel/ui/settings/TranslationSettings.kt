@@ -312,6 +312,7 @@ object TranslationSettings {
                     true
                 },
             ),
+            metadataAiPreference(context, translateIcon),
             Preference.PreferenceItem.SwitchPreference(
                 icon = translateIcon,
                 title = "Translate search queries",
@@ -995,4 +996,27 @@ object TranslationSettings {
             },
         )
     }
+}
+
+/**
+ * "Translate titles and synopses with AI" (default on; docs/browse.md). Self-contained so it is
+ * listed in the AI Translation group with a single line.
+ */
+@Composable
+internal fun metadataAiPreference(context: Context, icon: Painter): Preference.PreferenceItem.SwitchPreference {
+    val preference = remember {
+        AccessorPreferenceData(
+            com.lagradost.quicknovel.translator.MetadataTranslations.KEY_AI_METADATA, true,
+            { com.lagradost.quicknovel.translator.MetadataTranslations.isAiEnabled(context) },
+            { com.lagradost.quicknovel.translator.MetadataTranslations.setAiEnabled(context, it) },
+        )
+    }
+    return Preference.PreferenceItem.SwitchPreference(
+        icon = icon,
+        title = "Translate titles and synopses with AI",
+        subtitle = "Use the translation model for titles in Browse, search and the library, and for " +
+            "synopses when a novel is opened (about \$0.0002 per novel, cached). Without an API key " +
+            "the free Google option above is used",
+        preference = preference,
+    )
 }

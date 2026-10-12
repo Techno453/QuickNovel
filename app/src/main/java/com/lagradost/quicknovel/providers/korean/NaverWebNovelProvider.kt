@@ -40,15 +40,26 @@ class NaverWebNovelProvider : MainAPI() {
     override val hasMainPage = true
     override val rateLimitTime = 800L
 
+    /**
+     * Listings, most popular first (verified 2026-10):
+     * "rank|<league>|<DAILY|WEEKLY>|<left|right>" = `/{league}/ranking?genre=&periodType=`, one page
+     * of 100; the left column is the free ranking (best) / overall ranking (challenge), the right
+     * one the new-works ranking (challenge; best's right column is the paid ranking, never used).
+     * "genre|<league>|<order>[|finish]" = the paged genre list (`finish=true`: completed only).
+     * Every listing is per genre ([tags]); the site has no all-genre lists.
+     */
     override val mainCategories = listOf(
-        "Best league (베스트리그)" to "best",
-        "Challenge league (챌린지리그)" to "challenge",
-    )
-
-    override val orderBys = listOf(
-        "Latest update" to "Update",
-        "Views" to "Read",
-        "Favourites" to "Like",
+        "Best league: daily ranking" to "rank|best|DAILY|left",
+        "Best league: weekly ranking" to "rank|best|WEEKLY|left",
+        "Best league: most viewed" to "genre|best|Read",
+        "Best league: most favourited" to "genre|best|Like",
+        "Best league: top rated" to "genre|best|StarScore",
+        "Best league: completed" to "genre|best|Read|finish",
+        "Best league: latest updates" to "genre|best|Update",
+        "Challenge league: daily ranking" to "rank|challenge|DAILY|left",
+        "Challenge league: new works ranking" to "rank|challenge|DAILY|right",
+        "Challenge league: most viewed" to "genre|challenge|Read",
+        "Challenge league: latest updates" to "genre|challenge|Update",
     )
 
     override val tags = listOf(
@@ -84,9 +95,51 @@ class NaverWebNovelProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val league = mainCategory ?: "best"
-        val url = "$mainUrl/$league/genre?genre=${tag ?: "102"}&order=${orderBy ?: "Update"}&page=$page"
-        return HeadMainPageResponse(url, NaverWebNovelParser.parseCards(this, getDoc(url)))
+        val listing = Listing.parse(mainCategory ?: mainCategories.first().second)
+        val url = listingUrl(listing, tag, page)
+            ?: return HeadMainPageResponse("$mainUrl/${listing.league}/ranking", emptyList()) // one page
+        val doc = getDoc(url)
+        val cards = if (listing.ranking) {
+            NaverWebNovelParser.parseRanking(this, doc, right = listing.rightColumn)
+        } else {
+            NaverWebNovelParser.parseCards(this, doc)
+        }
+        return HeadMainPageResponse(url, cards)
+    }
+
+    /** A parsed [mainCategories] value. */
+    internal data class Listing(
+        val ranking: Boolean,
+        val league: String,
+        /** Ranking period (DAILY / WEEKLY) or genre-list order (Read / Like / StarScore / Update). */
+        val mode: String,
+        val rightColumn: Boolean = false,
+        val finishedOnly: Boolean = false,
+    ) {
+        companion object {
+            fun parse(value: String): Listing {
+                val parts = value.split('|')
+                val ranking = parts.getOrNull(0) == "rank"
+                return Listing(
+                    ranking = ranking,
+                    league = parts.getOrNull(1)?.takeIf { it == "best" || it == "challenge" } ?: "best",
+                    mode = parts.getOrNull(2)?.ifBlank { null } ?: if (ranking) "DAILY" else "Read",
+                    rightColumn = ranking && parts.getOrNull(3) == "right",
+                    finishedOnly = !ranking && "finish" in parts,
+                )
+            }
+        }
+    }
+
+    /** URL of [listing] for [genre]; null when [page] is past the end (rankings have one page). */
+    internal fun listingUrl(listing: Listing, genre: String?, page: Int): String? {
+        val g = genre ?: tags.first().second
+        return if (listing.ranking) {
+            if (page > 1) null else "$mainUrl/${listing.league}/ranking?genre=$g&periodType=${listing.mode}"
+        } else {
+            "$mainUrl/${listing.league}/genre?genre=$g&order=${listing.mode}" +
+                    (if (listing.finishedOnly) "&finish=true" else "") + "&page=$page"
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -158,6 +211,29 @@ object NaverWebNovelParser {
     fun listUrl(ref: Pair<String, String>) = "$BASE/${ref.first}/list?novelId=${ref.second}"
 
     fun isLoginWall(url: String): Boolean = url.contains("nid.naver.com") || url.contains("/login")
+
+    /**
+     * A ranking page (`/{league}/ranking`): `div.ranking_wrap_left` (free / overall ranking) or,
+     * with [right], `div.ranking_wrap_right`, each `ul.ranking_list li.item a.link` with
+     * `.title`, `.thumbnail img` and `.count` "총<n>회".
+     */
+    fun parseRanking(api: MainAPI, doc: Document, right: Boolean = false): List<SearchResponse> {
+        val column = doc.selectFirst(if (right) "div.ranking_wrap_right" else "div.ranking_wrap_left")
+            ?: return emptyList()
+        val seen = HashSet<String>()
+        return column.select("ul.ranking_list li.item a[href*=list?novelId=]").mapNotNull { a ->
+            val ref = novelRef(a.attr("href")) ?: return@mapNotNull null
+            if (!seen.add(ref.second)) return@mapNotNull null
+            val title = (a.selectFirst(".title")?.text() ?: a.selectFirst("img")?.attr("alt")).orEmpty().trim()
+                .ifEmpty { return@mapNotNull null }
+            api.newSearchResponse(title, listUrl(ref), fix = false) {
+                posterUrl = a.selectFirst("img")?.takeIf { !it.attr("src").startsWith("?") }
+                    ?.absUrl("src")?.ifBlank { null }
+                latestChapter = a.select(".count").firstOrNull { it.text().contains("회") }?.text()
+                    ?.replace("총", "")?.trim()?.ifEmpty { null }
+            }
+        }
+    }
 
     /**
      * Novel cards of search results (ul.default_list) and genre pages (ul.card_list), best and

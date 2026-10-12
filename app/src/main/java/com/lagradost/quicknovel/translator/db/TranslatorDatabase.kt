@@ -19,8 +19,9 @@ import com.lagradost.quicknovel.translator.batch.BatchStatus
         SpendEntry::class,
         BatchJob::class,
         BatchChapter::class,
+        NovelMetadataTranslation::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class TranslatorDatabase : RoomDatabase() {
@@ -31,14 +32,17 @@ abstract class TranslatorDatabase : RoomDatabase() {
     abstract fun chapterSummaryDao(): ChapterSummaryDao
     abstract fun spendDao(): SpendDao
     abstract fun batchDao(): BatchDao
+    abstract fun novelMetadataDao(): NovelMetadataDao
 
     /**
      * Removes everything stored for [novelId]: translated chapters, Story Bible terms, pending
      * terms, novel context, chapter summaries and finished batch jobs. Every "delete this novel"
      * path must use this so new per-novel tables cannot be forgotten.
      *
-     * Kept on purpose: the spend ledger (money already spent), and batch jobs still running at
-     * OpenAI (so their cost is recorded when they finish).
+     * Kept on purpose: the spend ledger (money already spent), batch jobs still running at
+     * OpenAI (so their cost is recorded when they finish), and the translated title/synopsis
+     * (novel_metadata_translations: tiny, already paid for, and shown again whenever the novel
+     * turns up in Browse or search).
      */
     suspend fun deleteAllForNovel(novelId: String) = withTransaction {
         translationDao().deleteAllForNovel(novelId)
@@ -165,9 +169,24 @@ abstract class TranslatorDatabase : RoomDatabase() {
             }
         }
 
+        /** SQL of [MIGRATION_6_7] (kept separate so a JVM unit test can check it). */
+        val MIGRATION_6_7_SQL = listOf(
+            "CREATE TABLE IF NOT EXISTS `novel_metadata_translations` (`novel_id` TEXT NOT NULL, " +
+                "`source_lang` TEXT NOT NULL, `title_hash` TEXT NOT NULL, `translated_title` TEXT NOT NULL, " +
+                "`title_engine` TEXT NOT NULL, `synopsis_hash` TEXT, `translated_synopsis` TEXT, " +
+                "`synopsis_engine` TEXT, `model` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`novel_id`))",
+        )
+
+        /** v7 (additive): translated titles and synopses (novel_metadata_translations, docs/browse.md). */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_6_7_SQL.forEach { db.execSQL(it) }
+            }
+        }
+
         /** Every migration, oldest first; all registered in [getInstance]. */
         val ALL_MIGRATIONS: Array<Migration>
-            get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
 
         fun getInstance(context: Context): TranslatorDatabase {
             return instance ?: synchronized(this) {

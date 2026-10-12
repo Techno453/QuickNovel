@@ -49,9 +49,23 @@ class PixivNovelProvider : MainAPI() {
     override val hasMainPage = true
     override val rateLimitTime = 1000L
 
-    override val orderBys = listOf(
-        "Newest" to "date_d",
-        "Oldest" to "date",
+    /**
+     * Listings, most popular first. "rank:<mode>" = the all-ages novel rankings
+     * (`/novel/ranking.php?mode=<mode>&p=<n>`, 50 per page, readable logged out; data from the
+     * page's `__NEXT_DATA__`, verified 2026-10). Popular-by-bookmarks search needs Premium, so
+     * the tag listings ([tags], `s_tag_full`) are by date only. Original works first: the
+     * overall rankings are mostly fan fiction.
+     */
+    override val mainCategories = listOf(
+        "Weekly ranking: original works" to "rank:weekly_original",
+        "Daily ranking" to "rank:daily",
+        "Weekly ranking" to "rank:weekly",
+        "Monthly ranking" to "rank:monthly",
+        "Rookie ranking" to "rank:rookie",
+        "Popular with male readers" to "rank:male",
+        "Popular with female readers" to "rank:female",
+        "In tag: newest" to "tag:date_d",
+        "In tag: oldest" to "tag:date",
     )
 
     override val tags = listOf(
@@ -95,8 +109,25 @@ class PixivNovelProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val url = searchUrl(tag ?: "オリジナル", "s_tag_full", orderBy ?: "date_d", page, grouped = true)
-        return HeadMainPageResponse(url, PixivNovelParser.parseSearch(this, getJson(url)))
+        val url = listingUrl(mainCategory, tag, page)
+        if (!url.contains("/ranking.php")) {
+            return HeadMainPageResponse(url, PixivNovelParser.parseSearch(this, getJson(url)))
+        }
+        val response = app.get(url, headers = headers + ("Accept" to "text/html,application/xhtml+xml"))
+        // Past the last ranking page the site answers 404 (or a page without rankings).
+        if (page > 1 && response.code == 404) return HeadMainPageResponse(url, emptyList())
+        SourceGuard.requireOk(name, response)
+        return HeadMainPageResponse(url, PixivNovelParser.parseRanking(this, response.text))
+    }
+
+    /** URL of a [mainCategories] listing (null = the first one) for [tag] and [page]. */
+    internal fun listingUrl(listing: String?, tag: String?, page: Int): String {
+        val value = listing ?: mainCategories.first().second
+        if (value.startsWith("rank:")) {
+            return "$mainUrl/novel/ranking.php?mode=${value.removePrefix("rank:")}" + if (page > 1) "&p=$page" else ""
+        }
+        val order = value.removePrefix("tag:").ifBlank { "date_d" }
+        return searchUrl(tag ?: tags.first().second, "s_tag_full", order, page, grouped = true)
     }
 
     /** Title/caption search first, then tag search for keywords that only appear as tags. */
@@ -201,6 +232,36 @@ object PixivNovelParser {
 
     private fun cover(node: JsonNode?): String? = node?.path("urls")?.let { urls ->
         urls.str("480mw") ?: urls.str("240mw") ?: urls.str("original")
+    }
+
+    private val nextDataRegex = Regex("""<script id="__NEXT_DATA__"[^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+
+    /**
+     * A novel ranking page: `__NEXT_DATA__` → props.pageProps.assign.display_a.rank_a[] with
+     * {id, title, url (100x100 cover), series_id, series_title, x_restrict, language}. Episodes of
+     * a series become one series entry; R-18 and non-Japanese rows are left out.
+     */
+    fun parseRanking(api: MainAPI, html: String): List<SearchResponse> {
+        val json = nextDataRegex.find(html)?.groupValues?.get(1) ?: return emptyList()
+        val root = runCatching { mapper.readTree(json) }.getOrNull() ?: return emptyList()
+        val rows = root.path("props").path("pageProps").path("assign").path("display_a").path("rank_a")
+        val seen = HashSet<String>()
+        return rows.mapNotNull { item ->
+            if (item.path("x_restrict").asText("0") != "0") return@mapNotNull null
+            if ((item.str("language") ?: "ja") != "ja") return@mapNotNull null
+            val seriesId = item.str("series_id")?.takeIf { it != "0" }
+            val (title, url) = if (seriesId != null) {
+                (item.str("series_title") ?: item.str("title")) to seriesUrl(seriesId)
+            } else {
+                item.str("title") to novelUrl(item.str("id") ?: return@mapNotNull null)
+            }
+            if (title == null || !seen.add(url)) return@mapNotNull null
+            api.newSearchResponse(title, url, fix = false) {
+                // The ranking ships 100x100 thumbnails; the 240x480 size of the same cover is sharp.
+                posterUrl = item.str("url")?.replace("/c/100x100/", "/c/240x480_80/")
+                posterHeaders = mapOf("Referer" to "https://www.pixiv.net/")
+            }
+        }
     }
 
     /**

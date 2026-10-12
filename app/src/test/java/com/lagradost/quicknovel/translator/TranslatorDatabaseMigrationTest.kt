@@ -37,7 +37,30 @@ class TranslatorDatabaseMigrationTest {
         val migrations = TranslatorDatabase.ALL_MIGRATIONS
         assertEquals(1, migrations.first().startVersion)
         migrations.toList().zipWithNext().forEach { (a, b) -> assertEquals(a.endVersion, b.startVersion) }
-        assertEquals(6, migrations.last().endVersion)
+        assertEquals(7, migrations.last().endVersion)
+    }
+
+    @Test
+    fun migration6To7OnlyCreatesTheMetadataTable() {
+        val statements = mutableListOf<String>()
+        TranslatorDatabase.MIGRATION_6_7.migrate(recordingDb(statements))
+        assertEquals(TranslatorDatabase.MIGRATION_6_7_SQL, statements)
+        assertEquals(1, statements.size)
+        assertTrue(statements[0].startsWith("CREATE TABLE IF NOT EXISTS `novel_metadata_translations`"))
+    }
+
+    /** Same check as [migration5To6MatchesRoomsGeneratedSchema] for the v7 table. */
+    @Test
+    fun migration6To7MatchesRoomsGeneratedSchema() {
+        val generated = listOf(
+            "build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+            "app/build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+        ).map { java.io.File(it) }.firstOrNull { it.isFile }
+        org.junit.Assume.assumeTrue("KSP output not found", generated != null)
+        val impl = generated!!.readText()
+        TranslatorDatabase.MIGRATION_6_7_SQL.forEach { sql ->
+            assertTrue("Room creates a different schema than:\n$sql", impl.contains(sql))
+        }
     }
 
     @Test

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -105,6 +106,7 @@ fun SearchList(
     modifier: Modifier,
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
+    footer: @Composable (() -> Unit)? = null,
 ) {
     if (isRow) {
         SearchListRow(
@@ -112,6 +114,7 @@ fun SearchList(
             modifier = modifier,
             items = items,
             searchAction = searchAction,
+            footer = footer,
         )
     } else {
         SearchResponseGrid(
@@ -119,6 +122,7 @@ fun SearchList(
             modifier = modifier,
             items = items,
             searchAction = searchAction,
+            footer = footer,
         )
     }
 }
@@ -129,6 +133,7 @@ fun SearchListRow(
     modifier: Modifier,
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
+    footer: @Composable (() -> Unit)? = null,
 ) {
     // Rows are capped at MaxContentWidth and centred on wide windows, but the list itself stays
     // full width so it can be scrolled from the side gutters too.
@@ -149,6 +154,11 @@ fun SearchListRow(
                 SearchResponseRow(
                     response = item, action = searchAction, modifier = Modifier.animateItem()
                 )
+            }
+            if (footer != null) {
+                item(key = "footer", span = { GridItemSpan(maxLineSpan) }) {
+                    footer()
+                }
             }
         }
     }
@@ -260,15 +270,26 @@ fun SearchResponseRow(
                 .padding(10.dp)
                 .weight(1.0f)
         ) {
-            val displayName by rememberDisplayName(response)
+            val translatedName by rememberTranslatedTitle(response)
             Text(
-                displayName,
+                translatedName ?: response.name,
                 maxLines = 2,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 14.sp,
                 lineHeight = 15.sp,
                 overflow = TextOverflow.Ellipsis
             )
+            if (translatedName != null) {
+                // The original title as a second, smaller line.
+                Text(
+                    response.name,
+                    maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 13.sp,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
             val text =
                 if (response.downloadState != null && response.downloadState.progress != response.downloadState.total) {
@@ -546,7 +567,10 @@ fun SearchResponseItem(
                 contentScale = ContentScale.Crop,
                 model = imageRequest,
                 contentDescription = response.name,
-                modifier = Modifier.fillMaxSize()
+                // Placeholder tint so a missing or slow cover still shows the poster's shape.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             )
 
             if (response.id != null) {
@@ -593,20 +617,41 @@ fun SearchResponseItem(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .padding(horizontal = 5.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            val displayName by rememberDisplayName(response)
+        PosterTitle(response)
+    }
+}
+
+/**
+ * Title under a poster: the English title when translated (two lines) with the original as a
+ * smaller third line, else the original in the usual two lines. Never waits for translation.
+ */
+@Composable
+fun PosterTitle(response: ImmutableSearchResponse, modifier: Modifier = Modifier) {
+    val translated by rememberTranslatedTitle(response)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 40.dp)
+            .padding(horizontal = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = translated ?: response.name,
+            fontSize = 13.sp,
+            lineHeight = 14.sp,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            textAlign = TextAlign.Center,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (translated != null) {
             Text(
-                text = displayName,
-                fontSize = 13.sp,
-                lineHeight = 14.sp,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
+                text = response.name,
+                fontSize = 11.sp,
+                lineHeight = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
                 textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis
             )
@@ -659,6 +704,7 @@ fun SearchResponseGrid(
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
     modifier: Modifier,
+    footer: @Composable (() -> Unit)? = null,
 ) {
     LazyVerticalGrid(
         columns = AdaptiveAtLeast(PosterMinCellWidth, minCount = 3),
@@ -680,6 +726,11 @@ fun SearchResponseGrid(
                     .fillMaxWidth()
                     .wrapContentHeight()
             )
+        }
+        if (footer != null) {
+            item(key = "footer", span = { GridItemSpan(maxLineSpan) }) {
+                footer()
+            }
         }
     }
 

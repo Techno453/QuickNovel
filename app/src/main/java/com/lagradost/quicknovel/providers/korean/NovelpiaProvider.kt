@@ -57,10 +57,22 @@ class NovelpiaProvider : MainAPI() {
         "Accept-Language" to "ko-KR,ko;q=0.9,en;q=0.8",
     )
 
-    override val orderBys = listOf(
-        "Latest update" to "date",
-        "Views" to "view",
-        "Recommendations" to "vote",
+    /**
+     * Listings, most popular first. "top100:<group>/<period>" are the site's Top 100 pages
+     * (one page of 100, verified 2026-10), "free:<order>" the paged free-serial list. PLUS works
+     * in the Top 100 only show their free episodes, so the free Top 100 comes first.
+     * Genres ([tags], `main_genre`) apply to every listing.
+     */
+    override val mainCategories = listOf(
+        "Free works: top 100 today" to "top100:freestory/today",
+        "Free works: top 100 this week" to "top100:freestory/weekly",
+        "Top 100 today" to "top100:all/today",
+        "Top 100 this week" to "top100:all/weekly",
+        "Top 100 this month" to "top100:all/monthly",
+        "Completed: top 100 this week" to "top100:complete/weekly",
+        "Free works: most viewed" to "free:view",
+        "Free works: most recommended" to "free:vote",
+        "Free works: latest updates" to "free:date",
     )
 
     override val tags = listOf(
@@ -85,9 +97,21 @@ class NovelpiaProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val url = "$mainUrl/freestory/all/${orderBy ?: "date"}/$page/all?main_genre=${tag.orEmpty()}"
+        val url = listingUrl(mainCategory, tag, page)
+            ?: return HeadMainPageResponse("$mainUrl/top100", emptyList()) // a Top 100 has one page
         val html = app.get(url, headers = baseHeaders + ("Referer" to "$mainUrl/")).text
         return HeadMainPageResponse(url, NovelpiaParser.parseBrowse(this, html))
+    }
+
+    /** URL of a [mainCategories] listing (null = the first one); null when [page] is past its end. */
+    internal fun listingUrl(listing: String?, genre: String?, page: Int): String? {
+        val value = listing ?: mainCategories.first().second
+        val genreParam = "main_genre=" + genre.orEmpty()
+        return if (value.startsWith("top100:")) {
+            if (page > 1) null else "$mainUrl/top100/${value.removePrefix("top100:")}/view/all/all?$genreParam"
+        } else {
+            "$mainUrl/freestory/all/${value.removePrefix("free:").ifBlank { "date" }}/$page/all?$genreParam"
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -203,17 +227,26 @@ object NovelpiaParser {
         }
     }
 
+    /**
+     * Free-serial lists (`b.name_st` carrying the onclick, `img.cover_style`) and Top 100 pages
+     * (`div.novelbox.mobile_hidden`, onclick on an inner div, title `b.cut_line_one`, cover
+     * `img.scale`).
+     */
     fun parseBrowse(api: MainAPI, html: String): List<SearchResponse> {
         val doc = Jsoup.parse(html, api.mainUrl)
         val seen = HashSet<String>()
-        // Each work is rendered twice (desktop .novelbox + mobile .mobile_m_box); use desktop.
+        // Each work is rendered twice (desktop .novelbox + a mobile box); use desktop.
         return doc.select("div.novelbox").mapNotNull { box ->
-            val titleEl = box.selectFirst("b.name_st") ?: return@mapNotNull null
-            val no = onclickNovelRegex.find(titleEl.attr("onclick"))?.groupValues?.get(1)
+            val titleEl = box.selectFirst("b.name_st") ?: box.selectFirst("b.cut_line_one")
+                ?: return@mapNotNull null
+            val onclick = titleEl.attr("onclick").ifBlank {
+                box.selectFirst("[onclick*=/novel/]")?.attr("onclick").orEmpty()
+            }
+            val no = onclickNovelRegex.find(onclick)?.groupValues?.get(1)
                 ?: return@mapNotNull null
             if (!seen.add(no)) return@mapNotNull null
             api.newSearchResponse(titleEl.text().trim(), "${api.mainUrl}/novel/$no", fix = false) {
-                posterUrl = fixImage(box.selectFirst("img.cover_style")?.attr("src"))
+                posterUrl = fixImage((box.selectFirst("img.cover_style") ?: box.selectFirst("img.scale"))?.attr("src"))
             }
         }
     }

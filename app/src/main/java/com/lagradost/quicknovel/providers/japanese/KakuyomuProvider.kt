@@ -42,11 +42,17 @@ class KakuyomuProvider : MainAPI() {
         "Accept-Language" to "ja,en;q=0.8",
     )
 
-    override val orderBys = listOf(
+    /**
+     * Listings, most popular first. Value = "<search order>" or "<search order>|completed"
+     * (`serial_status=completed`, checked live 2026-10). Genres ([tags]) apply to every listing.
+     */
+    override val mainCategories = listOf(
         "Weekly ranking" to "weekly_ranking",
-        "Popular" to "popular",
-        "Latest episode" to "last_episode_published_at",
-        "Newest work" to "published_at",
+        "All-time popular" to "popular",
+        "Completed: weekly ranking" to "weekly_ranking|completed",
+        "Completed: all-time popular" to "popular|completed",
+        "Latest updates" to "last_episode_published_at",
+        "New works" to "published_at",
     )
 
     override val tags = listOf(
@@ -68,11 +74,18 @@ class KakuyomuProvider : MainAPI() {
 
     private suspend fun getText(url: String): String = app.get(url, headers = headers).text
 
-    private fun searchUrl(query: String?, order: String?, genre: String?, page: Int): String {
+    internal fun searchUrl(
+        query: String?,
+        order: String?,
+        genre: String?,
+        page: Int,
+        completedOnly: Boolean = false,
+    ): String {
         val params = buildList {
             if (!query.isNullOrBlank()) add("q=" + URLEncoder.encode(query, "UTF-8"))
             if (!genre.isNullOrBlank()) add("genre_name=$genre")
             if (!order.isNullOrBlank()) add("order=$order")
+            if (completedOnly) add("serial_status=completed")
             if (page > 1) add("page=$page")
         }
         return "$mainUrl/search" + if (params.isEmpty()) "" else "?" + params.joinToString("&")
@@ -84,8 +97,14 @@ class KakuyomuProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val url = searchUrl(null, orderBy ?: "weekly_ranking", tag, page)
+        val url = listingUrl(mainCategory, tag, page)
         return HeadMainPageResponse(url, KakuyomuParser.parseSearch(this, getText(url)))
+    }
+
+    /** URL of a [mainCategories] listing ("order" or "order|completed"); null = the first one. */
+    internal fun listingUrl(listing: String?, genre: String?, page: Int): String {
+        val parts = (listing ?: mainCategories.first().second).split('|')
+        return searchUrl(null, parts[0].ifBlank { "weekly_ranking" }, genre, page, completedOnly = "completed" in parts)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
