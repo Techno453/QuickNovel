@@ -98,6 +98,9 @@ class MetadataTranslator(
     private val pending = LinkedHashMap<String, MutableList<Pair<TitleRequest, CompletableDeferred<String?>>>>()
     private val inFlight = HashMap<String, CompletableDeferred<String?>>()
     private val flushJobs = HashMap<String, Job>()
+
+    /** Languages whose flush job is still in its [batchWindowMs] delay (guarded by [lock]). */
+    private val windowWaiting = HashSet<String>()
     private val novelLocks = ConcurrentHashMap<String, Mutex>()
 
     /** Number of AI title calls made (for tests and the docs' "one call per page" claim). */
@@ -130,11 +133,19 @@ class MetadataTranslator(
             val queue = pending.getOrPut(request.lang) { mutableListOf() }
             queue += request to created
             if (queue.size >= maxBatch) {
-                flushJobs.remove(request.lang)?.cancel()
-                flushJobs[request.lang] = scope.launch { flush(request.lang) }
+                // A full batch skips the rest of the window. Only a flush still waiting out the
+                // window is replaced: cancelling a running one would cancel the batch in flight
+                // (its callers would get nothing); a running flush takes the queue next anyway.
+                if (flushJobs[request.lang] == null || request.lang in windowWaiting) {
+                    windowWaiting -= request.lang
+                    flushJobs.remove(request.lang)?.cancel()
+                    flushJobs[request.lang] = scope.launch { flush(request.lang) }
+                }
             } else if (flushJobs[request.lang] == null) {
+                windowWaiting += request.lang
                 flushJobs[request.lang] = scope.launch {
                     delay(batchWindowMs)
+                    lock.withLock { windowWaiting -= request.lang }
                     flush(request.lang)
                 }
             }
