@@ -61,6 +61,7 @@ import com.lagradost.quicknovel.ui.ReadingType
 import com.lagradost.quicknovel.ui.ScrollIndex
 import com.lagradost.quicknovel.ui.ScrollVisibilityIndex
 import com.lagradost.quicknovel.ui.UiText
+import com.lagradost.quicknovel.ui.reader.OriginalNotice
 import com.lagradost.quicknovel.ui.toScroll
 import com.lagradost.quicknovel.ui.toUiText
 import com.lagradost.quicknovel.ui.txt
@@ -69,6 +70,7 @@ import com.lagradost.quicknovel.translator.ChapterTranslationRepository
 import com.lagradost.quicknovel.imported.EpubChapters
 import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.translator.NovelAnalyzer
+import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.ui.translate.NovelChapterSource
 import com.lagradost.quicknovel.ui.translate.ReadAheadScheduler
 import com.lagradost.quicknovel.translator.TranslationLanguages
@@ -177,6 +179,35 @@ abstract class AbstractBook {
     /** Chapters whose text was last served from the AI translation DB (or translated on demand). */
     val aiTranslatedChapters: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
+    /** Chapters served as the original although they could be translated, and why (see [OriginalNotice]). */
+    private val originalNotices: MutableMap<Int, OriginalNotice> = ConcurrentHashMap()
+
+    fun originalNotice(index: Int): OriginalNotice? = originalNotices[index]
+
+    /** Records why chapter [index] is served as the original (nothing when [onPurpose], i.e. Reload). */
+    protected fun noteOriginal(ctx: Context?, index: Int, translatable: Boolean, onPurpose: Boolean) {
+        val reason = ctx?.let {
+            OriginalNotice.reasonFor(
+                translatable = translatable,
+                onPurpose = onPurpose,
+                onDemand = SecurePrefs.isTranslateOnDemandEnabled(it),
+                hasKey = !SecurePrefs.getApiKey(it).isNullOrBlank(),
+            )
+        }
+        if (reason == null) originalNotices.remove(index) else originalNotices[index] = reason
+    }
+
+    protected fun noteTranslated(index: Int) {
+        aiTranslatedChapters += index
+        originalNotices.remove(index)
+    }
+
+    /**
+     * True when missing chapters are translated when opened ("Translate chapters when opened"):
+     * zh / ja / ko sources and imported books with a known language. May read disk.
+     */
+    open fun translatesOnDemand(): Boolean = false
+
     /** Translator novel id ("apiName/novelName") for translatable sources, else null. */
     open fun translatorNovelId(): String? = null
 
@@ -204,6 +235,8 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
         TranslationLanguages.isTranslatableApi(data.meta.apiName)
 
     override fun sourceLang(): String? = TranslationLanguages.langOfApi(data.meta.apiName)
+
+    override fun translatesOnDemand(): Boolean = sourceLang() != null
 
     override fun translatorNovelId(): String? =
         if (isTranslatableSource()) TranslatorNovelId.from(data.meta.apiName, data.meta.name).also {
@@ -256,9 +289,10 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
                 analysisListener = analysisListener,
             ) {
                 ctx.getQuickChapter(data.meta, data.data[index], index, false)?.html
-            }?.let { aiTranslatedChapters += index; return it }
+            }?.let { noteTranslated(index); return it }
         }
         aiTranslatedChapters -= index
+        noteOriginal(ctx, index, translatable = sourceLang != null, onPurpose = reload)
 
         return ctx.getQuickChapter(
             data.meta,
@@ -336,6 +370,10 @@ class RegularBook(
         return if (imported) ImportedBooks.lang(id) else TranslationLanguages.langOfApi(id.substringBefore('/'))
     }
 
+    // Offline EPUBs of a source only serve stored translations; imports translate like online novels.
+    override fun translatesOnDemand(): Boolean =
+        imported && novelId != null && TranslationLanguages.normalize(sourceLang()) != null
+
     /** Toast once when the on-demand path runs the automatic analysis. */
     private val analysisListener = object : NovelAnalyzer.Listener {
         @Volatile
@@ -387,11 +425,12 @@ class RegularBook(
                 ChapterTranslationRepository.getCached(ctx, id, index)
             }
             if (translated != null) {
-                aiTranslatedChapters += index
+                noteTranslated(index)
                 return translated
             }
         }
         aiTranslatedChapters -= index
+        noteOriginal(ctx, index, translatable = translatesOnDemand(), onPurpose = reload)
         return chapters.html(index)
     }
 

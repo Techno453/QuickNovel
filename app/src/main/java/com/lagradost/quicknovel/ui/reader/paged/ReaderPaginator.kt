@@ -25,7 +25,8 @@ sealed class ReaderPage(val chapter: Int) {
     /** Last character on the page (exclusive), for TTS lookups. */
     abstract val endChar: Int
 
-    class Title(chapter: Int, val name: UiText) : ReaderPage(chapter) {
+    /** Chapter title page; [notice] is the original notice under the title (ui/reader/OriginalNotice). */
+    class Title(chapter: Int, val name: UiText, val notice: UiText? = null) : ReaderPage(chapter) {
         override val startChar = -1
         override val innerIndex = 0
         override val endChar = 0
@@ -165,7 +166,7 @@ object ReaderPaginator {
             when (item) {
                 is ChapterStartSpanned -> {
                     flushRun()
-                    pages += ReaderPage.Title(chapter, item.name)
+                    pages += ReaderPage.Title(chapter, item.name, item.notice)
                 }
 
                 is TextSpan -> {

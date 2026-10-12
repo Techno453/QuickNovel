@@ -45,6 +45,8 @@
     <string name="tr_show_buttons_desc">Translate and Glossary on the pages of Chinese, Japanese and Korean novels</string>
     <string name="tr_on_demand">Translate chapters when opened</string>
     <string name="tr_on_demand_desc">The reader translates a chapter without a translation when you open it. Off: it shows the original</string>
+    <!-- One line under the chapter title in the reader when it shows the original because the switch above is off -->
+    <string name="tr_reader_original_notice">Showing the original. Turn on Translate chapters when opened to translate it.</string>
     <string name="tr_read_ahead">Read ahead</string>
     <string name="tr_read_ahead_off">Off</string>
     <plurals name="tr_read_ahead_chapters">
