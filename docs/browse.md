@@ -18,6 +18,7 @@ A provider exposes three label/value lists and `loadMainPage(page, mainCategory,
 | `mainCategories` | Listing | first chip row on the source page; "Popular / New / Completed" in All sources |
 | `orderBys` | Order | second chip row (empty for the providers below: their listings already include the order) |
 | `tags` | Genre | one "Genres" chip that opens a multi-select sheet (see [Per-source page](#per-source-page)) |
+| `lengthFilter` | Length | one "Length" chip next to Genres (see [Length filter](#length-filter)); null = no chip |
 
 Rules every provider in the Browse tab follows:
 
@@ -81,7 +82,9 @@ with those providers).
     rails without network. Entries expire after 6 hours; at most 200 pages are kept, the least
     recently used are deleted on each write (a read touches the file, so the order survives a
     restart). Only the fields a listing fills are stored (`DiskListingPage`: title, URL, source,
-    poster URL and headers, rating, latest chapter); bump `diskKey`'s `v1` if that changes.
+    poster URL and headers, rating, latest chapter, length); bump `diskKey`'s `v1` if that changes
+    incompatibly. `length` was added compatibly: a page saved before it reads without it and the
+    length falls back to the latest chapter's number.
     Unreadable or foreign files count as misses. Android may clear the cache dir at any time.
   - Failures and empty pages are never cached in either layer. Pull to refresh and Retry reload
     bypassing both layers and write the new page through to both.
@@ -125,7 +128,88 @@ with those providers).
   `browse_last_listing_<source name>` = `"category,order,tags"`, genres joined with `+`, e.g.
   `"0,0,2+5"`; the older single-genre value reads the same way) and restored when the page is
   opened from Browse or from the Search screen's source tiles. Explicit filters (a genre chip on
-  the result page selects that one genre) win.
+  the result page selects that one genre) win. The length range is remembered on its own key
+  (`browse_last_length_<source name>` = `"500-1500"`, `"-100"` or `"1000-"`; removed for any
+  length), so the listing value keeps its format; an explicit genre opens without a range.
+
+## Length filter
+
+"I want to filter by length, the way Royal Road has its number of pages; chapters as a
+fallback." One **Length** chip next to Genres on the per-source page (hidden for sources without
+a length filter) reads "Any length", "Length: 500–1,500 pages", "Length: ≥ 1,000 chapters" or
+"Length: 10万–50万字". It opens a bottom sheet in the Genres style: Clear and Apply on top, a
+note on how the source filters, "Any length" and the four presets of the source's unit as
+wrapping chips (no sideways scrolling), and Min / Max fields; dismissing keeps the old range.
+
+| Unit | Short | Medium | Long | Epic |
+|---|---|---|---|---|
+| Pages | ≤ 100 | 100–500 | 500–1,500 | ≥ 1,500 |
+| Characters (shown and entered in 万 = 10,000) | ≤ 10万 | 10万–50万 | 50万–200万 | ≥ 200万 |
+| Chapters | ≤ 50 | 50–200 | 200–1,000 | ≥ 1,000 |
+
+Ranges are inclusive (neighbouring presets share their edge); an empty or 0 field is an open end,
+swapped ends are put in order.
+
+**Where the numbers come from.** `SearchResponse.length` / `ImmutableSearchResponse.length`
+(`NovelLength`: chapters, characters, pages, each optional, plus `approximate`) is filled by the
+listing parsers below. Every other source falls back centrally (`newSearchResponse`, and
+`ImmutableSearchResponse.from` for responses built without it) to the number in the latest
+chapter's name: "Chapter 523", "Ch. 523", "EP.138", "第523章", "第一千零五章", "123화", "全123部分",
+"109 Chapters", a leading "1417." or a trailing number, as **approximate** chapters (shown with
+≈). A word count such as "289.4万字" or a date is not taken for a chapter.
+
+| Source | Unit | Filtered by | Number from | Notes |
+|---|---|---|---|---|
+| Royal Road | pages | site | list and search cards: "2,932 Pages", "109 Chapters" (book / list icons of the stats row) | With a range the listing becomes `/fictions/search?minPages=&maxPages=&tagsAdd=<genre>&orderBy=&page=`. Order mapping: Best Rated → rating (the search's plain average, so works with few ratings rank high), Latest Updates → last_update, New Releases → release_date, Ongoing → popularity + `status=ONGOING`, Completed → popularity + `status=COMPLETED`, and Popular this week, Trending, Rising Stars, Writathon → popularity (**approximations**: the search has no such orders; the Writathon filter is lost). Latest-updates cards have no stats: approximate chapters from the newest chapter only, so filter that listing by range (search) |
+| Syosetu | characters | site | ranking: "連載中(全662エピソード)", "2,209,879文字"; search: "(全286エピソード)", "（2,830,123文字）" | With a range every listing becomes `search.php?order=&minlen=&maxlen=` with the same genre / isekai / status filters; rankings map to hyoka (all-time), dailypoint, weeklypoint, monthlypoint, quarterpoint, yearlypoint (point orders instead of the ranking pages: the same works, possibly in a slightly different order); Latest updates stays `order=new`. 短編 counts as one episode |
+| Kakuyomu | characters | app | listing JSON: `totalCharacterCount`, `publicEpisodeCount` | the search form has no length parameter (JS only) |
+| Pixiv Novels | characters | app | tag listings: `publishedTextLength` / `textLength` and `publishedEpisodeCount` of each card; rankings: `character_count` of one-shots | ranking rows of a series carry one episode's count, so they have no length and are hidden while filtering |
+| Hameln | characters | app | "連載：37話　平均：1,942字": episodes × average | within a few characters of the total (the average is rounded); fixtures only (Cloudflare) |
+| Ixdzs | characters | app | "289.4万字" / "506.01萬字" on every card | |
+| Piaotia | characters | app | the 字数 column ("17265K") and the latest chapter's number | K = kilobytes of GBK text as the jieqi CMS stores it, about 512 characters each: **approximate**; fixtures only (WebView site) |
+| Novelpia | chapters | app | free lists "1573회차", Top 100 "EP.138", search JSON `count_book` | |
+| Naver Webnovel | chapters | app | "총 76회" | exact episode total |
+| 69shuba | chapters | app | the latest chapter on the cards ("最近章节 第568章 …", latest updates' chapter link) | approximate; no 字数 in the lists; fixtures only (WebView search) |
+| czbooks | chapters | app | the latest chapter ("第307頁") | approximate; "後記" and similar give none |
+| Freewebnovel, LibRead | chapters | app | the latest chapter's number | approximate |
+| ScrollersPub | chapters | app | the API's `chapterCount` | exact |
+| Quanben, ScribbleHub, other English sources | — | — | — | no chip: Quanben's lists show no count; ScribbleHub's Browse list (latest releases, behind Cloudflare) has no count the parser reads |
+
+**Server-side** (Royal Road, Syosetu; `LengthFilterSupport.serverSide`): the range reaches the
+provider through `MainAPI.loadMainPage(page, mainCategory, orderBy, tag, length)` (a 5-argument
+overload whose default calls the 4-argument one, so other providers are unchanged), and the
+pages are cached under a key with the range (`…|1|len=500-1500`). The site's results are shown
+as they come.
+
+**Client-side** (all others, `BrowseRepository.filteredPage` + the pure `LengthFilter.scan`):
+the unfiltered pages are loaded as usual (and cached under their usual keys, so changing the
+range reads them from the cache), items outside the range are dropped, and **items without a
+length in the source's unit are dropped** while a range is set. One load keeps reading pages
+until 10 items matched (`MIN_ITEMS_PER_LOAD`) or 3 extra pages were read (`MAX_EXTRA_PAGES`, so
+at most 4 pages per load); an extra page that is not cached waits the provider's rate limit (at
+least 300 ms). A page that adds nothing new is the end of the list. A cached page in which no
+item has a length in the unit (a page saved by a version without lengths; the disk cache keeps
+pages 6 h) is asked for again, once per page and session, so an update does not hide everything
+until the cache expires; the cards of such cached pages show only the latest-chapter fallback
+until then. When a whole load found
+nothing (and the list did not end), scrolling stops and the list shows "No novels of this length
+on pages 5–8." with **Keep looking**; nothing is scanned without the user asking. Several genres
+work as before: each scanned page is the merged multi-genre page.
+
+**Cards**: on the per-source page of a source with a length filter, each card shows the known
+length as a small line under the title ("2,932 pages · 109 ch", "283万字 · 286 ch", "≈1,417 ch");
+in the row layout it replaces the latest chapter's name when known. Other screens are unchanged.
+
+**Cache keys**: without a range every key is exactly what it was (`TagFilter.pageKey`, tested in
+`LengthFilterTest`), so pages cached before stay valid.
+
+Code: `ui/browse/LengthFilter.kt` (presets, normalize, summary and card text, cache-key part,
+number and latest-chapter parsing, the paging rule; `LengthFilterTest`), `BrowseRepository`,
+`MainPageViewModel2` (`FilterQuery.length`, `SelectLength`, `KeepLooking`), `MainScreen`
+(`LengthSelector`, `LengthSheet`), the providers' parsers (`LengthParsingFixtureTest`, fixtures
+`royalroad/` added and Kakuyomu / Novelpia / Pixiv extended with the real length markup) and
+`LengthListingsLiveTest` (`-Dlive=1`: Royal Road and Syosetu honour the range; Kakuyomu, Ixdzs,
+Novelpia, Naver, Pixiv and czbooks listings carry lengths).
 
 ## All sources
 
@@ -218,6 +302,12 @@ Browse).
 
 - Several genres are a union (any selected genre), never an intersection: the sites' genre
   parameters take one value.
+- The length filter is per source only; the All sources feed and the Browse home rails do not
+  have it. Client-side filtering only sees what the listing shows: works without a listed
+  length are hidden, approximate chapter counts (the latest chapter's number) can be off for
+  sites that number volumes or side stories, and a rare range may need several "Keep looking"
+  taps. Royal Road's trending / rising-stars / weekly / writathon lists become a popularity search
+  when a range is set.
 - The disk cache is per (source, listing, genres, page) with a fixed 6 h TTL; a listing that changes faster
   (latest updates) can look up to 6 hours old after a restart until pulled to refresh.
 - Top 100 / ranking pages (Novelpia, Naver) have a single page; the list ends there.

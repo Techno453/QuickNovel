@@ -5,7 +5,10 @@ import android.os.Build
 import androidx.preference.PreferenceManager
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.DataStore
+import com.lagradost.quicknovel.LengthRange
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ui.common.ImmutableHeadMainPageResponse
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import kotlinx.collections.immutable.toImmutableList
@@ -16,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -55,11 +59,20 @@ object BrowseRepository {
 
     /**
      * One cached page: [tags] is the set of genre indexes (sorted; one entry for a plain listing,
-     * several for a merged multi-genre page, see [TagFilter]).
+     * several for a merged multi-genre page, see [TagFilter]); [length] the range a source that
+     * filters by length server-side was asked for (null = none; client-side filtering reads the
+     * unfiltered pages, see [filteredPage]).
      */
-    data class PageKey(val api: String, val category: Int, val orderBy: Int, val tags: List<Int>, val page: Int) {
-        constructor(api: String, listing: BrowseCatalog.Listing, page: Int) :
-                this(api, listing.category, listing.orderBy, listOf(listing.tag), page)
+    data class PageKey(
+        val api: String,
+        val category: Int,
+        val orderBy: Int,
+        val tags: List<Int>,
+        val page: Int,
+        val length: LengthRange? = null,
+    ) {
+        constructor(api: String, listing: BrowseCatalog.Listing, page: Int, length: LengthRange? = null) :
+                this(api, listing.category, listing.orderBy, listOf(listing.tag), page, length)
     }
 
     private val cache by lazy {
@@ -77,8 +90,12 @@ object BrowseRepository {
     /** Folder under the app's cache dir. */
     const val DISK_DIR = "browse_listings"
 
-    /** Key on disk; bump the version when [DiskListingPage] changes shape. */
-    fun PageKey.diskKey() = TagFilter.pageKey(api, category, orderBy, tags, page)
+    /**
+     * Key on disk; bump the version when [DiskListingPage] changes shape incompatibly (the
+     * optional `length` of [DiskListingItem] was added compatibly: older files read without it).
+     * Without a length range it is exactly the key used before the length filter.
+     */
+    fun PageKey.diskKey() = TagFilter.pageKey(api, category, orderBy, tags, page) + LengthFilter.keyPart(length)
 
     /** The page in the memory cache (no disk read). */
     fun cached(key: PageKey): ImmutableHeadMainPageResponse? = cache.inMemory(key)
@@ -86,7 +103,7 @@ object BrowseRepository {
     /**
      * Page [page] (1-based) of [listing] on [apiName], from the memory or disk cache unless
      * [refresh]. [gate] limits how many sources load at once (null = not throttled, for the page
-     * the user is looking at).
+     * the user is looking at). [length] is a range for a source that filters server-side.
      */
     suspend fun page(
         apiName: String,
@@ -94,9 +111,10 @@ object BrowseRepository {
         page: Int,
         gate: Semaphore? = null,
         refresh: Boolean = false,
+        length: LengthRange? = null,
     ): Result<ImmutableHeadMainPageResponse> =
-        cache.get(PageKey(apiName, listing, page), refresh) {
-            if (gate != null) gate.withPermit { load(apiName, listing, page) } else load(apiName, listing, page)
+        cache.get(PageKey(apiName, listing, page, length), refresh) {
+            if (gate != null) gate.withPermit { load(apiName, listing, page, length) } else load(apiName, listing, page, length)
         }
 
     /**
@@ -115,17 +133,18 @@ object BrowseRepository {
         page: Int,
         gate: Semaphore? = null,
         refresh: Boolean = false,
+        length: LengthRange? = null,
     ): Result<ImmutableHeadMainPageResponse> {
         val loaded = TagFilter.loaded(tags)
         if (loaded.size == 1) {
-            return BrowseRepository.page(apiName, BrowseCatalog.Listing(category, orderBy, loaded[0]), page, gate, refresh)
+            return BrowseRepository.page(apiName, BrowseCatalog.Listing(category, orderBy, loaded[0]), page, gate, refresh, length)
         }
-        val key = PageKey(apiName, category, orderBy, loaded, page)
+        val key = PageKey(apiName, category, orderBy, loaded, page, length)
         var partial = false
         val result = cache.get(key, refresh) {
             val results = coroutineScope {
                 loaded.map { tag ->
-                    async { BrowseRepository.page(apiName, BrowseCatalog.Listing(category, orderBy, tag), page, gate, refresh) }
+                    async { BrowseRepository.page(apiName, BrowseCatalog.Listing(category, orderBy, tag), page, gate, refresh, length) }
                 }.awaitAll()
             }
             val pages = results.mapNotNull { it.getOrNull() }
@@ -142,7 +161,62 @@ object BrowseRepository {
         return result
     }
 
-    private suspend fun load(apiName: String, listing: BrowseCatalog.Listing, page: Int): Result<ImmutableHeadMainPageResponse> =
+    /**
+     * A source page filtered by length in the app (sources without server-side length filtering):
+     * pages from [startPage] on (several genres merged as in [page]) are scanned until enough
+     * items in [range] were found or [LengthFilter.MAX_EXTRA_PAGES] extra pages were read
+     * ([LengthFilter.scan]); items without a length in [unit] are dropped. The unfiltered pages
+     * are cached as usual, so changing the range re-reads them from the cache. Extra pages that
+     * are not cached wait the provider's rate limit (at least [LengthFilter.EXTRA_PAGE_DELAY_MS]).
+     */
+    suspend fun filteredPage(
+        apiName: String,
+        category: Int,
+        orderBy: Int,
+        tags: List<Int>,
+        unit: LengthUnit,
+        range: LengthRange,
+        startPage: Int,
+        known: Set<String>,
+        refresh: Boolean = false,
+    ): Result<LengthFilter.Scan<ImmutableSearchResponse>> {
+        val api = getApiFromName(apiName)
+        val loaded = TagFilter.loaded(tags)
+        return LengthFilter.scan(
+            startPage = startPage,
+            known = known,
+            urlOf = { it.url },
+            keep = { LengthFilter.matches(it.length, unit, range) },
+            pause = { p ->
+                if (cache.inMemory(PageKey(apiName, category, orderBy, loaded, p)) == null) {
+                    delay(maxOf(api.rateLimitTime, LengthFilter.EXTRA_PAGE_DELAY_MS))
+                }
+            },
+        ) { p ->
+            val result = page(apiName, category, orderBy, tags, p, gate = null, refresh = refresh)
+            val list = result.getOrNull()?.list
+            val key = PageKey(apiName, category, orderBy, loaded, p).diskKey()
+            // A page cached by a version without lengths (the disk cache keeps pages 6 h) has
+            // none in the unit: ask the site again, once per page and session.
+            if (!refresh && list != null && list.isNotEmpty() && list.none { it.length?.valueIn(unit) != null } &&
+                lengthReloaded.add(key)
+            ) {
+                page(apiName, category, orderBy, tags, p, gate = null, refresh = true).map { it.url to it.list }
+            } else {
+                result.map { it.url to it.list }
+            }
+        }
+    }
+
+    /** Pages reloaded by [filteredPage] because they had no length in the source's unit. */
+    private val lengthReloaded: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    private suspend fun load(
+        apiName: String,
+        listing: BrowseCatalog.Listing,
+        page: Int,
+        length: LengthRange?,
+    ): Result<ImmutableHeadMainPageResponse> =
         withContext(Dispatchers.IO) {
             val api = getApiFromName(apiName)
             val timeoutMs = if (api.api.usesCloudFlareKiller) CLOUDFLARE_TIMEOUT_MS else TIMEOUT_MS
@@ -152,6 +226,7 @@ object BrowseRepository {
                     mainCategory = api.mainCategories.getOrNull(listing.category)?.second,
                     orderBy = api.orderBys.getOrNull(listing.orderBy)?.second,
                     tag = api.tags.getOrNull(listing.tag)?.second,
+                    length = length,
                 )
             } ?: Result.failure(java.util.concurrent.TimeoutException("$apiName did not answer in ${timeoutMs / 1000} s"))
         }
@@ -185,6 +260,7 @@ object BrowseRepository {
 /** Per-viewer Browse preferences (default shared preferences). */
 object BrowsePrefs {
     private const val LAST_LISTING_PREFIX = "browse_last_listing_"
+    private const val LAST_LENGTH_PREFIX = "browse_last_length_"
 
     /** Keys the first-run setup wizard may store the reader's languages under (set or CSV). */
     private val READING_LANGUAGE_KEYS = listOf("reading_languages", "setup_reading_languages")
@@ -204,6 +280,21 @@ object BrowsePrefs {
         prefs(context)?.edit()?.putString(
             LAST_LISTING_PREFIX + apiName, TagFilter.encodeListing(category, orderBy, tags)
         )?.apply()
+    }
+
+    /**
+     * The length range last chosen on a source's browse page, or null. Stored on its own key
+     * (`browse_last_length_<source>` = [LengthFilter.encode], e.g. "500-1500"), so the listing
+     * value keeps its format.
+     */
+    fun lastLength(context: Context?, apiName: String): LengthRange? =
+        LengthFilter.decode(prefs(context)?.getString(LAST_LENGTH_PREFIX + apiName, null))
+
+    fun setLastLength(context: Context?, apiName: String, range: LengthRange?) {
+        val edit = prefs(context)?.edit() ?: return
+        if (range == null) edit.remove(LAST_LENGTH_PREFIX + apiName)
+        else edit.putString(LAST_LENGTH_PREFIX + apiName, LengthFilter.encode(range))
+        edit.apply()
     }
 
     /** Reading languages stored by the setup wizard, if any (empty = show every language). */
@@ -244,6 +335,7 @@ data class DiskListingPage(
                     posterHeaders = it.posterHeaders,
                     rating = it.rating,
                     latestChapterName = it.latestChapterName,
+                    length = it.length,
                 )
             },
         )
@@ -258,6 +350,8 @@ data class DiskListingItem(
     val posterHeaders: Map<String, String>? = null,
     val rating: Int? = null,
     val latestChapterName: String? = null,
+    /** Added with the length filter; pages saved before it read as null (latest-chapter fallback). */
+    val length: NovelLength? = null,
 ) {
     fun toResponse() = ImmutableSearchResponse(
         name = name,
@@ -269,5 +363,6 @@ data class DiskListingItem(
         latestChapterName = latestChapterName,
         timeOfCached = System.currentTimeMillis(),
         chaptersRead = ImmutableSearchResponse.chaptersRead(name),
+        length = length ?: LengthFilter.fromLatestChapter(latestChapterName),
     )
 }

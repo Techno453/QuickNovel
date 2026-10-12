@@ -3,8 +3,11 @@ package com.lagradost.quicknovel.providers.korean
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
@@ -12,6 +15,7 @@ import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.providers.ReaderHtml
 import com.lagradost.quicknovel.providers.SourceGuard
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import kotlinx.coroutines.delay
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -38,6 +42,9 @@ class NaverWebNovelProvider : MainAPI() {
     override val mainUrl = "https://novel.naver.com"
     override val lang = "ko"
     override val hasMainPage = true
+
+    /** Chapters (总 N회 on the cards); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHAPTERS)
     override val rateLimitTime = 800L
 
     /**
@@ -230,6 +237,8 @@ object NaverWebNovelParser {
                     ?.absUrl("src")?.ifBlank { null }
                 latestChapter = a.select(".count").firstOrNull { it.text().contains("회") }?.text()
                     ?.replace("총", "")?.trim()?.ifEmpty { null }
+                // "총 123회" is the number of episodes, not a latest-chapter guess.
+                length = latestChapter?.let { LengthFilter.parseCount(it) }?.let { NovelLength(chapters = it) }
             }
         }
     }
@@ -252,6 +261,7 @@ object NaverWebNovelParser {
                     ?.absUrl("src")?.ifBlank { null }
                 latestChapter = a.select(".count").firstOrNull { it.text().contains("회") }?.text()
                     ?.replace("총", "")?.trim()?.ifEmpty { null }
+                length = latestChapter?.let { LengthFilter.parseCount(it) }?.let { NovelLength(chapters = it) }
             }
         }
     }

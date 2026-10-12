@@ -15,8 +15,11 @@ import com.lagradost.cloudstream4.state.StateContainer
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.BookDownloader2
+import com.lagradost.quicknovel.LengthRange
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.ui.browse.BrowsePrefs
 import com.lagradost.quicknovel.ui.browse.BrowseRepository
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import com.lagradost.quicknovel.ui.browse.TagFilter
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
@@ -47,6 +50,10 @@ data class MainPageState(
     val tags: PersistentList<String> = persistentListOf(),
     /** The provider's first tag means "no genre filter" (see [TagFilter]). */
     val tagsFirstIsNoFilter: Boolean = false,
+    /** Unit of the source's length filter; null = no length filter (the chip is hidden). */
+    val lengthUnit: LengthUnit? = null,
+    /** The site applies the length range itself (else the app filters, [LengthFilter.scan]). */
+    val lengthServerSide: Boolean = false,
 )
 
 @Immutable
@@ -66,6 +73,11 @@ data class FilterState(
     val query: FilterQuery = FilterQuery(),
     /** The last page added nothing new: stop loading more. */
     val endReached: Boolean = false,
+    /**
+     * Client-side length filter: the last load scanned these pages (first to last) without a
+     * match; loading stops until the user asks to keep looking.
+     */
+    val lengthStalled: Pair<Int, Int>? = null,
 )
 
 @Immutable
@@ -77,11 +89,14 @@ data class FilterQueryVisual(
 
 @Immutable
 data class FilterQuery(
+    /** Last page loaded (with a client-side length filter: the last page scanned). */
     val page: Int = 0,
     val category: Int = 0,
     val orderBy: Int = 0,
     /** Selected genre indexes, normalized by [TagFilter.normalize] (empty = no genre filter). */
     val tags: List<Int> = emptyList(),
+    /** Length range in the source's unit, normalized by [LengthFilter.normalize] (null = any length). */
+    val length: LengthRange? = null,
 )
 
 enum class DialogType {
@@ -110,6 +125,12 @@ sealed class MainPageAction {
     /** Genres chosen in the genre sheet (indexes into the provider's tags). */
     data class SelectTags(val tags: List<Int>) : MainPageAction()
 
+    /** Length range chosen in the length sheet (null = any length). */
+    data class SelectLength(val range: LengthRange?) : MainPageAction()
+
+    /** Client-side length filter found nothing in the last pages: scan the next ones. */
+    object KeepLooking : MainPageAction()
+
     /** Pull to refresh, or retry after an error: reload from page 1 bypassing the session cache. */
     object Refresh : MainPageAction()
 }
@@ -134,6 +155,8 @@ class MainPageViewModel2(
         orderBys = api.orderBys.map { it.first }.toPersistentList(),
         tags = api.tags.map { it.first }.toPersistentList(),
         tagsFirstIsNoFilter = api.tags.firstOrNull().let { TagFilter.firstIsNoFilter(it?.first, it?.second) },
+        lengthUnit = api.lengthFilter?.unit,
+        lengthServerSide = api.lengthFilter?.serverSide == true,
     )
 ), EffectContainer<MainPageEffect> by DefaultEffectContainer(), ActionHandler<MainPageAction> {
     companion object {
@@ -155,6 +178,9 @@ class MainPageViewModel2(
                 } else {
                     BrowsePrefs.lastListing(BaseApplication.context, api.name) ?: Triple(0, 0, emptyList())
                 }
+                // An explicit genre starts without a length range; otherwise the last one is restored.
+                val length = if (explicit || api.lengthFilter == null) null
+                else BrowsePrefs.lastLength(BaseApplication.context, api.name)
                 fun clamp(index: Int, size: Int) = if (index in 0 until size) index else 0
                 val firstIsNoFilter = api.tags.firstOrNull().let { TagFilter.firstIsNoFilter(it?.first, it?.second) }
                 MainPageViewModel2(
@@ -164,6 +190,7 @@ class MainPageViewModel2(
                         category = clamp(category, api.mainCategories.size),
                         orderBy = clamp(orderBy, api.orderBys.size),
                         tags = TagFilter.normalize(tags, api.tags.size, firstIsNoFilter),
+                        length = LengthFilter.normalize(length),
                     )
                 )
             }
@@ -171,6 +198,9 @@ class MainPageViewModel2(
     }
 
     private val expandMutex = Mutex()
+
+    /** URLs scanned by earlier client-side length loads of the current listing (under [expandMutex]). */
+    private val scannedUrls = HashSet<String>()
 
     init {
         viewModelScope.launch {
@@ -196,9 +226,17 @@ class MainPageViewModel2(
             }
 
             val nextPage = from.page + 1
-            // Several genres: page n of each genre's listing, merged by rank (TagFilter).
+            if (from.page == 0) scannedUrls.clear()
+            val lengthFilter = api.lengthFilter
+            if (from.length != null && lengthFilter != null && !lengthFilter.serverSide) {
+                expandFiltered(from, fromList, lengthFilter.unit, from.length, nextPage, refresh)
+                return@withLock
+            }
+            // Several genres: page n of each genre's listing, merged by rank (TagFilter). A source
+            // that filters by length server-side gets the range with each request.
             BrowseRepository.page(
-                api.name, from.category, from.orderBy, from.tags, nextPage, gate = null, refresh = refresh
+                api.name, from.category, from.orderBy, from.tags, nextPage, gate = null, refresh = refresh,
+                length = from.length?.takeIf { lengthFilter?.serverSide == true },
             )
                 .onFailure { error ->
                     if (error is CancellationException) {
@@ -233,6 +271,56 @@ class MainPageViewModel2(
                 }
             updateState { copy(filter = filter.copy(loading = false)) }
         }
+    }
+
+    /**
+     * One load with a client-side length filter ([BrowseRepository.filteredPage]): pages from
+     * [nextPage] on are scanned until enough items match. A load that found nothing (but did not
+     * reach the end) sets [FilterState.lengthStalled] instead of scanning on by itself.
+     */
+    private suspend fun expandFiltered(
+        from: FilterQuery,
+        fromList: PersistentList<ImmutableSearchResponse>,
+        unit: LengthUnit,
+        range: LengthRange,
+        nextPage: Int,
+        refresh: Boolean,
+    ) {
+        val known = scannedUrls + fromList.map { it.url }
+        BrowseRepository.filteredPage(
+            api.name, from.category, from.orderBy, from.tags, unit, range, nextPage, known, refresh
+        ).onFailure { error ->
+            if (error is CancellationException) {
+                updateState { copy(filter = filter.copy(loading = false)) }
+                return
+            }
+            updateState {
+                if (this.filter.query != from) copy(filter = filter.copy(loading = false))
+                else copy(filter = filter.copy(loading = false, error = error))
+            }
+            if (fromList.isNotEmpty()) postEffect { MainPageEffect.ErrorLoading(error = error) }
+        }.onSuccess { scan ->
+            if (state.value.filter.query == from) scannedUrls += scan.scannedUrls
+            val seen = fromList.map { it.url }.toHashSet()
+            val fresh = scan.items.filter { seen.add(it.url) }
+            updateState {
+                if (this.filter.query != from) {
+                    return@updateState copy(filter = filter.copy(loading = false))
+                }
+                copy(
+                    filter = filter.copy(
+                        loading = false,
+                        error = null,
+                        items = fromList.addAll(fresh),
+                        query = from.copy(page = scan.lastPage),
+                        url = scan.url,
+                        endReached = scan.end,
+                        lengthStalled = if (fresh.isEmpty() && !scan.end) nextPage to scan.lastPage else null,
+                    )
+                )
+            }
+        }
+        updateState { copy(filter = filter.copy(loading = false)) }
     }
 
     val searchQuery = SingleActiveQuery(Dispatchers.IO)
@@ -285,10 +373,12 @@ class MainPageViewModel2(
             copy(
                 filter = filter.copy(
                     query = next, items = persistentListOf(), error = null, url = "", endReached = false,
+                    lengthStalled = null,
                 ), dialog = null
             )
         }
         BrowsePrefs.setLastListing(BaseApplication.context, api.name, next.category, next.orderBy, next.tags)
+        if (api.lengthFilter != null) BrowsePrefs.setLastLength(BaseApplication.context, api.name, next.length)
         viewModelScope.launch {
             expand()
         }
@@ -308,7 +398,7 @@ class MainPageViewModel2(
 
             is MainPageAction.Expand -> {
                 val filter = state.value.filter
-                if (filter.loading || filter.endReached || filter.error != null) return
+                if (filter.loading || filter.endReached || filter.error != null || filter.lengthStalled != null) return
                 viewModelScope.launch {
                     expand()
                 }
@@ -342,6 +432,22 @@ class MainPageViewModel2(
 
             is MainPageAction.SelectDialog -> select(action.type, action.selected)
 
+            is MainPageAction.SelectLength -> {
+                if (api.lengthFilter == null) return
+                val length = LengthFilter.normalize(action.range)
+                val query = state.value.filter.query
+                if (length != query.length) applyQuery(query.copy(length = length))
+            }
+
+            MainPageAction.KeepLooking -> {
+                val filter = state.value.filter
+                if (filter.loading || filter.lengthStalled == null) return
+                updateState { copy(filter = filter.copy(lengthStalled = null)) }
+                viewModelScope.launch {
+                    expand()
+                }
+            }
+
             is MainPageAction.SelectTags -> {
                 val tags = normalizeTags(action.tags)
                 val query = state.value.filter.query
@@ -354,6 +460,7 @@ class MainPageViewModel2(
                         filter = filter.copy(
                             query = filter.query.copy(page = 0),
                             items = persistentListOf(), error = null, endReached = false,
+                            lengthStalled = null,
                         )
                     )
                 }

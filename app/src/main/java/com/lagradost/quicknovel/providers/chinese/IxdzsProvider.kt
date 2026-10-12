@@ -3,8 +3,11 @@ package com.lagradost.quicknovel.providers.chinese
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
@@ -12,6 +15,7 @@ import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.providers.SourceGuard
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.paragraphs
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Entities
@@ -39,6 +43,9 @@ class IxdzsProvider : MainAPI() {
     override val mainUrl = "https://ixdzs8.com"
     override val lang = "zh"
     override val hasMainPage = true
+
+    /** Characters (N万字 on the cards); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHARACTERS)
     override val rateLimitTime = 800L
 
     /**
@@ -184,6 +191,8 @@ object IxdzsParser {
             api.newSearchResponse(title, "${api.mainUrl}/read/$id/", fix = false) {
                 posterUrl = li.selectFirst(".l-img img")?.absUrl("src")?.ifBlank { null }
                 latestChapter = li.selectFirst(".size")?.text()?.trim()?.ifBlank { null }
+                // ".size" is the word count ("289.4万字", "506.01萬字"), not a chapter.
+                length = latestChapter?.let { LengthFilter.parseCount(it) }?.let { NovelLength(characters = it) }
             }
         }
     }

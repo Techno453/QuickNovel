@@ -3,8 +3,11 @@ package com.lagradost.quicknovel.providers.chinese
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
@@ -13,6 +16,7 @@ import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.providers.SourceGuard
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.paragraphs
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.textWithEncoding
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Entities
@@ -41,6 +45,9 @@ open class PiaotiaProvider : MainAPI() {
     override val mainUrl = "https://www.piaotia.com"
     override val lang = "zh"
     override val hasMainPage = true
+
+    /** Characters (the 字数 column, approximate); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHARACTERS)
     override val usesCloudFlareKiller = true
     override val rateLimitTime = 1000L
 
@@ -174,6 +181,7 @@ object PiaotiaParser {
     /** Rows of the `table.grid` used by search results, category lists and rankings. */
     fun parseGrid(api: MainAPI, doc: Document): List<SearchResponse> {
         val seen = HashSet<String>()
+        val sizeColumn = doc.select("table.grid th").indexOfFirst { it.text().contains("字数") }
         return doc.select("table.grid tr").mapNotNull { tr ->
             val a = tr.selectFirst("a[href*=/bookinfo/]") ?: return@mapNotNull null
             val ids = ids(a.attr("href")) ?: return@mapNotNull null
@@ -185,9 +193,24 @@ object PiaotiaParser {
                 // "no cover" and shows the title placeholder).
                 posterUrl = coverUrl(api.mainUrl, ids)
                 latestChapter = tr.selectFirst("a[href*=/html/]")?.text()?.trim()?.ifEmpty { null }
+                val size = tr.select("td").getOrNull(sizeColumn)?.text()?.let { charactersOfSize(it) }
+                length = NovelLength.of(
+                    chapters = LengthFilter.chapterNumber(latestChapter),
+                    characters = size,
+                    approximate = true,
+                )
             }
         }
     }
+
+    private val sizeRegex = Regex("""^\s*([\d,]+)\s*K\s*$""", RegexOption.IGNORE_CASE)
+
+    /**
+     * The 字数 column ("17265K"): kilobytes of GBK text as the jieqi CMS stores it, two bytes per
+     * Chinese character, so about 512 characters per K. Approximate.
+     */
+    fun charactersOfSize(text: String): Long? =
+        sizeRegex.find(text)?.groupValues?.get(1)?.replace(",", "")?.toLongOrNull()?.let { it * 512 }
 
     data class Info(
         val title: String,

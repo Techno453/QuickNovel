@@ -3,6 +3,8 @@ package com.lagradost.quicknovel.providers
 import android.net.Uri
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
@@ -27,6 +29,9 @@ open class FreewebnovelProvider : MainAPI() {
     override val iconBackgroundId = R.color.wuxiaWorldOnlineColor
     open val secondUrl = mainUrl
     override val hasMainPage = true
+
+    /** Chapters (the latest chapter number); filtered in the app. LibRead inherits it. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHAPTERS)
     open val removeHtml = true // because the two sites use .html or not for no reason
     override val hasReviews = true
     override val usesCloudFlareKiller = true

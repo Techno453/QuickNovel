@@ -3,6 +3,8 @@ package com.lagradost.quicknovel.providers.chinese
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.ReleaseStatus
@@ -36,6 +38,9 @@ class CzbooksProvider : MainAPI() {
     override val mainUrl = CzbooksParser.MAIN_URL
     override val lang = "zh"
     override val hasMainPage = true
+
+    /** Chapters (the latest chapter number; no 字数 in the lists); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHAPTERS)
     override val rateLimitTime = 800L
 
     override val orderBys = listOf(

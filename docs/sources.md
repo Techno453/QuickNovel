@@ -103,6 +103,8 @@ OkHttp client gets through (fixtures and live checks use it).
   monthly-ticket (月票) or bookmark (收藏) ranking.
 - Status from `og:novel:status` (连载 / 全本 / 完本) through `CjkStatus`. Tags: the category followed by
   the `tags: '...|...'` list of the page's `bookinfo` script (the visible tag list is filled by JS).
+- [Length filter](browse.md#length-filter): chapters, from the latest chapter on the list cards (`div.zxzj`, "最近章节 第568章 …"; the
+  latest-updates page's chapter link), approximate. The lists show no 字数.
 
 ### Quanben, zh — https://www.quanben.io
 - Chapter list: the AMP list page `/amp/n/{slug}/list.html` has every chapter on one page (688 for
@@ -115,6 +117,7 @@ OkHttp client gets through (fixtures and live checks use it).
 - Browse: no ranking or latest-updates page exists. Default "Recommended (推荐小说)" is the home
   page (18 books, one page). Genre listings `/c/{genre}.html`, `/c/{genre}_{page}.html` (12 per
   page, site order). Every book on the site is complete (全本), so there is no status filter.
+- [Length filter](browse.md#length-filter): none (the lists show no count and no latest chapter), so the chip is hidden.
 
 ### Ixdzs (爱下电子书), zh — https://ixdzs8.com
 - UTF-8, server-rendered. Search `/bsearch?q=`, category browse `/sort/{cat}/index-0-{status}-{order}-{page}.html`.
@@ -126,6 +129,7 @@ OkHttp client gets through (fixtures and live checks use it).
 - Mirrors: ixdzs.tw and ixdzs.hk serve the same ids in traditional characters (not used).
 - Limitations: covers and chapter titles come from the site as-is. Site-name promo lines are
   removed from the text.
+- [Length filter](browse.md#length-filter): characters, from the cards' `.size` ("289.4万字", "506.01萬字" on the rankings).
 
 ### Piaotia (飘天文学), zh — https://www.piaotia.com
 - Covers: the search grid and the category / ranking lists carry no cover, so the provider
@@ -147,6 +151,8 @@ OkHttp client gets through (fixtures and live checks use it).
   (`NBA`), a novel page (1851 chapters) and a chapter all loaded with no WebView solve started
   (no `CloudflareKiller` log lines). The JVM live test runs the provider with the interceptor off,
   because the interceptor needs Android's `CookieManager`.
+- [Length filter](browse.md#length-filter): characters from the grids' 字数 column ("17265K" = kilobytes of GBK text, about 512
+  characters per K, approximate) and approximate chapters from the latest chapter ("第一千章").
 
 ### Hameln (ハーメルン), ja — https://syosetu.org
 - User-generated novels, mostly fan fiction (二次創作) plus original works. The R-18 section is a
@@ -185,9 +191,12 @@ OkHttp client gets through (fixtures and live checks use it).
 - Verified on emulator-5562 (2026-10-12): Browse rail and source page (daily ranking; Completed +
   Original works; Latest updates with paging), search (`BLEACH`), novel page (33 chapters with
   section titles, status Ongoing, tags, rating, views), chapter text.
+- [Length filter](browse.md#length-filter): characters = episodes × the card's average ("連載：37話　平均：1,942字"), plus the episodes.
 
 ### Kakuyomu (カクヨム), ja
 Next.js Apollo state. All episodes are embedded on the work page. No login is needed.
+- [Length filter](browse.md#length-filter): characters (`totalCharacterCount`) and episodes (`publicEpisodeCount`) of the listing
+  JSON; the search has no length parameter, so the app filters.
 
 ### Syosetu (小説家になろう), ja
 - Episode titles: the table of contents lists 100 episodes per page (`?p=2`, ...). The provider
@@ -205,6 +214,9 @@ Next.js Apollo state. All episodes are embedded on the work page. No login is ne
   big genre). Tags = status: All, Ongoing (連載中, `_r` / `type=r`), Completed (完結済, `_er` /
   `type=er`), Short stories (短編, `_t` / `type=t`).
 - The adult sister sites (Noc/Novel18, which need an `over18=yes` cookie) are not covered.
+- [Length filter](browse.md#length-filter): characters, filtered by the site. With a range every listing is `search.php` with
+  `minlen` / `maxlen` (rankings as point orders: hyoka, dailypoint, …, yearlypoint). Counts come
+  from the ranking cards ("全662エピソード", "2,209,879文字") and the search cards.
 
 ### Pixiv Novels (pixiv小説), ja — https://www.pixiv.net/novel
 - JSON endpoints of the web app, readable logged out for all-ages works:
@@ -221,9 +233,13 @@ Next.js Apollo state. All episodes are embedded on the work page. No login is ne
   needs a pixiv `Referer` that the reader does not send. Covers carry `posterHeaders` with the
   Referer.
 - Mostly fan fiction (二次創作). Tag "オリジナル" is the default browse tab.
+- [Length filter](browse.md#length-filter): characters, from the grouped search cards (`publishedTextLength`, `publishedEpisodeCount`)
+  and the rankings' `character_count` of one-shots (a series row only has one episode's count, so
+  it has no length).
 
 ### Novelpia (노벨피아), ko
 Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
+- [Length filter](browse.md#length-filter): chapters: "1573회차" on the free lists, "EP.138" on the Top 100, `count_book` in search.
 
 ### Naver Webnovel (네이버 웹소설), ko — https://novel.naver.com
 - Only the free amateur leagues are covered: 베스트리그 (`/best/`) and 챌린지리그
@@ -238,6 +254,7 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 - Limitations: best-league works picked up for paid serialization lose their free episodes. They
   still show in search, with 0 chapters and a note in the synopsis. Adult works redirect to a
   Naver login and raise an error.
+- [Length filter](browse.md#length-filter): chapters, the cards' exact "총 76회".
 
 ### czbooks (小說狂人), zh (Traditional Chinese) — https://czbooks.net
 - Taiwanese aggregator. **Text is Traditional Chinese**; the source still declares `lang = "zh"`,
@@ -267,6 +284,7 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 - Paging: a page past the end comes back as some other page instead of an empty one, so the
   provider checks the active link in `ul.paginate` and returns an empty page when it does not
   match.
+- [Length filter](browse.md#length-filter): chapters, approximate, from the latest chapter ("第307頁"); "後記" and the like give none.
 
 ## Cloudflare and blocks
 
@@ -390,3 +408,6 @@ and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
 
   `LIVE=1` in the environment works too. The output (`[live] ...` lines) is in the test report's
   standard output.
+- Length filter: `LengthParsingFixtureTest` (every source's length on its fixtures, the
+  per-source units, Royal Road / Syosetu URLs with a range) and the gated
+  `LengthListingsLiveTest` (`-Dlive=1`).

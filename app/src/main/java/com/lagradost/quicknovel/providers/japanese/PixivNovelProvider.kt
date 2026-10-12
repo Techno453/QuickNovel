@@ -6,8 +6,11 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
@@ -47,6 +50,9 @@ class PixivNovelProvider : MainAPI() {
     override val mainUrl = "https://www.pixiv.net"
     override val lang = "ja"
     override val hasMainPage = true
+
+    /** Characters (text length of one-shots and series cards); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHARACTERS)
     override val rateLimitTime = 1000L
 
     /**
@@ -257,6 +263,11 @@ object PixivNovelParser {
                 // The ranking ships 100x100 thumbnails; the 240x480 size of the same cover is sharp.
                 posterUrl = item.str("url")?.replace("/c/100x100/", "/c/240x480_80/")
                 posterHeaders = mapOf("Referer" to "https://www.pixiv.net/")
+                // character_count is the ranked text's: the whole work for a one-shot, one episode
+                // of a series (so a series row has no length).
+                if (seriesId == null) {
+                    length = NovelLength.of(chapters = 1, characters = item.str("character_count")?.toLongOrNull())
+                }
             }
         }
     }
@@ -284,8 +295,23 @@ object PixivNovelParser {
                 posterHeaders = mapOf("Referer" to "https://www.pixiv.net/")
                 latestChapter = item.get("publishedEpisodeCount")?.takeIf { it.isNumber }
                     ?.let { "${it.asInt()} episodes" }
+                length = searchLength(item, folded = seriesId != null && !item.has("novelId") && !item.has("isOneshot"))
             }
         }
+    }
+
+    /**
+     * Length of a search card: grouped cards carry the work's `publishedTextLength` (or
+     * `textLength`) and, for a series, `publishedEpisodeCount`; a plain one-shot row its
+     * `textCount`. A series episode [folded] into its series has only that episode's count: none.
+     */
+    private fun searchLength(item: JsonNode, folded: Boolean): NovelLength? {
+        if (folded) return null
+        fun long(field: String) = item.get(field)?.takeIf { it.isNumber }?.asLong()
+        val characters = long("publishedTextLength") ?: long("textLength") ?: long("textCount")
+        val episodes = long("publishedEpisodeCount")
+            ?: if (item.has("novelId") || item.path("isOneshot").asBoolean(false) || !item.has("isOneshot")) 1L else null
+        return NovelLength.of(chapters = episodes, characters = characters)
     }
 
     data class Info(
