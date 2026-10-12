@@ -87,7 +87,7 @@ class TranslationBench {
         // 4. Translate, one provider phase at a time.
         val adapter = BenchEngineAdapter()
         val judge = if (cfg.judge.enabled) cfg.model(cfg.judge.model)?.let { Judge(api, it) } else null
-        val options = RunOptions({ env.key(it) }, cfg.baseUrl, ledger)
+        val options = RunOptions({ env.key(it) }, cfg.baseUrl, ledger, cfg.engineOptions())
         val aborted = AtomicBoolean(false)
         val store = ResultStore(File(env.outputRoot, "results"))
         val phases = cfg.models.filter { it.enabled }.groupBy { it.provider }
@@ -122,7 +122,7 @@ class TranslationBench {
                     sem.withPermit {
                         val bible = bibles.getValue(s.id)
                         val output = when {
-                            listing != null && m.id !in listing ->
+                            listing != null && m.apiModel !in listing ->
                                 BenchOutput("", Usage(), 0, "model id not in ${m.provider} /models listing", unavailable = true)
                             aborted.get() -> BenchOutput("", Usage(), 0, "skipped: budget cap reached", budgetHit = true)
                             else -> adapter.translate(s, bible, m, options)
@@ -240,6 +240,21 @@ class TranslationBench {
             assertTrue(m.inputParagraphs > 0 && m.outputParagraphs == m.inputParagraphs)
         }
         notes.add("DRY RUN: no API calls were made; outputs are fakes that deliberately leak CJK and use a wrong pronoun.")
+
+        // Adapter smoke: every enabled model's resolved config (presets included) goes through
+        // BenchEngineAdapter -> TranslationEngine, answered by a local fake endpoint (no network, no spend).
+        val smokeLedger = CostLedger(File(runDir, "dry-run-ledger.json"), cfg.budgetUsd, "dry-run")
+        val smokeOptions = RunOptions({ "dry-run-key" }, cfg.baseUrl, smokeLedger, cfg.engineOptions())
+        val sample = samples.first()
+        val enabled = cfg.models.filter { it.enabled }
+        for (m in enabled) {
+            val transport = FakeChatTransport()
+            val out = BenchEngineAdapter(transport = transport).translate(sample, bibles.getValue(sample.id), m, smokeOptions)
+            val problems = transport.problems(m, cfg.baseUrl)
+            log("adapter smoke ${m.id}: ${transport.requests.size} requests, ${out.error ?: "ok"}${if (problems.isEmpty()) "" else " · " + problems.joinToString()}")
+            assertTrue("adapter smoke ${m.id}: ${out.error} $problems", out.error == null && problems.isEmpty() && transport.requests.isNotEmpty())
+        }
+        notes.add("Adapter smoke: ${enabled.size} model configs ran through BenchEngineAdapter → TranslationEngine (story bible, context, options) against a local fake endpoint.")
         writeReport(cfg, samples, bibles, results, emptyMap(), notes, runDir, "dry-run-${runDir.name}", ledger, dryRun = true)
     }
 

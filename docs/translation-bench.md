@@ -26,11 +26,23 @@ Overrides, as `-Dbench.<name>=…`, environment `BENCH_<NAME>=…`, or a line in
 |---|---|---|
 | `bench.models` | `-Dbench.models=gpt-5-mini,anthropic/claude-haiku-5.5` | run only these model ids (must exist in the config) |
 | `bench.samples` | `-Dbench.samples=zh-doupo` | run only these sample ids |
-| `bench.dryRun` | `-Dbench.dryRun=true` | fetch samples, fake outputs, compute metrics, write the report; **no API calls** |
+| `bench.dryRun` | `-Dbench.dryRun=true` | fetch samples, fake outputs, compute metrics, write the report, and run every enabled model config through `BenchEngineAdapter` against a local fake endpoint; **no API calls** |
 | `bench.judge` | `-Dbench.judge=false` | skip the LLM judge |
 | `bench.reportOnly` | `-Dbench.reportOnly=true` | no API calls: rebuild the report from stored results (metrics recomputed) |
 | `bench.budget` / `BENCH_BUDGET_USD` | `BENCH_BUDGET_USD=1.50` | cost cap (default 2.50) |
 | `bench.parallelism` | `-Dbench.parallelism=2` | concurrent translations (default 4) |
+
+Smoke check after changing the engine, presets or the config (free; only the sample pages are
+fetched):
+
+```sh
+BENCH=1 ./gradlew :app:testDebugUnitTest --tests "com.lagradost.quicknovel.bench.TranslationBench" -Dbench=1 -Dbench.dryRun=true -Dbench.judge=false --console=plain
+```
+
+It logs `adapter smoke <model>: N requests, ok` per enabled model and fails if a request does not
+match the model's resolved config (endpoint, model id, extra body, temperature, headers).
+`BenchConfigPresetTest` (part of the normal unit tests) checks preset resolution and the adapter
+offline as well.
 
 Re-running a subset (e.g. one model after fixing its parameters) merges into the report: the
 latest result per (sample, model) is kept in `app/build/translation-bench/results/` and every
@@ -43,6 +55,11 @@ Put keys in `bench.local.properties` at the project root (gitignored via `*.loca
 ```
 OPENAI_API_KEY=sk-...
 OPENROUTER_API_KEY=sk-or-...
+# only for direct-provider presets:
+GEMINI_API_KEY=...
+DEEPSEEK_API_KEY=...
+DASHSCOPE_API_KEY=...
+ANTHROPIC_API_KEY=...
 ```
 
 or set them as environment variables (these win). From a git worktree the harness also finds
@@ -84,9 +101,13 @@ is used as a fallback and the report says so. Sample text and translations stay 
 
 ## Models
 
-Each entry in `models`:
+Each entry in `models` either references one of the app's model presets
+(`app/src/main/java/com/lagradost/quicknovel/translator/ModelPresets.kt`) or is fully explicit:
 
 ```json
+{ "preset": "gpt-6-luna" }
+{ "preset": "or-gemini-3.1-flash-lite", "priceNote": "OpenRouter default route, estimate" }
+{ "preset": "gpt-6-sol", "id": "gpt-6-sol-low", "reasoningEffort": "low" }
 { "id": "gpt-5-mini", "inputPerM": 0.25, "outputPerM": 2.00, "reasoningEffort": "minimal" }
 { "id": "anthropic/claude-haiku-5.5", "inputPerM": 0.10, "outputPerM": 0.50,
   "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY",
@@ -95,6 +116,13 @@ Each entry in `models`:
   "priceNote": "OpenRouter default route, estimate" }
 ```
 
+- `preset`: takes the API model id, base URL, `extraBody`, temperature behaviour
+  (`sendTemperature: false` becomes `"temperature": null`), `reasoning_effort`, headers, key name
+  (by provider: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`,
+  `DASHSCOPE_API_KEY`, `ANTHROPIC_API_KEY`) and prices from the preset, so the bench measures
+  exactly what the app sends. Any field given next to it overrides the preset (`extraBody`
+  entries are merged, explicit ones win). `id` defaults to the preset's model id; `model`
+  (the id sent to the API) defaults to `id`.
 - Prices are USD per 1M tokens and drive estimates and OpenAI cost accounting.
 - `reasoningEffort` (OpenAI): sent as `reasoning_effort`; if the API rejects it the harness
   steps down `none → minimal → low → omitted` (rejected requests cost nothing) and records the
@@ -106,7 +134,9 @@ Each entry in `models`:
   `{"effort": "low"}`; models with mandatory reasoning reject `enabled: false`.
 - `maxTokensParam` overrides the output-limit field (`max_tokens` for non-OpenAI by default);
   `completionFactor`/`minCompletionTokens` size it (default 2.5 × prompt tokens).
-- `enabled: false` keeps a model in the config without running it.
+- `sendTemperature: false` makes the engine never send `temperature`.
+- `enabled: false` keeps a model in the config without running it (the direct Gemini, DeepSeek
+  and Qwen presets are listed disabled; enable them when you have those keys).
 - Models are run in phases by provider (OpenAI first); the bible and the judge always use
   `bibleModel` / `judge.model` (OpenAI).
 
@@ -114,9 +144,12 @@ Each entry in `models`:
 
 For each sample one call to `bibleModel` extracts characters (English rendering, gender, role)
 and places / techniques / ranks as JSON. It is cached in `cache/bible-<sample>.json`, so every
-model, and every later run, gets the same glossary. `BenchEngineAdapter` converts it to the
-engine's `List<GlossaryTerm>` (gender and role go into the description). When the engine's
-story-bible API lands, only `BenchEngineAdapter.kt` needs to change.
+model, and every later run, gets the same glossary. `BenchEngineAdapter` calls the story-bible
+engine exactly like the app: `translateChapter(..., glossaryTerms, context = StoryContext(premise),
+options = TranslationOptions(strictMode, carryStoryContext))`, with each bible entry mapped to a
+`GlossaryTerm` (gender for characters, role as notes). `strictMode` and `carryStoryContext` are
+top-level config switches (default on, as in the app). The engine's content-filter fallback is
+not used in the bench (each model is measured on its own).
 
 ## Results
 

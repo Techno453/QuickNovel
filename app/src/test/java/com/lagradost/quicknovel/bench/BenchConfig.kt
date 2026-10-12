@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.lagradost.quicknovel.translator.ModelPresets
+import com.lagradost.quicknovel.translator.TranslationOptions
 import java.io.File
 import java.util.Properties
 
@@ -23,19 +25,31 @@ data class SampleSpec(
     val enabled: Boolean = true,
 )
 
+/**
+ * One model under test. Either fully explicit, or `"preset": "<app preset id>"` (see
+ * [ModelPresets]) with any field below given explicitly as an override; [resolved] fills the rest
+ * from the preset.
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class ModelSpec(
-    val id: String,
-    val inputPerM: Double,
-    val outputPerM: Double,
+    /** Report / result-store id; defaults to the preset's model id. */
+    val id: String = "",
+    /** App preset to take endpoint, model, extra body, temperature behaviour and prices from. */
+    val preset: String? = null,
+    /** Model id sent to the API; null = [id]. */
+    val model: String? = null,
+    val inputPerM: Double = Double.NaN,
+    val outputPerM: Double = Double.NaN,
     /** OpenAI reasoning_effort, stepped down automatically if rejected; null = not sent. */
     val reasoningEffort: String? = null,
     /** null = the config's baseUrl (OpenAI). */
     val baseUrl: String? = null,
-    /** Name of the API key in the environment / bench.local.properties. */
-    val keyName: String = OPENAI_KEY,
+    /** Name of the API key in the environment / bench.local.properties ("" = by provider, OpenAI by default). */
+    val keyName: String = "",
     /** Extra top-level request fields (handed to the engine's extraBody); a null value removes the field. */
     val extraBody: Map<String, Any?> = emptyMap(),
+    /** false = never send temperature (engine `sendTemperature`); null = send. */
+    val sendTemperature: Boolean? = null,
     val headers: Map<String, String> = emptyMap(),
     /** "max_completion_tokens" or "max_tokens"; null = by provider (OpenAI: max_completion_tokens). */
     val maxTokensParam: String? = null,
@@ -48,6 +62,37 @@ data class ModelSpec(
 ) {
     val provider: String get() = if (keyName == OPENAI_KEY) "openai" else keyName.removeSuffix("_API_KEY").lowercase()
 
+    /** Model id sent to the API. */
+    val apiModel: String get() = model ?: id
+
+    /**
+     * Fills unset fields from [preset]: model, base URL, key name (by provider), prices, extra
+     * body (explicit entries win), reasoning_effort (so the metering interceptor keeps it),
+     * headers and temperature behaviour. Explicit models only get the OpenAI key default.
+     */
+    fun resolved(): ModelSpec {
+        val p = preset?.let { ModelPresets.byId(it) ?: error("Unknown preset '$it' in bench.config.json") }
+        if (p == null) {
+            require(id.isNotBlank()) { "Model without id or preset in bench.config.json" }
+            require(!inputPerM.isNaN() && !outputPerM.isNaN()) { "Model $id: inputPerM / outputPerM missing" }
+            return copy(keyName = keyName.ifBlank { OPENAI_KEY })
+        }
+        val presetBody = p.extraBody + (if (p.sendTemperature) emptyMap() else mapOf("temperature" to null))
+        return copy(
+            id = id.ifBlank { p.model },
+            model = model ?: p.model,
+            inputPerM = if (inputPerM.isNaN()) p.priceIn else inputPerM,
+            outputPerM = if (outputPerM.isNaN()) p.priceOut else outputPerM,
+            reasoningEffort = reasoningEffort ?: p.extraBody["reasoning_effort"] as? String,
+            baseUrl = baseUrl ?: p.baseUrl,
+            keyName = keyName.ifBlank { keyNameFor(p.provider.id) },
+            extraBody = presetBody + extraBody,
+            sendTemperature = sendTemperature ?: p.sendTemperature,
+            headers = headers.ifEmpty { p.provider.headers },
+            priceNote = priceNote.ifBlank { "preset ${p.id}" },
+        )
+    }
+
     fun baseUrlOr(default: String): String = baseUrl ?: default
 
     fun tokensParam(): String = maxTokensParam ?: if (keyName == OPENAI_KEY) "max_completion_tokens" else "max_tokens"
@@ -57,6 +102,14 @@ data class ModelSpec(
 
     companion object {
         const val OPENAI_KEY = "OPENAI_API_KEY"
+
+        /** Environment / bench.local.properties key name for an app provider id. */
+        fun keyNameFor(providerId: String): String = when (providerId) {
+            "openai" -> OPENAI_KEY
+            "google" -> "GEMINI_API_KEY"
+            "qwen" -> "DASHSCOPE_API_KEY"
+            else -> providerId.uppercase() + "_API_KEY" // OPENROUTER_, DEEPSEEK_, ANTHROPIC_API_KEY
+        }
     }
 }
 
@@ -79,17 +132,30 @@ data class BenchConfig(
     val bibleModel: String = "gpt-6-luna",
     /** Before each provider phase, drop at most this many of its most expensive models if the estimate would exceed the cap. */
     val maxDropsPerPhase: Int = 2,
+    /** Engine options for translations (the app's defaults: strict mode and story context on). */
+    val strictMode: Boolean = true,
+    val carryStoryContext: Boolean = true,
     val judge: JudgeSpec = JudgeSpec(),
     val samples: List<SampleSpec> = emptyList(),
     val models: List<ModelSpec> = emptyList(),
 ) {
     fun model(id: String): ModelSpec? = models.firstOrNull { it.id == id }
 
+    fun engineOptions(): TranslationOptions = TranslationOptions(strictMode = strictMode, carryStoryContext = carryStoryContext)
+
+    /** Resolves preset references; fails on duplicate ids. */
+    fun resolved(): BenchConfig {
+        val list = models.map { it.resolved() }
+        val dupes = list.groupBy { it.id }.filterValues { it.size > 1 }.keys
+        require(dupes.isEmpty()) { "Duplicate model ids in bench.config.json: $dupes" }
+        return copy(models = list)
+    }
+
     companion object {
         fun loadDefault(): BenchConfig {
             val stream = BenchConfig::class.java.getResourceAsStream("/bench/bench.config.json")
                 ?: error("bench/bench.config.json not found on the test classpath")
-            return stream.use { benchMapper.readValue(it) }
+            return stream.use { benchMapper.readValue<BenchConfig>(it) }.resolved()
         }
     }
 }

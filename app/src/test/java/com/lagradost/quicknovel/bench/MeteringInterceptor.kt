@@ -31,7 +31,8 @@ data class CallRecord(
 class ParamState(model: ModelSpec) {
     @Volatile var effort: String? = model.reasoningEffort
     @Volatile var tokensParam: String = model.tokensParam()
-    @Volatile var sendTemperature = !model.extraBody.containsKey("temperature") || model.extraBody["temperature"] != null
+    @Volatile var sendTemperature = model.sendTemperature != false &&
+        (!model.extraBody.containsKey("temperature") || model.extraBody["temperature"] != null)
     val adjustments = java.util.Collections.synchronizedList(mutableListOf<String>())
 }
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Translation benchmark config. See docs/translation-bench.md. Prices are USD per 1M tokens (OpenAI pricing page, 2026-10-11).",
+  "_comment": "Translation benchmark config. See docs/translation-bench.md. Prices are USD per 1M tokens (2026-10-11). A model with \"preset\" takes endpoint, model id, extraBody, temperature behaviour, key name and prices from the app preset (ModelPresets.kt); any field given next to it overrides the preset.",
   "baseUrl": "https://api.openai.com/v1",
   "dryRun": false,
   "budgetUsd": 2.50,
@@ -37,14 +37,14 @@
     }
   ],
   "models": [
-    { "id": "gpt-6-luna",   "inputPerM": 0.10, "outputPerM": 0.50,  "reasoningEffort": "none" },
-    { "id": "gpt-6-sol",    "inputPerM": 2.00, "outputPerM": 10.00, "reasoningEffort": "none" },
+    { "preset": "gpt-6-luna" },
+    { "preset": "gpt-6-sol" },
     { "id": "gpt-6.1-sol",  "inputPerM": 2.00, "outputPerM": 10.00, "reasoningEffort": "low" },
     { "id": "gpt-5-mini",   "inputPerM": 0.25, "outputPerM": 2.00,  "reasoningEffort": "minimal" },
-    { "id": "gpt-5.4-mini", "inputPerM": 0.75, "outputPerM": 4.50,  "reasoningEffort": "none" },
+    { "preset": "gpt-5.4-mini" },
     { "id": "gpt-5.6-terra", "inputPerM": 2.00, "outputPerM": 12.00, "reasoningEffort": "none" },
-    { "id": "gpt-4o-mini",  "inputPerM": 0.15, "outputPerM": 0.60 },
-    { "id": "gpt-4o",       "inputPerM": 2.50, "outputPerM": 10.00 },
+    { "preset": "gpt-4o-mini" },
+    { "preset": "gpt-4o" },
     { "id": "gpt-6-astra",  "inputPerM": 10.00, "outputPerM": 50.00, "reasoningEffort": "none", "enabled": false },
 
     { "id": "anthropic/claude-haiku-5.5", "inputPerM": 0.10, "outputPerM": 0.50, "priceNote": "OpenRouter default route, estimate",
@@ -55,18 +55,9 @@
       "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY", "completionFactor": 3.5,
       "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
       "extraBody": { "reasoning": { "effort": "low", "exclude": true }, "temperature": null } },
-    { "id": "deepseek/deepseek-v4.1-flash", "inputPerM": 0.30, "outputPerM": 1.20, "priceNote": "OpenRouter default route, estimate",
-      "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY",
-      "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
-      "extraBody": { "reasoning": { "enabled": false } } },
-    { "id": "google/gemini-3.1-flash-lite", "inputPerM": 0.25, "outputPerM": 1.50, "priceNote": "OpenRouter default route, estimate",
-      "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY",
-      "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
-      "extraBody": { "reasoning": { "enabled": false } } },
-    { "id": "qwen/qwen3.8-flash", "inputPerM": 0.15, "outputPerM": 0.47, "priceNote": "OpenRouter default route, estimate",
-      "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY",
-      "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
-      "extraBody": { "reasoning": { "enabled": false } } },
+    { "preset": "or-deepseek-flash", "priceNote": "OpenRouter default route, estimate" },
+    { "preset": "or-gemini-3.1-flash-lite", "priceNote": "OpenRouter default route, estimate" },
+    { "preset": "or-qwen3.8-flash", "priceNote": "OpenRouter default route, estimate" },
     { "id": "z-ai/glm-5.3-flash", "inputPerM": 0.15, "outputPerM": 0.50, "priceNote": "OpenRouter default route, estimate; reasoning mandatory",
       "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY", "completionFactor": 3.5,
       "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
@@ -78,6 +69,11 @@
     { "id": "mistralai/mistral-small-2603", "inputPerM": 0.15, "outputPerM": 0.60, "priceNote": "OpenRouter default route, estimate",
       "baseUrl": "https://openrouter.ai/api/v1", "keyName": "OPENROUTER_API_KEY",
       "headers": { "HTTP-Referer": "https://github.com/LagradOst/QuickNovel", "X-Title": "QuickNovel translation bench" },
-      "extraBody": { "reasoning": { "enabled": false } } }
+      "extraBody": { "reasoning": { "enabled": false } } },
+
+    { "preset": "or-gpt-6-luna", "enabled": false },
+    { "preset": "gemini-3.1-flash-lite", "enabled": false },
+    { "preset": "deepseek-flash", "enabled": false },
+    { "preset": "qwen3.8-flash", "enabled": false }
   ]
 }

@@ -48,7 +48,7 @@ class BenchOpenAi(
         val meter = MeteringInterceptor(ledger, model, stateFor(model), purpose, sample)
         val client = base.newBuilder().addInterceptor(meter).build()
         val body = buildMap<String, Any> {
-            put("model", model.id)
+            put("model", model.apiModel)
             put("messages", buildList {
                 if (system != null) add(mapOf("role" to "system", "content" to system))
                 add(mapOf("role" to "user", "content" to user))
