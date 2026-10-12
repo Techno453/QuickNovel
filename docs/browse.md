@@ -25,6 +25,10 @@ Rules every provider in the Browse tab follows:
   and the All sources "Popular" feed load `(mainCategories[0], orderBys[0], tags[0])`, page 1.
 - Labels are English; genres keep the original name in brackets so a reader of the raws
   recognises them, e.g. `Fantasy (판타지)`.
+- Romance listings are deliberately not offered: no romance, BL / danmei, GL / yuri / 百合,
+  "no romance" (无CP) or sexual-orientation option on any axis, and no romance-focused source
+  (JJWXC and Wattpad were removed). The per-source list is in [sources.md](sources.md#romance-listings-not-offered);
+  `NoRomanceListingsTest` keeps it that way.
 - A listing value may encode several site parameters (`"popular|completed"`); the provider's
   `listingUrl(...)` (internal, unit-tested in `BrowseListingsTest`) turns it into the URL.
 

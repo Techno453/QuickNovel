@@ -55,6 +55,32 @@ status empty). Substring match, checked in this order:
 Used by 69shuba, Quanben, Syosetu and Hameln. Pass the status field only, not a whole page (全本小说网 is a
 site name).
 
+### Romance listings (not offered)
+
+Romance, BL / danmei, GL / yuri / 百合, "no romance" (无CP) and sexual-orientation listings are
+deliberately left out of every source's browse axes (2026-10-12), and romance-focused sources
+are not carried (JJWXC and Wattpad were removed, see "Removed sources"). Search still finds any
+work by name. `providers/cjk/NoRomanceListingsTest` scans the labels and values of every
+registered CJK provider so none comes back.
+
+| Source | Left out |
+|---|---|
+| 69shuba | Romance 言情 (3) |
+| Quanben | 言情, 现言 (modern romance), 耽美, and 穿越 / 青春, which on quanben.io list only romances (palace, CEO, campus) |
+| Ixdzs | 言情穿越 (7), 耽美同人 (8), 台言古言 (9) |
+| Piaotia | nothing: 都市言情 (3) is kept as "Urban (都市)", because the list is mostly urban fiction (the site's completed list calls it 全本都市) |
+| czbooks | 言情, 耽美, 百合, and 女性向 / 女生同人 (both list only romance and adult romance); the adult 情色工口 / 耽美工口 were already out |
+| Syosetu | Isekai romance (i1), 異世界〔恋愛〕 (101), 現実世界〔恋愛〕 (102) |
+| Kakuyomu | 恋愛 (love_story), ラブコメ (romance) |
+| Alphapolis | 恋愛 (110500), BL (119000) |
+| Pixiv Novels | tags 恋愛, 悪役令嬢 (villainess, a romance genre), BL, 百合 |
+| Novelpia | 로맨스 (6) |
+| Naver Webnovel | 로맨스 (101), 로판 / romance fantasy (109) |
+| Hameln | nothing (its only scope axis is original works / fan fiction) |
+
+The rankings themselves (e.g. a site-wide weekly ranking) are not filtered, so a romance work
+can still appear in an all-genre list.
+
 ## Per-source notes
 
 ### 69shuba (Biquge), zh
@@ -70,7 +96,7 @@ OkHttp client gets through (fixtures and live checks use it).
   Ongoing: popular, monthly (连载人气榜, `monthvisit|2`), Completed: popular, monthly (全本人气榜,
   `monthvisit|1`), Completed: recommended (全本推荐榜, `allvote|1`), Latest updates (最近更新,
   `/last.html`: one page of 30 books, page 2 is empty, ignores genre and status). Tags: the site's
-  12 category ids (`/novels/class/{id}.htm`). The old shape (status in the main category, ranking
+  category ids (`/novels/class/{id}.htm`) except romance (言情, 3). The old shape (status in the main category, ranking
   in `orderBy`) still maps to the same URLs.
 - Not offered: 新书榜 (`newhot`) answers with a Cloudflare managed challenge outside a browser;
   `lastupdate`/`allvisit`/`goodnum`/`postdate`/`dayvisit` rankings are empty. The site has no
@@ -170,7 +196,7 @@ Next.js Apollo state. All episodes are embedded on the work page. No login is ne
   短編 → Completed; tags are the genre (ジャンル) and the keywords (キーワード). The novel page no
   longer has a type label, so before 2026-10 every work showed as Ongoing with no tags.
 - Browse: main category = genre, with "All genres (総合)" first (`/rank/list/type/{period}_total/`),
-  then the isekai lists and the genres. Orders: All-time ranking (累計, default), Daily (日間),
+  then the isekai lists and the genres (without the romance ones). Orders: All-time ranking (累計, default), Daily (日間),
   Weekly (週間), Monthly (月間), Quarterly (四半期), Yearly (年間), all 50 per page, and Latest
   updates (最新掲載: `/search.php?order=new`, 20 per page; isekai categories map to `istt=1` plus the
   big genre). Tags = status: All, Ongoing (連載中, `_r` / `type=r`), Completed (完結済, `_er` /
@@ -179,7 +205,7 @@ Next.js Apollo state. All episodes are embedded on the work page. No login is ne
 
 ### Alphapolis (アルファポリス), ja — https://www.alphapolis.co.jp
 - Search `/search?query=&category=novel`. Browse `/novel/index?sort=&category_ids=` (24h,
-  weekly, monthly points, recent, completed, favourites; 15 categories).
+  weekly, monthly points, recent, completed, favourites; 12 categories plus All, without 恋愛 and BL).
 - The table of contents is the `app-cover-data` JSON on the work page. Episodes of works that
   became books turn into paid rentals (`isPublic:false`) and are left out of the chapter list.
 - Episode text is not in the episode page. The page's own script POSTs
@@ -236,7 +262,7 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   order. Chapter `GET /n/{id}/{cid}?chapterNumber=n`, text in `div.content`. Chapter 0 is often
   the "作品相關" intro page.
 - Browse: `orderBys` (default first) Popular this week (週排行), Popular today (日排行), Popular all
-  time (總排行), Latest updates (最新), Completed (完本); `tags`: All genres plus 17 genres. With
+  time (總排行), Latest updates (最新), Completed (完本); `tags`: All genres plus 12 genres (no romance ones). With
   All genres, Popular uses the site's 精選排行 `/c/normal/{day|week|total}/{page}` (the homepage's
   main ranking; the 人氣榜 `/c/all` mixes in adult titles) and Completed uses the 完本榜
   `/c/finish/week/{page}`, which can include adult titles. With a genre it is
@@ -298,7 +324,15 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 | uukanshu.cc, hetushu, trxs, xbanxia, linovelib/bilinovel, zh | Reachable (HTTP 200), not evaluated further. Ixdzs and Piaotia already cover the zh web-novel catalogue. |
 | xbiquge.so, ttkan, 69shu.com, zh | HTTP 403 from here (non-Cloudflare 403 or redirect to blocked mirror). |
 | biquge.com.cn, bqgui.cc, biqukan.cc, shuquge, uukanshu.net | Connection failures or timeouts from here. (czbooks timed out too in that check; it was reachable later and is now a source.) |
-| JJWXC (晋江文学城), zh | Removed 2026-10-12: a romance / danmei (BL) / GL site (言情, 纯爱, 百合); romance sources and listings are deliberately not offered (see [browse.md](browse.md)). It was a working source (search, 作品库 browse, free chapters; VIP chapters left out). |
+
+## Removed sources
+
+Romance-focused sources are not carried (see "Romance listings (not offered)" above).
+
+| Source | Removed | Reason |
+|---|---|---|
+| JJWXC (晋江文学城), zh | 2026-10-12 | A romance / danmei (BL) / GL site (言情, 纯爱, 百合); the user does not read romance. It was a working source (search, 作品库 browse, free chapters; VIP chapters left out). |
+| Wattpad, en (upstream provider) | 2026-10-12 | Romance-centric user-generated site; the user does not read romance. `WattpadProvider`, its icon and colour were deleted. |
 
 ## Tests
 
