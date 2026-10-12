@@ -7,14 +7,15 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingStart="24dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="8dp">
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/style_names"
-            android:textColor="?attr/textColor"
-            android:textStyle="bold" />
+            style="@style/TranslateSectionLabel"
+            android:layout_marginTop="0dp"
+            android:text="@string/style_names" />
 
         <RadioGroup
             android:id="@+id/style_name_group"
@@ -23,12 +24,8 @@
             android:orientation="vertical" />
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/style_honorifics"
-            android:textColor="?attr/textColor"
-            android:textStyle="bold" />
+            style="@style/TranslateSectionLabel"
+            android:text="@string/style_honorifics" />
 
         <RadioGroup
             android:id="@+id/style_honorific_group"
@@ -37,7 +34,7 @@
             android:orientation="vertical" />
 
         <com.google.android.material.textfield.TextInputLayout
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            style="@style/TranslateTextField"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
@@ -53,7 +50,7 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            style="@style/TranslateTextField"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"

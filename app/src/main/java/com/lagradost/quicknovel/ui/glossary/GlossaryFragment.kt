@@ -7,19 +7,18 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuInflater
+import android.util.TypedValue
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.core.view.MenuProvider
+import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.chip.Chip
@@ -120,9 +119,10 @@ class GlossaryFragment : Fragment() {
             Toast.makeText(requireContext(), getString(R.string.glossary_locked_count, shown.size), Toast.LENGTH_SHORT).show()
         }
 
+        // "Review N new terms" only when there is something to review (the dialog closes itself when empty).
         viewModel.pendingCount.observe(viewLifecycleOwner) { count ->
-            binding.pendingTermsBadge.visibility = if (count > 0) View.VISIBLE else View.GONE
-            binding.pendingTermsBadge.text = count.toString()
+            binding.pendingTermsBtn.visibility = if (count > 0) View.VISIBLE else View.GONE
+            binding.pendingTermsBtn.text = resources.getQuantityString(R.plurals.tr_glossary_review_count, count, count)
         }
 
         viewModel.renameOffer.observe(viewLifecycleOwner) { offer ->
@@ -159,12 +159,16 @@ class GlossaryFragment : Fragment() {
         AnalysisState.lastProgress?.takeIf { it.novelId == novelId }?.let { renderAnalysis(it) }
         AnalysisState.addListener(analysisListener)
 
-        requireActivity().addMenuProvider(object : MenuProvider {
-            override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-                menuInflater.inflate(R.menu.menu_glossary, menu)
-            }
-
-            override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        // The screen's own toolbar carries the menu: the main activity has no action bar, so a
+        // menu provider on the activity was never shown.
+        val toolbar = binding.glossaryToolbar
+        toolbar.subtitle = arguments?.getString("novel_name")?.takeIf { it.isNotBlank() }
+        toolbar.setNavigationOnClickListener { activity?.onBackPressedDispatcher?.onBackPressed() }
+        toolbar.inflateMenu(R.menu.menu_glossary)
+        toolbar.overflowIcon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_baseline_more_vert_24)?.mutate()
+            ?.apply { setTint(themeColor(com.lagradost.quicknovel.R.attr.iconColor)) }
+        toolbar.setOnMenuItemClickListener(object : Toolbar.OnMenuItemClickListener {
+            override fun onMenuItemClick(menuItem: MenuItem): Boolean {
                 return when (menuItem.itemId) {
                     R.id.action_analyze_novel -> {
                         AnalyzeNovelDialogFragment.newInstance(viewModel.novelId)
@@ -201,7 +205,13 @@ class GlossaryFragment : Fragment() {
                     else -> false
                 }
             }
-        }, viewLifecycleOwner, Lifecycle.State.RESUMED)
+        })
+    }
+
+    private fun themeColor(attr: Int): Int {
+        val value = TypedValue()
+        requireContext().theme.resolveAttribute(attr, value, true)
+        return value.data
     }
 
     override fun onDestroyView() {
@@ -234,10 +244,10 @@ class GlossaryFragment : Fragment() {
         val current = viewModel.filter.value ?: GlossaryFilter()
         val currentKey = if (current.unreviewedOnly) FILTER_UNREVIEWED else current.category
         for ((key, label) in filters) {
-            val chip = Chip(ctx).apply {
+            // The app's filled chip style (primary when checked), readable in light and dark themes.
+            val chip = (layoutInflater.inflate(R.layout.item_glossary_filter_chip, group, false) as Chip).apply {
                 id = View.generateViewId()
                 text = label
-                isCheckable = true
                 tag = key ?: ""
             }
             group.addView(chip)
