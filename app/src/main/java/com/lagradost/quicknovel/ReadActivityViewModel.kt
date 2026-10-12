@@ -104,6 +104,7 @@ import java.io.InputStream
 import java.net.URLDecoder
 import java.security.MessageDigest
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -224,6 +225,9 @@ abstract class AbstractBook {
 
     /** Returns true if this book comes from a translatable (zh/ja/ko) source. */
     open fun isTranslatableSource(): Boolean = false
+
+    /** Chapters whose text was last served from the AI translation DB (or translated on demand). */
+    val aiTranslatedChapters: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 }
 
 class QuickBook(val data: QuickStreamData) : AbstractBook() {
@@ -265,8 +269,9 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
             val novelId = TranslatorNovelId.from(data.meta.apiName, data.meta.name)
             ChapterTranslationRepository.getOrTranslate(ctx, novelId, index, sourceLang) {
                 ctx.getQuickChapter(data.meta, data.data[index], index, false)?.html
-            }?.let { return it }
+            }?.let { aiTranslatedChapters += index; return it }
         }
+        aiTranslatedChapters -= index
 
         return ctx.getQuickChapter(
             data.meta,
@@ -379,9 +384,10 @@ class RegularBook(val data: EpubBook, val novelId: String? = null) : AbstractBoo
         if (novelId != null && !reload) {
             val ctx = context
             if (ctx != null) {
-                ChapterTranslationRepository.getCached(ctx, novelId, index)?.let { return it }
+                ChapterTranslationRepository.getCached(ctx, novelId, index)?.let { aiTranslatedChapters += index; return it }
             }
         }
+        aiTranslatedChapters -= index
 
         val start = allTocReferences[index].resource
         val startIdx = data.spine.getResourceIndex(start)
@@ -594,6 +600,23 @@ class ReadActivityViewModel : ViewModel() {
             chaptersTitlesInternal.add(book.getChapterTitle(idx))
         }
         _chaptersTitles.postValue(chaptersTitlesInternal)
+    }
+
+    /** Chapter title, marked "(AI translated)" when the text came from the translation DB. */
+    private fun displayChapterTitle(index: Int): UiText {
+        val title = book.getChapterTitle(index)
+        return if (index in book.aiTranslatedChapters) txt(R.string.chapter_title_ai_translated, title) else title
+    }
+
+    /** Updates the toolbar / chapter list title of [index] if its AI-translated marker changed. */
+    private fun refreshChapterTitle(index: Int) {
+        if (index !in chaptersTitlesInternal.indices) return
+        val marked = (chaptersTitlesInternal[index] as? UiText.StringResource)?.resId ==
+            R.string.chapter_title_ai_translated
+        if (marked == index in book.aiTranslatedChapters) return
+        chaptersTitlesInternal[index] = displayChapterTitle(index)
+        _chaptersTitles.postValue(chaptersTitlesInternal)
+        if (index == currentIndex) _chapterTile.postValue(chaptersTitlesInternal[index])
     }
 
     private val chapterMutex = Mutex()
@@ -952,13 +975,14 @@ class ReadActivityViewModel : ViewModel() {
                     originalRendered = originalRendered,
                     originalSpans = originalSpans,
                     rawText = rawText,
-                    title = book.getChapterTitle(index),
+                    title = displayChapterTitle(index),
                 )
             }
 
             // set the data and return
             chapterMutex.withLock {
                 chapterData[index] = data
+                refreshChapterTitle(index)
             }
         } catch (t: Throwable) {
             // Tasks.await may throw

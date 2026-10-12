@@ -352,6 +352,7 @@
     <string name="translation_finished_title">Translation finished</string>
     <string name="translation_finished_text">%1$d of %2$d chapters translated</string>
     <string name="translation_no_issues">no consistency issues</string>
+    <string name="chapter_title_ai_translated">%s (AI translated)</string>
 
     <string name="analyzing_novel">Analyzing novel</string>
     <string name="analysis_fetching">Fetching chapter %1$d of %2$d</string>
