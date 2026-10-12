@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 6 to 11 (API 23-30) backup rules, see docs/backup.md. Used for both cloud backup
+    (25 MB cap) and device-to-device transfer on these versions, so they match the cloud rules
+    of backup_rules.xml.
+-->
+<full-backup-content>
+    <!-- translator_database, translator_database-wal, translator_database-shm -->
+    <include domain="database" path="." />
+    <!-- rebuild_preference.xml (library and progress) and the default preferences (settings) -->
+    <include domain="sharedpref" path="." />
+    <!-- Encrypted with a Keystore master key that never leaves the device -->
+    <exclude domain="sharedpref" path="translator_secure_prefs.xml" />
+    <!-- Plain-text fallback of the same secrets (API keys) -->
+    <exclude domain="sharedpref" path="translator_prefs_fallback.xml" />
+</full-backup-content>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+ (API 31+) backup rules, see docs/backup.md.
+    Cache dirs, code_cache and no_backup (WorkManager's database) are never backed up.
+-->
+<data-extraction-rules>
+    <!-- Google cloud backup: capped at 25 MB per app, so only the small, irreplaceable data -->
+    <cloud-backup>
+        <!-- translator_database plus its WAL files (Room uses WAL journaling):
+             translator_database, translator_database-wal, translator_database-shm -->
+        <include domain="database" path="." />
+        <!-- rebuild_preference.xml (library, bookmarks, download metadata, reading progress,
+             new-chapter state) and the default preferences (settings) -->
+        <include domain="sharedpref" path="." />
+        <!-- Encrypted with a Keystore master key that never leaves the device -->
+        <exclude domain="sharedpref" path="translator_secure_prefs.xml" />
+        <!-- Plain-text fallback of the same secrets (API keys) -->
+        <exclude domain="sharedpref" path="translator_prefs_fallback.xml" />
+        <!-- Not included: files/ (downloaded chapters, generated EPUBs, posters, imported books) -->
+    </cloud-backup>
+
+    <!-- Device-to-device transfer: no size cap, so everything except secrets and re-fetchable files -->
+    <device-transfer>
+        <exclude domain="sharedpref" path="translator_secure_prefs.xml" />
+        <exclude domain="sharedpref" path="translator_prefs_fallback.xml" />
+        <!-- In-app updater download, outdated on the new device -->
+        <exclude domain="file" path="Download/apk" />
+    </device-transfer>
+</data-extraction-rules>
