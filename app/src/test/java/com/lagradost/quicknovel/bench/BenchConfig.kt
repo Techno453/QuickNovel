@@ -163,7 +163,8 @@ data class BenchConfig(
         val list = models.map { it.resolved() }
         val dupes = list.groupBy { it.id }.filterValues { it.size > 1 }.keys
         require(dupes.isEmpty()) { "Duplicate model ids in bench.config.json: $dupes" }
-        return copy(models = list)
+        // Panel judges get the same defaults (an entry without keyName is an OpenAI model).
+        return copy(models = list, judges = judges.copy(panel = judges.panel.map { it.resolved() }))
     }
 
     companion object {
