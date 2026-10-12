@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -186,6 +190,17 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(snapAnimationSpec = null)
     val listState = rememberLazyGridState()
 
+    // Result sections are re-sorted as sources answer (raw CJK first). A LazyColumn keeps the first
+    // visible section in place when one is inserted above it, so stay pinned to the top until the
+    // user drags the list.
+    val resultsState = rememberLazyListState()
+    val resultsDragged by resultsState.interactionSource.collectIsDraggedAsState()
+    var followTop by remember(state.lastQuery, state.searchLanguage) { mutableStateOf(true) }
+    LaunchedEffect(resultsDragged) { if (resultsDragged) followTop = false }
+    LaunchedEffect(state.searchRows, followTop) {
+        if (followTop && state.searchRows.isNotEmpty()) resultsState.requestScrollToItem(0)
+    }
+
 
     val searchAction = remember<(SearchResponseAction) -> Unit>(action) {
         { item ->
@@ -257,6 +272,7 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
     ) { innerPadding ->
         if (state.isQueryOpen) {
             LazyColumn(
+                state = resultsState,
                 modifier = Modifier
                     .fillMaxSize()
                     // This fixes the double padding from the bottom nav bar
