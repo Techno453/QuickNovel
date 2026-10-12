@@ -16,6 +16,7 @@ import com.lagradost.quicknovel.providers.chinese.PiaotiaProvider
 import com.lagradost.quicknovel.providers.chinese.JjwxcProvider
 import com.lagradost.quicknovel.providers.chinese.CzbooksProvider
 import com.lagradost.quicknovel.providers.japanese.AlphapolisProvider
+import com.lagradost.quicknovel.providers.japanese.HamelnProvider
 import com.lagradost.quicknovel.providers.japanese.PixivNovelProvider
 import com.lagradost.quicknovel.providers.korean.NaverWebNovelProvider
 import com.lagradost.quicknovel.providers.japanese.KakuyomuProvider
@@ -170,6 +171,7 @@ class Apis {
             NaverWebNovelProvider(),
             JjwxcProvider(),
             CzbooksProvider(),
+            HamelnProvider(),
         ).sortedBy { it.name }
 
         fun getApiFromName(name: String): APIRepository {
