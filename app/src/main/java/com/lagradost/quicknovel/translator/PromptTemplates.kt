@@ -290,12 +290,20 @@ In ${TranslationProtocol.TERMS_MARKER} list only names and recurring terms (peop
         val languageName = TranslationLanguages.displayName(sourceLang)
         return """
 You build a translator's Story Bible for a $languageName web novel. You do NOT translate the text.
-Read the excerpt and extract:
-- every named character: English name, gender, role, relationships to other characters (use their English names), speech style or verbal tics, other names/nicknames they are called by;
-- places, sects/factions/organizations, cultivation ranks/levels, techniques/skills, notable items, creatures, titles.
+The Story Bible fixes how recurring NAMES are rendered, so it lists only:
+- named characters (anyone with a personal name, including named creatures): English name, gender, role, relationships to other characters (use their English names), speech style or verbal tics, and every other name or nickname they are called by;
+- proper nouns: named places, countries, cities, sects, clans, families, organizations, named items and artifacts;
+- setting-specific terminology that must stay consistent: cultivation or power ranks and realms, named techniques, skills and spells, titles that exist only in this world.
+Never list:
+- unnamed people described by a role or description (the assassin, the mastermind, a minister, the examiner, the middle-aged man, that woman); mention them in the notes of the named characters instead;
+- ordinary words: common nouns and adjectives (poison, dagger, wheat field, kitchen knife, pigeon, scroll, prodigy, low level, dimension, god) and everyday forms of address (Miss, young master, clan leader), unless the story uses them as a fixed name;
+- insults, curses, jokes and one-off wordplay;
+- anything that comes only from author's notes, afterwords, update notices or requests for votes, tickets or donations (作者的话, PS, 求月票, あとがき, 작가의 말 …): the author's pen name and the real-world places, people and works mentioned there are not part of the story.
+One entry per entity: when the same person, place or thing is written in several ways, give ONE entry with one English rendering and put the other source forms in "aliases".
 Gender: use explicit evidence only (pronouns such as 他/她, 彼/彼女, 그/그녀, kinship terms, titles, gendered descriptions); otherwise "unknown".
+"proper": true for a name or setting-specific term; false when it may be just an ordinary word or an unnamed role (entries marked false are discarded).
 Output ONLY one JSON object, no prose and no code fences:
-{"premise":"<3-5 sentences: setting, protagonist, central conflict so far>","terms":[{"source":"<exactly as written in the source>","english":"<rendering>","category":"character|location|sect|rank|technique|artifact|creature|title|other","gender":"male|female|neutral|unknown","notes":"<role; relationships; speech style>","aliases":["<other source-language forms of the same name>"],"confidence":<0.0-1.0>}]}
+{"premise":"<3-5 sentences: setting, protagonist, central conflict so far>","terms":[{"source":"<exactly as written in the source>","english":"<rendering>","category":"character|location|sect|rank|technique|artifact|creature|title|other","gender":"male|female|neutral|unknown","notes":"<role; relationships; speech style>","aliases":["<other source-language forms of the same name>"],"proper":true,"confidence":<0.0-1.0>}]}
 List characters first. Skip anything in the "Already known" list.
 """.trim()
     }
@@ -318,7 +326,10 @@ List characters first. Skip anything in the "Already known" list.
         }
         sb.append(renderStyle(sourceLang, style)).append("\n\n")
         sb.append("## $languageName excerpt ($chapterLabel)\n").append(excerpt.trim()).append("\n\n")
-        sb.append("## Task\nOutput the JSON object described in the instructions.")
+        sb.append(
+            "## Task\nOutput the JSON object described in the instructions: names and setting-specific terms only, " +
+                "one entry per entity, nothing from author's notes."
+        )
         return sb.toString()
     }
 

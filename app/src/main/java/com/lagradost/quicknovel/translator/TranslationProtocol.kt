@@ -208,7 +208,27 @@ object TranslationProtocol {
             notes = str("notes", "note", "description", "role"),
             confidence = parseConfidence(node.get("confidence")?.asText()),
             aliases = aliases,
+            proper = parseProper(node),
         )
+    }
+
+    /**
+     * The analysis pre-pass's `"proper"` flag (true/false, also as a string), or a `"kind"` of
+     * "generic"/"common"/"role" (false) vs "proper"/"name"/"term" (true); null when absent or unclear.
+     */
+    internal fun parseProper(node: JsonNode): Boolean? {
+        node.get("proper")?.takeIf { !it.isNull }?.let { p ->
+            if (p.isBoolean) return p.booleanValue()
+            when (p.asText().trim().lowercase()) {
+                "true", "yes", "1" -> return true
+                "false", "no", "0" -> return false
+            }
+        }
+        return when (node.get("kind")?.takeIf { !it.isNull }?.asText()?.trim()?.lowercase()) {
+            "generic", "common", "common noun", "role", "description", "ordinary" -> false
+            "proper", "proper noun", "name", "term", "terminology" -> true
+            else -> null
+        }
     }
 
     private fun termFromFields(obj: String): DiscoveredTerm? {

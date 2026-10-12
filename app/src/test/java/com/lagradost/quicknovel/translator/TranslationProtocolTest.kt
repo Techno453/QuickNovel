@@ -141,4 +141,22 @@ class TranslationProtocolTest {
         assertEquals("Revenge story.", broken.premise)
         assertEquals("Lin Feng", broken.terms.first().english)
     }
+
+    @Test
+    fun parsesProperFlagBackwardCompatibly() {
+        val parsed = TranslationProtocol.parseAnalysis(
+            """{"premise":"p","terms":[
+            {"source":"林风","english":"Lin Feng","category":"character","proper":true},
+            {"source":"毒","english":"poison","category":"other","proper":false},
+            {"source":"短剣","english":"dagger","proper":"false"},
+            {"source":"大臣","english":"minister","kind":"generic"},
+            {"source":"青云宗","english":"Qingyun Sect","kind":"proper"},
+            {"source":"萧炎","english":"Xiao Yan"}
+            ]}"""
+        )
+        assertEquals(listOf(true, false, false, false, true, null), parsed.terms.map { it.proper })
+        // The translation tail never carries the flag.
+        val tail = TranslationProtocol.parseTerms("""[{"source":"苏婉","english":"Su Wan"}]""")
+        assertEquals(null, tail.single().proper)
+    }
 }

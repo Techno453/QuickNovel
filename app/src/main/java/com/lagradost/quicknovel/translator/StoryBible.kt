@@ -52,6 +52,12 @@ data class DiscoveredTerm(
     val notes: String = "",
     val confidence: Float = 0.5f,
     val aliases: List<String> = emptyList(),
+    /**
+     * Analysis pre-pass only: the model's own verdict on whether this is a proper noun or
+     * setting-specific term (true) or an ordinary word / unnamed role (false). null = not given
+     * (older prompts, the translation tail); [AnalysisFilter] drops entries marked false.
+     */
+    val proper: Boolean? = null,
 )
 
 /** JSON helpers for the `aliases` column (a JSON array of source-language strings). */
