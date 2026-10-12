@@ -42,6 +42,16 @@ class ProviderLanguageTest {
         assertTrue(registered.count { it.lang in cjk } >= 5)
     }
 
+    /** Only Chinese, Japanese, Korean and English sources are carried (docs/sources.md, "Removed sources"). */
+    @Test
+    fun everyRegisteredProviderIsChineseJapaneseKoreanOrEnglish() {
+        val allowed = setOf("en", "zh", "ja", "ko")
+        val offenders = Apis.apis
+            .filter { it.lang.lowercase().substringBefore('-').substringBefore('_') !in allowed }
+            .map { "${it.name} (lang=${it.lang})" }
+        assertTrue("Providers in other languages: $offenders", offenders.isEmpty())
+    }
+
     private fun looksCjk(api: MainAPI): Boolean {
         val labels = listOf(api.name) + api.tags.map { it.first } + api.mainCategories.map { it.first } +
                 api.orderBys.map { it.first }

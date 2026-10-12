@@ -55,7 +55,8 @@ with those providers).
 - Sources with `hasMainPage`, grouped by language: the reading languages chosen in the setup
   wizard first (default preferences `reading_languages` or `setup_reading_languages`, a string
   set or comma-separated; absent = no preference), then the remaining CJK languages in the order
-  Chinese, Japanese, Korean, then every other language in one "Other sources" group, collapsed.
+  Chinese, Japanese, Korean, then the rest (English, the only other source language, unless it is
+  a reading language) in one "Other sources" group, collapsed.
 - Each source card: name, language chip, the name of its default listing, and a horizontal
   "Popular" rail with the first 12 entries. The label under the source name is the provider's default listing: the first label of the first axis that is not a bare "All" (a status axis that defaults to "All" is skipped, so a ranking on the next axis is shown instead), or "Popular" when there is none. Tapping a poster opens the result page
   (`loadResult`), a long press the preview sheet; the card title or "See all" opens the
@@ -188,7 +189,7 @@ novel's translations keeps these rows (they are tiny, paid for, and shown again 
 - The disk cache is per (source, listing, page) with a fixed 6 h TTL; a listing that changes faster
   (latest updates) can look up to 6 hours old after a restart until pulled to refresh.
 - Top 100 / ranking pages (Novelpia, Naver) have a single page; the list ends there.
-- The All sources feed covers zh / ja / ko sources; other languages are browsed per source.
+- The All sources feed covers zh / ja / ko sources; English sources are browsed per source.
 - De-duplication only compares title (and author when listed); different novels with the same
   title and no author in the listing are merged. Chapter counts are rarely in listings, so the
   first copy seen is usually kept.

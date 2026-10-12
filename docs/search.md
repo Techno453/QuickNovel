@@ -20,11 +20,12 @@ cover widths). On wide windows it sits under the search field, centred with it.
 
 | Chip | Sources searched | Query sent to them |
 |---|---|---|
-| All languages | every enabled source | each CJK source gets candidates in its own language; English and other sources get the raw query |
+| All languages | every enabled source | each CJK source gets candidates in its own language; English sources get the raw query |
 | Chinese / Japanese / Korean | sources whose `MainAPI.lang` has that base language (`zh-CN` counts as Chinese) | candidates in that language only |
 | English | sources whose lang is `en` or unset (the upstream default of `MainAPI.lang`) | the raw query, never translated |
 
-- Other languages (ar, es, fr, id, pt, ru) are only searched under All languages.
+- Only en, zh, ja and ko sources exist (the others were removed, docs/sources.md "Removed sources");
+  a source in any other language would only be searched under All languages.
 - The user's settings still apply on top: Settings → Search providers (per source) and Provider
   languages.
 - The chip also filters the source tiles shown before a search.
@@ -32,8 +33,9 @@ cover widths). On wide windows it sits under the search field, centred with it.
   `ja`, `ko`, `en`; default `all`). It is restored when the tab opens.
 - Changing the chip while results are open re-runs the last query.
 - If no enabled source has the chosen language, a notice says so.
-- Results: with All languages, the raw CJK sources' sections come first, then English sites, then
-  other languages. Sections with results come before empty or failed ones.
+- Results: with All languages, the raw CJK sources' sections come first, then English sites
+  (a source in any other language would come last). Sections with results come before empty or
+  failed ones.
 
 ## Candidate queries
 

@@ -15,8 +15,6 @@
 - https://bestlightnovel.com
 - https://freewebnovel.com
 - https://graycity.net
-- https://indowebnovel.id
-- https://kolnovel.com
 - https://libread.com
 - https://lightnovelstranslations.com/Li
 - https://risenovel.com
@@ -28,7 +26,6 @@
 - https://readfrom.net
 - https://readnovelfull.com
 - https://www.royalroad.com
-- https://sakuranovel.id
 - https://www.scribblehub.com
 
 **Скриншоты:**

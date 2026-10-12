@@ -21,45 +21,32 @@ import com.lagradost.quicknovel.providers.korean.NaverWebNovelProvider
 import com.lagradost.quicknovel.providers.japanese.KakuyomuProvider
 import com.lagradost.quicknovel.providers.korean.NovelpiaProvider
 import com.lagradost.quicknovel.providers.AnnasArchive
-import com.lagradost.quicknovel.providers.ArNoProvider
 import com.lagradost.quicknovel.providers.AsianNovelProvider
 import com.lagradost.quicknovel.providers.BrightNovelProvider
 import com.lagradost.quicknovel.providers.ChikariProvider
-import com.lagradost.quicknovel.providers.DevilNovelsProvider
 import com.lagradost.quicknovel.providers.FaqWikiProvider
 import com.lagradost.quicknovel.providers.FenrirRealProvider
 import com.lagradost.quicknovel.providers.FreewebnovelProvider
-import com.lagradost.quicknovel.providers.GalaxyNovelsProvider
 import com.lagradost.quicknovel.providers.GraycityProvider
-import com.lagradost.quicknovel.providers.IndoWebNovelProvider
 import com.lagradost.quicknovel.providers.LnoriProvider
-import com.lagradost.quicknovel.providers.KolNovelProvider
 import com.lagradost.quicknovel.providers.LibReadProvider
 import com.lagradost.quicknovel.providers.LightNovelTranslationsProvider
 import com.lagradost.quicknovel.providers.NovLoveProvider
 import com.lagradost.quicknovel.providers.NovelBinProvider
 import com.lagradost.quicknovel.providers.NovelFireProvider
-import com.lagradost.quicknovel.providers.NovelFranceProvider
 import com.lagradost.quicknovel.providers.NovelFullNETProvider
 import com.lagradost.quicknovel.providers.NovelFullProvider
 import com.lagradost.quicknovel.providers.NovelLightProvider
-import com.lagradost.quicknovel.providers.NovelManiaProvider
 import com.lagradost.quicknovel.providers.NovelPhoenixProvider
-import com.lagradost.quicknovel.providers.NovelasLigerasProvider
-import com.lagradost.quicknovel.providers.PlanetaEpubProvider
 import com.lagradost.quicknovel.providers.QuanbenProvider
-import com.lagradost.quicknovel.providers.RanobeHubProvider
 import com.lagradost.quicknovel.providers.RanobesProvider
 import com.lagradost.quicknovel.providers.ReadNovelFullProvider
 import com.lagradost.quicknovel.providers.ReadfromnetProvider
 import com.lagradost.quicknovel.providers.ReadhiveProvider
 import com.lagradost.quicknovel.providers.RedditProvider
-import com.lagradost.quicknovel.providers.RewayatProvider
 import com.lagradost.quicknovel.providers.RoyalRoadProvider
-import com.lagradost.quicknovel.providers.SakuraNovelProvider
 import com.lagradost.quicknovel.providers.ScribblehubProvider
 import com.lagradost.quicknovel.providers.ScrollersPubProvider
-import com.lagradost.quicknovel.providers.SkyNovelsProvider
 import com.lagradost.quicknovel.providers.SyosetuProvider
 import com.lagradost.quicknovel.providers.WuxiaWorldProvider
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
@@ -70,58 +57,45 @@ class Apis {
             //AllProvider(),
             AllNovelProvider(),
             AnnasArchive(),
-            ArNoProvider(),
             AsianNovelProvider(),
             //AzynovelProvider(), // dont exist anymore
             //BestLightNovelProvider(), //dont exist anymore
             BrightNovelProvider(),
             ChikariProvider(),
             //ComrademaoProvider(), // domain sold/down?
-            DevilNovelsProvider(),
             //EfremnetProvider(), // domain is expired
             //EngNovelProvider(),
             FaqWikiProvider(),
             FenrirRealProvider(),
             FreewebnovelProvider(),
             GraycityProvider(),
-            GalaxyNovelsProvider(),
-            IndoWebNovelProvider(),
-            KolNovelProvider(),
             LibReadProvider(),
             //LightNovelPubProvider(), // Got cloudflare, but probably bypassable
             LightNovelTranslationsProvider(),
            // LightNovelWorldProvider(), // Replaced with chikari.moe
             LnoriProvider(),
             //MNovelFreeProvider(), // same as NovelFullVipProvider
-            NovelasLigerasProvider(),
             NovelBinProvider(),
             NovelFireProvider(),
             NovelFullNETProvider(),
             NovelFullProvider(),
             NovelLightProvider(),
-            NovelManiaProvider(),
-            NovelFranceProvider(),
             //NovelPassionProvider(), // Site gone
             //NovelsOnlineProvider(), // not working
             NovLoveProvider(),
             NovelPhoenixProvider(),
-            //PlanetaEpubProvider(), //not working
             QuanbenProvider(),
             RanobesProvider(),
-            RanobeHubProvider(),
             //RanobesProvider(),
             //ReadAnyBookProvider(), // Books locked behind login
             ReadfromnetProvider(),
             ReadhiveProvider(),
             //ReadLightNovelProvider(), // NOT WORKING?
             ReadNovelFullProvider(),
-            RewayatProvider(),
             RoyalRoadProvider(),
-            SakuraNovelProvider(), // cloudflare?
             ScribblehubProvider(),
             ScrollersPubProvider(),
             SyosetuProvider(),
-            SkyNovelsProvider(),
             WuxiaWorldProvider(),
             //WuxiaWorldOnlineProvider(), // Site does not work
             //WuxiaWorldSiteProvider(),
