@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="gbk">
+<meta name="viewport" content="initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>小说点击排行榜_精品小说推荐榜_69书吧</title>
+<meta name="keywords" content="69书吧小说排行榜,精品小说推荐榜" />
+<meta name="description" content="69书吧为您提供最受小说迷喜爱,点击最热的精品全本完结小说阅读！">
+<link rel="stylesheet" type="text/css" href="https://cdn.cdnshu.com/css/style.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.cdnshu.com/css/iconfont/iconfont.css">
+<script src="https://cdn.cdnshu.com/js/jquery.min.js"></script>
+<script src="https://cdn.cdnshu.com/js/newmain.js"></script>
+<link rel="shortcut icon" href="https://cdn.cdnshu.com/favicon.ico" type="image/x-icon">
+</head>
+<body class="readbody">
+    <div class="leftmenu">
+        <div class="menu_close_btn" onclick="hidemenu()"><i class="iconfont icon-close" onclick="hidemenu()"></i></div>
+        <div class="headuser">
+        <div class="headimg"><img class="user_touxiang" src="https://cdn.cdnshu.com/images/user.png" alt=""/></div>
+        <span><script type=text/javascript>uname()</script></span>
+        </div>
+        <div class="register">
+            <script type=text/javascript>login2()</script>
+        </div>
+        <div class="menu2">
+            <ul>
+                <li><a href="https://www.69shuba.com/"><i class="iconfont icon-home"></i>首页</a></li>
+                <li><a href="https://www.69shuba.com/novels/hot"><i class="iconfont icon-chart"></i>排行榜</a></li>
+                <li><a href="https://www.69shuba.com/novels/full"><i class="iconfont icon-ai-book"></i>完本小说</a></li>
+                <li><a href="https://www.69shuba.com/novels/class/0.htm"><i class="iconfont icon-list1"></i>小说分类</a></li>
+                <li><a href="/modules/article/bookcase.php"><i class="iconfont icon-library"></i>我的书架</a></li>
+                <li><a href="https://www.69shuba.com/jilu/"><i class="iconfont icon-yuedujilu"></i>阅读记录</a></li>
+                <li><a href="https://www.69shuba.com/newmessage.php?tosys=1&title=%B7%B4%C0%A1"><i class="iconfont icon-chat"></i>意见反馈</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="modbg" onclick="hidemenu()"></div>
+    <header>
+        <div class="headbox clearfix">
+            <div class="menubtn pull-left" onclick="showmenu()"><i class="iconfont icon-menu"></i></div>
+            <div class="logo pull-left">
+                <div class="logoimg"></div>
+                <a href="https://www.69shuba.com/">69书吧</a>
+            </div>
+            <form action="/modules/article/search.php" method="post">
+            <div class="search pull-left">
+                
+                <i class="iconfont icon-search"></i>
+                <div class="inputbox">
+                    <i class="iconfont icon-ArrowLeft"></i>
+                    <input type="text" onblur="if(this.value==''){this.value=this.defaultValue}" onfocus="if(this.value==this.defaultValue){this.value=''}" value="请输入搜索内容！" name="searchkey"/>
+                    <input type="hidden" name="searchtype"  value="all" />
+                </div>
+            </div> </form>
+            <div class="user1 pull-right" onclick="showmenu()"><img class="user_touxiang" src="https://cdn.cdnshu.com/images/user.png" alt=""/></div>
+            <div class="lang pull-right">
+                <a href="javascript:;" class="textsel">简体</a>
+                <ul>
+                    <li><a href="javascript:zh_tran('s');" class="zh_click" id="zh_click_s">简体</a> </li>
+                    <li><a href="javascript:zh_tran('t');" class="zh_click" id="zh_click_t">繁體</a></li>
+                </ul>
+            </div>
+            <div class="menu1 pull-right">
+                <ul>
+                    <li><a href="https://www.69shuba.com/"> 首页</a></li>
+                    <li><a href="https://www.69shuba.com/novels/hot"><i class="iconfont icon-chart"></i> 排行</a></li>
+                    <li><a href="https://www.69shuba.com/novels/full"><i class="iconfont icon-ai-book"></i> 完本</a></li>
+                    <li><a href="https://www.69shuba.com/novels/class/0.htm"><i class="iconfont icon-list1"></i> 分类</a></li>
+                    <li><a href="https://www.69shuba.com/modules/article/bookcase.php"><i class="iconfont icon-library"></i> 我的书架</a></li>
+                    <li><a href="https://www.69shuba.com/jilu/"><i class="iconfont icon-yuedujilu"></i> 阅读记录</a></li>
+
+                </ul>
+            </div>
+        </div>
+    </header>
+    
+    
+    
+    
+    
+
+<!--头部内容结束-->
+
+    <div class="container">
+        <div class="mybox"  style="background: none; padding: 0; box-shadow: none;">
+     <div class="weekl_yrank">        
+  
+  
+  <li class="active"><a href="https://www.69shuba.com/novels/monthvisit_0_0_1.htm"><strong>不限</strong></a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_0_2_1.htm">连载</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_0_1_1.htm">全本</a></li>
+  
+  &nbsp;
+    
+  
+  <li class="active"><a href="https://www.69shuba.com/novels/monthvisit_0_0_1.htm"><strong>人气</strong></a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/allvote_0_0_1.htm">推荐</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/newhot_0_0_1.htm">新书榜</a></li>
+  
+  
+    </div>         
+           <div class=" clearfix listbox">
+                  <div class="listleft">
+                <ul>
+  
+  
+  <li class="active"><a href="https://www.69shuba.com/novels/monthvisit_0_0_1.htm">全部</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_1_0_1.htm">玄幻魔法</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_2_0_1.htm">修真武侠</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_3_0_1.htm">言情小说</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_4_0_1.htm">历史军事</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_5_0_1.htm">游戏竞技</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_6_0_1.htm">科幻空间</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_7_0_1.htm">悬疑惊悚</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_8_0_1.htm">同人小说</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_9_0_1.htm">都市小说</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_10_0_1.htm">官场职场</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_11_0_1.htm">穿越时空</a></li>
+  
+  
+  
+  <li><a href="https://www.69shuba.com/novels/monthvisit_12_0_1.htm">青春校园</a></li>
+  
+  
+                </ul>
+            </div>      
+            <div class="listright">
+                <div class="newbox">
+                    <ul id="article_list_content">
+                         
+                        <li>
+                            <a href="https://www.69shuba.com/book/29590.htm" class="imgbox" >
+                                <img src="https://cdn.cdnshu.com/images/nocover.jpg" alt="1" data-src="https://cdn.cdnshu.com/files/article/image/29/29590/29590s.jpg">
+                            </a>
+                            <div class="newnav">
+                                <h3><a href="https://www.69shuba.com/book/29590.htm" >诡秘之主</a></h3>
+                                <div class="labelbox">
+                                    <label>爱潜水的乌贼</label>
+                                    <label>全本</label>
+                                </div>
+                                <ol class="ellipsis_2">
+                                        乙丙丁戊己庚辛壬癸，乙丙丁戊己庚？壬癸甲乙丙丁戊己庚，壬癸甲乙丙丁？己庚辛壬癸甲乙，丁戊己庚辛壬癸甲：
+    辛壬，甲乙，丁戊，庚辛壬，甲乙丙；戊己，辛壬，甲乙，丁戊己，辛壬癸……丙丁戊己庚辛，癸甲乙丙丁戊，庚辛壬癸“乙丙”戊己庚。
+
+                                </ol>
+                                <div class="zxzj">
+                                    <p><span>最近章节</span>1417.新书已发</p>
+                                </div>
+                            </div>
+                            <div class="newright">
+                                <div class="piaos">
+                                    <span></span><label></label>
+                                </div>
+                                        <a class="btn btn-tp" href="https://www.69shuba.com/book/29590.htm">点击阅读</a>
+                                        <a class="btn btn-jrsj" rel="nofollow" id="a_addbookcase" href="javascript:;" onclick="addbookcase(29590,0);">加入书架</a>
+                            </div>
+                        </li>
+                        
+                        <li>
+                            <a href="https://www.69shuba.com/book/48273.htm" class="imgbox" >
+                                <img src="https://cdn.cdnshu.com/images/nocover.jpg" alt="1" data-src="https://cdn.cdnshu.com/files/article/image/48/48273/48273s.jpg">
+                            </a>
+                            <div class="newnav">
+                                <h3><a href="https://www.69shuba.com/book/48273.htm" >阵问长生</a></h3>
+                                <div class="labelbox">
+                                    <label>观虚</label>
+                                    <label>连载</label>
+                                </div>
+                                <ol class="ellipsis_2">
+                                    辛壬癸甲，丙丁戊己，辛壬癸甲，丙丁戊己，辛壬癸甲乙丙。
+己庚辛壬癸甲乙丙，戊己庚辛，癸甲乙丙。
+己庚辛壬癸，乙丙丁戊，庚辛壬癸，乙丙丁戊。
+辛壬癸甲乙丙，戊己庚辛，癸甲乙丙丁戊己庚辛壬癸甲乙丙丁戊己。
+壬癸甲乙丙丁戊，庚辛壬癸甲乙丙。
+己庚辛壬癸甲乙丙，戊己庚辛壬癸。
+丙丁戊己庚辛，癸甲乙丙丁戊，庚辛壬癸甲乙，丁戊己庚辛壬，甲乙丙丁戊己……
+                                </ol>
+                                <div class="zxzj">
+                                    <p><span>最近章节</span>请假条</p>
+                                </div>
+                            </div>
+                            <div class="newright">
+                                <div class="piaos">
+                                    <span></span><label></label>
+                                </div>
+                                        <a class="btn btn-tp" href="https://www.69shuba.com/book/48273.htm">点击阅读</a>
+                                        <a class="btn btn-jrsj" rel="nofollow" id="a_addbookcase" href="javascript:;" onclick="addbookcase(48273,0);">加入书架</a>
+                            </div>
+                        </li>
+                        
+                        <li>
+                            <a href="https://www.69shuba.com/book/90442.htm" class="imgbox" >
+                                <img src="https://cdn.cdnshu.com/images/nocover.jpg" alt="1" data-src="https://cdn.cdnshu.com/files/article/image/90/90442/90442s.jpg">
+                            </a>
+                            <div class="newnav">
+                                <h3><a href="https://www.69shuba.com/book/90442.htm" >霍格沃茨的学习面板</a></h3>
+                                <div class="labelbox">
+                                    <label>林曦遇鹿</label>
+                                    <label>连载</label>
+                                </div>
+                                <ol class="ellipsis_2">
+                                    辛壬癸甲，丙丁戊己庚辛壬癸甲乙丙丁戊己，辛壬癸甲乙丙丁戊，庚辛壬癸甲乙丙丁戊己庚辛壬癸甲乙丙。
+己庚辛壬癸甲乙，丁戊己庚辛壬癸甲乙。
+“己庚辛壬癸甲乙丙丁戊己庚辛壬！甲乙丙丁戊，庚辛！”
+乙丙丁戊己庚辛壬【甲乙丙丁】，庚辛壬癸甲乙丙丁【己庚辛】；
+乙丙丁戊己庚辛【癸甲乙丙丁】，庚辛壬癸甲乙丙丁戊己【辛壬癸甲】；
+戊己庚辛壬癸甲乙丙丁戊【庚辛壬癸】，丙丁戊己庚辛壬癸甲乙丙【戊己庚辛】。
+乙丙丁戊己庚辛壬癸甲乙丙：戊己、辛壬、甲乙、丁戊己、辛壬、甲乙丙丁、己庚、壬癸……
+丁戊己庚辛壬癸甲乙丙丁：己庚辛壬...
+                                </ol>
+                                <div class="zxzj">
+                                    <p><span>最近章节</span>第568章 566：任意门</p>
+                                </div>
+                            </div>
+                            <div class="newright">
+                                <div class="piaos">
+                                    <span></span><label></label>
+                                </div>
+                                        <a class="btn btn-tp" href="https://www.69shuba.com/book/90442.htm">点击阅读</a>
+                                        <a class="btn btn-jrsj" rel="nofollow" id="a_addbookcase" href="javascript:;" onclick="addbookcase(90442,0);">加入书架</a>
+                            </div>
+                        </li>
+                        
+                        <li>
+                            <a href="https://www.69shuba.com/book/43484.htm" class="imgbox" >
+                                <img src="https://cdn.cdnshu.com/images/nocover.jpg" alt="1" data-src="https://cdn.cdnshu.com/files/article/image/43/43484/43484s.jpg">
+                            </a>
+                            <div class="newnav">
+                                <h3><a href="https://www.69shuba.com/book/43484.htm" >御兽从零分开始</a></h3>
+                                <div class="labelbox">
+                                    <label>给我加葱</label>
+                                    <label>连载</label>
+                                </div>
+                                <ol class="ellipsis_2">
+                                    辛壬癸，乙丙丁戊己庚辛壬癸甲乙丙。
+己庚辛壬癸甲乙丙丁戊。
+985甲乙丙丁戊己？
+壬癸甲……
+戊己庚辛壬癸甲！
+丁戊己庚辛壬癸甲乙丙丁戊己？
+壬癸甲乙丙丁戊己庚辛壬癸？
+……
+……
+壬癸甲乙丙丁戊己。
+                                </ol>
+                                <div class="zxzj">
+                                    <p><span>最近章节</span>1600.第1594章 这是什么？（二合一）</p>
+                                </div>
+                            </div>
+                            <div class="newright">
+                                <div class="piaos">
+                                    <span></span><label></label>
+                                </div>
+                                        <a class="btn btn-tp" href="https://www.69shuba.com/book/43484.htm">点击阅读</a>
+                                        <a class="btn btn-jrsj" rel="nofollow" id="a_addbookcase" href="javascript:;" onclick="addbookcase(43484,0);">加入书架</a>
+                            </div>
+                        </li>
+                        
+                        <li>
+                            <a href="https://www.69shuba.com/book/90509.htm" class="imgbox" >
+                                <img src="https://cdn.cdnshu.com/images/nocover.jpg" alt="1" data-src="https://cdn.cdnshu.com/files/article/image/90/90509/90509s.jpg">
+                            </a>
+                            <div class="newnav">
+                                <h3><a href="https://www.69shuba.com/book/90509.htm" >我所有职业，天赋全是神级？</a></h3>
+                                <div class="labelbox">
+                                    <label>行陆苍穹</label>
+                                    <label>连载</label>
+                                </div>
+                                <ol class="ellipsis_2">
+                                    辛壬、甲乙丙、戊己、辛壬、甲乙丙、戊己庚辛……
+乙丙丁、己庚辛、癸甲、丙丁戊、庚辛壬……
+丙丁戊己庚辛壬癸甲乙丙丁戊己庚辛。
+甲乙，丁戊己庚辛壬1甲，丙丁戊己庚辛壬癸甲乙丙。
+己庚：「癸甲·丙丁戊己庚」——甲乙丙丁戊己庚辛，癸甲乙丙。
+己庚辛：「甲乙·丁戊己庚」——甲乙丙丁戊己庚辛壬癸。
+丙丁戊：「辛壬·甲乙」——己庚辛壬癸甲乙丙，戊己庚辛。
+……
+丁戊己庚辛壬癸甲乙丙，戊己庚辛壬癸……
+丁戊，庚辛壬癸。
+【丁戊8000癸甲乙丙，戊己庚辛】
+                                </ol>
+                                <div class="zxzj">
+                                    <p><span>最近章节</span>反思，最后再肺腑一些吧</p>
+                                </div>
+                            </div>
+                            <div class="newright">
+                                <div class="piaos">
+                                    <span></span><label></label>
+                                </div>
+                                        <a class="btn btn-tp" href="https://www.69shuba.com/book/90509.htm">点击阅读</a>
+                                        <a class="btn btn-jrsj" rel="nofollow" id="a_addbookcase" href="javascript:;" onclick="addbookcase(90509,0);">加入书架</a>
+                            </div>
+                        </li>
+                        
+                    </ul>
+                </div>
+            </div>
+           </div>
+    </div>
+    </div>
+
+<div class="foot">
+<div class="copyright">
+        <div>
+            <a href="/novels/hot">排行榜</a>
+            <a href="/last.html">最新更新</a>
+            <a href="/all.html">全部小说</a>
+            <a href="/tags">热门小说标签</a>
+        </div>
+        <p>Copyright 2025 <a href="https://www.69shuba.com/">69书吧</a><a href="https://www.69shuba.com/">www.69shuba.com</a></p>
+    </div>
+</div>
+<div class="modelbg"></div>
+<script src="https://cdn.cdnshu.com/js/chinese.js"></script>
+   <script>
+            start();
+            var clock;
+            $(window).on('scroll',function(){
+                if(clock){
+                    clearTimeout(clock);
+                }
+                clock = setTimeout(function(){
+                    start()
+                },10)
+            })
+            function start(){
+                 $('.container img').not('[data-isLoading]').each(function () {
+                    if (isShow($(this))) {
+                        loadImg($(this));
+                    }
+                })
+            }
+            function isShow($node){
+                return $node.offset().top <= $(window).height()+$(window).scrollTop();
+            }
+            function loadImg($img){
+                    $img.attr('src', $img.attr('data-src'));
+                    $img.attr('data-isLoading',1);
+            }
+
+        </script>
+</body>
+</html>

@@ -13,11 +13,11 @@ import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
+import com.lagradost.quicknovel.providers.CjkStatus
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.cleanChapterText
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.extractChineseTitle
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.paragraphs
 import com.lagradost.quicknovel.providers.chinese.ChineseProviderUtils.textWithEncoding
-import com.lagradost.quicknovel.setStatus
 import com.lagradost.quicknovel.util.Coroutines.main
 import kotlinx.coroutines.delay
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,6 +42,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *            Chapters: div.catalog#catalog ul li a  (newest-first, reversed on load)
  *   Chapter content: /txt/{id}/{cid}
  *            Content: div.txtnav
+ *   Browse (verified 2026-10): /novels/{order}_{category}_{status}_{page}.htm
+ *            Results: div.newbox ul li (same markup as search results)
  *
  * NOTE: GET pages load fine with plain OkHttp + browser User-Agent — no CF JS challenge.
  * The search POST endpoint has Cloudflare Turnstile.  We solve it by loading the search
@@ -64,24 +66,40 @@ class BiqugeProvider : MainAPI() {
         "Referer"    to mainUrl,
     )
 
+    // Browse (verified 2026-10-11). The old /paihang/... and /novels/class/{tag}/{order}/{page}/
+    // URLs return 404 since the redesign. Rankings are /novels/{order}_{category}_{status}_{page}.htm
+    // (50 per page). Not offered: newhot (新书榜) answers with a Cloudflare managed challenge
+    // outside a browser; lastupdate/allvisit/goodnum/postdate/dayvisit rankings are empty. The
+    // site has no monthly-ticket (月票) or bookmark (收藏) ranking.
     override val orderBys = listOf(
-        "Latest Update"   to "lastupdate",
-        "Clicks"          to "click",
-        "Collected"       to "goodnum"
+        "Popular, monthly (人气榜)" to "monthvisit",
+        "Popular, weekly (周榜)"    to "weekvisit",
+        "Recommended (推荐榜)"      to "allvote",
+        // /last.html: one page of the 30 latest updated books; ignores category and status.
+        "Latest updates (最近更新)" to LATEST,
     )
 
+    override val mainCategories = listOf(
+        "All"               to "0",
+        "Ongoing (连载)"    to "2",
+        "Completed (全本)"  to "1",
+    )
+
+    // Category ids as used by the site's own filters (same ids as /novels/class/{id}.htm).
     override val tags = listOf(
-        "All"             to "",
-        "Xianxia"         to "14",
-        "Xuanhuan"        to "15",
-        "Wuxia"           to "5",
-        "Urban"           to "1",
-        "History"         to "2",
-        "Online Game"     to "6",
-        "Science Fiction" to "7",
-        "Fantasy"         to "11",
-        "Military"        to "8",
-        "Romance"         to "10"
+        "All genres"                  to "0",
+        "Romance (言情)"              to "3",
+        "Fantasy & magic (玄幻魔法)"   to "1",
+        "Xianxia & wuxia (修真武侠)"   to "2",
+        "Time travel (穿越时空)"       to "11",
+        "Urban (都市)"                to "9",
+        "History & military (历史军事)" to "4",
+        "Games & sports (游戏竞技)"    to "5",
+        "Sci-fi (科幻空间)"            to "6",
+        "Suspense & horror (悬疑惊悚)" to "7",
+        "Fan fiction (同人)"           to "8",
+        "Officialdom & workplace (官场职场)" to "10",
+        "Youth & campus (青春校园)"    to "12",
     )
 
     // ─── Rate limiting ───────────────────────────────────────────────────────────
@@ -131,6 +149,15 @@ class BiqugeProvider : MainAPI() {
             results.add(newSearchResponse(title, href, fix = false) { posterUrl = cover })
         }
 
+        // Latest updates (/last.html): div.recentupdate2 ul li > a[book] a[chapter] span[date].
+        document.select("div.recentupdate2 ul li").forEach { el ->
+            val linkEl = el.select("a[href]").firstOrNull { it.attr("href").contains("/book/") }
+                ?: return@forEach
+            val title = linkEl.text().trim().ifBlank { return@forEach }
+            val href = linkEl.absUrl("href").ifBlank { "$mainUrl${linkEl.attr("href")}" }
+            results.add(newSearchResponse(title, href, fix = false))
+        }
+
         return results
     }
 
@@ -142,15 +169,23 @@ class BiqugeProvider : MainAPI() {
         orderBy: String?,
         tag: String?,
     ): HeadMainPageResponse {
-        val order = orderBy ?: "lastupdate"
-        val tagStr = tag ?: ""
-        val url = if (tagStr.isBlank()) {
-            "$mainUrl/paihang/$order/$page/"
-        } else {
-            "$mainUrl/novels/class/$tagStr/$order/$page/"
-        }
+        val url = mainPageUrl(page, mainCategory, orderBy, tag)
+        // The latest-updates page has no further pages; repeating it would duplicate the list.
+        if (orderBy == LATEST && page > 1) return HeadMainPageResponse(url, emptyList())
         val doc = Jsoup.parse(get(url).textWithEncoding(), url)
         return HeadMainPageResponse(url, parseBookList(doc))
+    }
+
+    /**
+     * Browse URL: a ranking page such as `/novels/monthvisit_3_2_1.htm` (romance, ongoing,
+     * page 1), or `/last.html` for the latest updates.
+     */
+    internal fun mainPageUrl(page: Int, mainCategory: String?, orderBy: String?, tag: String?): String {
+        val order = orderBy?.takeIf { it.isNotBlank() } ?: orderBys.first().second
+        if (order == LATEST) return "$mainUrl/last.html"
+        val category = tag?.takeIf { it.isNotBlank() } ?: "0"
+        val status = mainCategory?.takeIf { it.isNotBlank() } ?: "0"
+        return "$mainUrl/novels/${order}_${category}_${status}_${page.coerceAtLeast(1)}.htm"
     }
 
     // ─── Search ───────────────────────────────────────────────────────────────────
@@ -343,8 +378,11 @@ class BiqugeProvider : MainAPI() {
         // Synopsis: <div class="navtxt"><p>…</p>
         val synopsis = doc.selectFirst("div.navtxt p")?.text()?.trim()
 
-        // Status from booknav2 text (contains "连载" / "完本")
-        val statusText = doc.selectFirst("div.booknav2")?.text()
+        // Status: og:novel:status (连载 / 全本 / 完本), else the "71.35万字 | 连载" line.
+        val status = CjkStatus.parse(doc.selectFirst("meta[property=og:novel:status]")?.attr("content"))
+            ?: CjkStatus.parse(doc.select("div.booknav2 p").firstOrNull { it.text().contains("|") }?.text())
+
+        val tags = parseTags(doc)
 
         val chapters = mutableListOf<com.lagradost.quicknovel.ChapterData>()
 
@@ -374,8 +412,27 @@ class BiqugeProvider : MainAPI() {
             this.author = author
             this.posterUrl = cover
             this.synopsis = synopsis
-            setStatus(statusText)
+            this.status = status
+            this.tags = tags.ifEmpty { null }
         }
+    }
+
+    /**
+     * Category (分类 / og:novel:category) followed by the site's tags. The tags are only in the
+     * page's `bookinfo` script (`tags: '穿越|篮球|...|'`); the visible tag list is filled by JS.
+     */
+    internal fun parseTags(doc: org.jsoup.nodes.Document): List<String> {
+        val category = doc.selectFirst("meta[property=og:novel:category]")?.attr("content")
+            ?: doc.selectFirst("div.booknav2 p a[href*=/novels/class/]")?.text()
+        val scriptTags = doc.select("script").asSequence()
+            .mapNotNull { Regex("""\btags\s*:\s*'([^']*)'""").find(it.data())?.groupValues?.get(1) }
+            .firstOrNull()
+            ?.split('|')
+            .orEmpty()
+        return (listOfNotNull(category) + scriptTags)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
     }
 
     // ─── Load chapter ─────────────────────────────────────────────────────────────
@@ -412,6 +469,9 @@ class BiqugeProvider : MainAPI() {
 
     companion object {
         private const val TAG = "BiqugeProvider"
+
+        /** [orderBys] value for the latest-updates page. */
+        internal const val LATEST = "last"
 
         /** Pause after this many chapter fetches (any caller). */
         private const val CF_BURST_SIZE = 25
