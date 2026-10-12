@@ -14,30 +14,24 @@
 - https://annas-archive.org
 - https://bestlightnovel.com
 - https://freewebnovel.com
-- https://www.fanmtl.com
 - https://graycity.net
 - https://hiraethtranslation.com
 - https://indowebnovel.id
 - https://kolnovel.com
 - https://libread.com
 - https://lightnovelstranslations.com/Li
-- https://meionovels.com
 - https://risenovel.com
 - https://readonlinefreebook.com
-- https://www.mtlnovels.com
 - https://novelbin.com
 - https://novelfull.com
 - https://novelsonline.org
 - https://novlove.com/
 - https://novelfire.net/
-- https://pawread.com
 - https://readfrom.net
 - https://readnovelfull.com
 - https://www.royalroad.com
 - https://sakuranovel.id
 - https://www.scribblehub.com
-- https://wtr-lab.com
-- https://www.wuxiabox.com/
 
 **Скриншоты:**
 

@@ -14,7 +14,6 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://annas-archive.org
 - https://bestlightnovel.com
 - https://chrysanthemumgarden.com
-- https://www.fanmtl.com
 - https://fenrirealm.com
 - https://free.kolnovel.com
 - https://freewebnovel.com
@@ -26,18 +25,12 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://libread.com
 - https://lightnovelstranslations.com
 - https://lightnovelworld.org
-- https://lnmtl.com
-- https://meionovels.com
-- https://mtlnovel.me
-- https://www.nobadnovel.com
 - https://novelbin.com
-- https://novelbuddy.com
 - https://novelfire.net
 - https://novelfull.com
 - https://novelpia.com (Korean, free episodes only)
 - https://novelsonline.org
 - https://novlove.com
-- https://pawread.com
 - https://readfrom.net
 - https://readnovelfull.com
 - https://readonlinefreebook.com
@@ -47,10 +40,6 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://sakuranovel.id
 - https://www.scribblehub.com
 - https://www.skynovels.net
-- https://www.sonicmtl.com
-- https://wtr-lab.com
-- https://wuxia.click
-- https://www.wuxiabox.com
 - https://www.69shuba.com (Chinese)
 
 **AI translation:**

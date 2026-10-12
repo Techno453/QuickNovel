@@ -490,7 +490,7 @@ class BiqugeProvider : MainAPI() {
 
         /**
          * Extracts chapter text as reader HTML: one `<p>` per paragraph (the same shape other
-         * providers such as WtrLab return), paragraphs separated by a blank line so plain-text
+         * providers return), paragraphs separated by a blank line so plain-text
          * consumers can still split on "\n\n". Pure, so it is covered by a JVM unit test.
          */
         fun parseChapterHtml(html: String, url: String): String? {
