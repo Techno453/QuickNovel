@@ -85,12 +85,44 @@ class InAppUpdater {
         val channel: Channel get() = if (BuildConfig.DEBUG) Channel.PRE_RELEASE else Channel.STABLE
 
         /**
-         * Upstream's comparison, unchanged: the first asset's name must contain an `x.y.z`
-         * version, which is compared as a string with the installed versionName.
+         * ABIs the release workflow publishes a split APK for (`QuickNovel-<version>-<abi>.apk`,
+         * see `splits` in app/build.gradle and docs/ci.md), next to
+         * `QuickNovel-<version>-universal.apk`.
          */
-        internal fun stableUpdate(release: GithubRelease, installedVersionName: String?): Update {
+        internal val SPLIT_ABIS = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+
+        /**
+         * The APK of a release to install on a device whose ABIs are [supportedAbis]
+         * (`Build.SUPPORTED_ABIS`, most preferred first): the split APK of the first device ABI
+         * that has one, else the universal APK, else the first APK whose name names no ABI (an
+         * old single-APK release, or the pre-release). Null when the release only has other ABIs'
+         * splits. Other assets (`…-mapping.txt`) are never chosen.
+         */
+        internal fun pickApkAsset(assets: List<GithubAsset>, supportedAbis: List<String>): GithubAsset? {
+            val apks = assets.filter { it.name.endsWith(".apk", ignoreCase = true) }
+            fun abiOf(name: String): String? =
+                SPLIT_ABIS.firstOrNull { name.endsWith("-$it.apk", ignoreCase = true) }
+            for (abi in supportedAbis) {
+                apks.firstOrNull { abiOf(it.name).equals(abi, ignoreCase = true) }?.let { return it }
+            }
+            apks.firstOrNull { it.name.endsWith("-universal.apk", ignoreCase = true) }?.let { return it }
+            return apks.firstOrNull { abiOf(it.name) == null }
+        }
+
+        private val deviceAbis: List<String>
+            get() = runCatching { Build.SUPPORTED_ABIS?.toList() }.getOrNull().orEmpty()
+
+        /**
+         * Upstream's comparison: the name of the asset [pickApkAsset] chooses must contain an
+         * `x.y.z` version, which is compared as a string with the installed versionName.
+         */
+        internal fun stableUpdate(
+            release: GithubRelease,
+            installedVersionName: String?,
+            supportedAbis: List<String> = deviceAbis,
+        ): Update {
             val versionRegex = Regex("""(.*?((\d)\.(\d)\.(\d)).*\.apk)""")
-            val foundAsset = release.assets.getOrNull(0)
+            val foundAsset = pickApkAsset(release.assets, supportedAbis)
             val foundVersion = foundAsset?.name?.let { versionRegex.find(it) }
             val shouldUpdate =
                 if (foundAsset?.browser_download_url != "" && foundVersion != null) installedVersionName?.compareTo(
@@ -104,8 +136,12 @@ class InAppUpdater {
         }
 
         /** Pre-release channel: newer when the asset's CI run number is above this build's. */
-        internal fun preReleaseUpdate(release: GithubRelease, installedBuild: Int): Update {
-            val asset = release.assets.firstOrNull { it.name.endsWith(".apk") } ?: return Update(false, null, null, null)
+        internal fun preReleaseUpdate(
+            release: GithubRelease,
+            installedBuild: Int,
+            supportedAbis: List<String> = deviceAbis,
+        ): Update {
+            val asset = pickApkAsset(release.assets, supportedAbis) ?: return Update(false, null, null, null)
             val build = preReleaseBuildRegex.find(asset.name)?.groupValues?.get(1)?.toIntOrNull()
                 ?: return Update(false, null, null, null)
             return Update(
@@ -128,6 +164,9 @@ class InAppUpdater {
         )
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false).build()
 
+        /** A GitHub `releases/…` API response (unit-tested: the release build maps it by reflection). */
+        internal fun parseRelease(json: String): GithubRelease = mapper.readValue(json)
+
         private suspend fun Activity.getAppUpdate(): Update {
             try {
                 val url = when (channel) {
@@ -135,8 +174,7 @@ class InAppUpdater {
                     Channel.PRE_RELEASE -> "https://api.github.com/repos/$UPDATE_REPO/releases/tags/$PRE_RELEASE_TAG"
                 }
                 val headers = mapOf("Accept" to "application/vnd.github.v3+json")
-                val response =
-                    mapper.readValue<GithubRelease>(app.get(url, headers = headers).text)
+                val response = parseRelease(app.get(url, headers = headers).text)
 
                 return when (channel) {
                     Channel.STABLE -> {
