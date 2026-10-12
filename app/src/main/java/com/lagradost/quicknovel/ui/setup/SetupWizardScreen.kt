@@ -79,6 +79,7 @@ import com.lagradost.quicknovel.translator.CostEstimator
 import com.lagradost.quicknovel.translator.ModelPresets
 import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.translator.TranslationLanguages
+import com.lagradost.quicknovel.ui.common.ConnectionMessages
 import com.lagradost.quicknovel.ui.translate.SpendDialog
 import com.lagradost.quicknovel.ui.translate.TranslationForegroundService
 import com.lagradost.quicknovel.updates.LibraryUpdateScheduler
@@ -495,13 +496,8 @@ private fun TestPage(
     }
     if (result == null || testing) return
     val ok = result.status == ConnectionStatus.OK
-    val message = when (result.status) {
-        ConnectionStatus.OK -> stringResource(if (result.httpCode == 429) R.string.setup_test_ok_rate_limited else R.string.setup_test_ok)
-        ConnectionStatus.INVALID_KEY -> stringResource(R.string.setup_test_invalid_key, label)
-        ConnectionStatus.NETWORK_ERROR -> stringResource(R.string.setup_test_network, label)
-        ConnectionStatus.BLOCKED -> stringResource(R.string.setup_test_blocked, label)
-        ConnectionStatus.PROVIDER_ERROR -> stringResource(R.string.setup_test_provider_error, label)
-    }
+    // Same wording as Settings → AI translation → API key → Test connection.
+    val message = stringResource(ConnectionMessages.messageRes(result.status, result.httpCode), label)
     OutlinedCard(
         border = BorderStroke(1.dp, if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error),
         modifier = Modifier.fillMaxWidth(),
@@ -512,8 +508,7 @@ private fun TestPage(
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
-            val detail = listOfNotNull(result.httpCode?.let { "HTTP $it" }, result.detail.takeIf { it.isNotBlank() })
-                .joinToString(" · ")
+            val detail = ConnectionMessages.detail(result)
             if (!ok && detail.isNotBlank()) {
                 Text(
                     stringResource(R.string.setup_test_detail, detail),
@@ -620,7 +615,7 @@ private fun DonePage(
     val perChapter = CostEstimator.estimateForPreset(readAheadPreset, 1, lang, SecurePrefs.isStrictModeEnabled(context))
         .usd?.let { CostEstimator.formatCost(it) } ?: "?"
     ToggleRow(
-        title = stringResource(R.string.setup_done_read_ahead),
+        title = stringResource(R.string.tr_read_ahead),
         description = if (readAhead > 0) {
             stringResource(R.string.setup_done_read_ahead_desc, readAhead, perChapter, readAheadPreset.label)
         } else {
@@ -660,7 +655,11 @@ private fun DonePage(
     }
 
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onSpending) { Text(stringResource(R.string.setup_done_spending)) }
+        OutlinedButton(onClick = onSpending) {
+            Icon(painterResource(R.drawable.ic_spend_24), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.setup_done_spending))
+        }
         TextButton(onClick = onSettings) { Text(stringResource(R.string.setup_done_all_settings)) }
     }
 }
