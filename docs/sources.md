@@ -327,12 +327,29 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 
 ## Removed sources
 
-Romance-focused sources are not carried (see "Romance listings (not offered)" above).
+The fork keeps the raw CJK sources above (translated by its own AI translator) plus
+human-translation and original-fiction sites (e.g. Royal Road, Scribble Hub, Wuxiaworld, fan
+translation groups, ebook libraries). Machine-translation (MTL) aggregators are not carried:
+reading the raw source through the fork's translator replaces them. Romance-focused sources are
+not carried either (see "Romance listings (not offered)" above). `providers/RemovedSourcesTest`
+and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
 
 | Source | Removed | Reason |
 |---|---|---|
 | JJWXC (晋江文学城), zh | 2026-10-12 | A romance / danmei (BL) / GL site (言情, 纯爱, 百合); the user does not read romance. It was a working source (search, 作品库 browse, free chapters; VIP chapters left out). |
 | Wattpad, en (upstream provider) | 2026-10-12 | Romance-centric user-generated site; the user does not read romance. `WattpadProvider`, its icon and colour were deleted. |
+| LNMTL (lnmtl.com), en | 2026-10-12 | MTL aggregator: MTL site ("Place where Web Novels are being MTLed"). Deleted `LnMTLProvider`, its icon, deep link and README entry. |
+| MTLNovel (mtlnovel.me), en | 2026-10-12 | MTL aggregator: MTL site ("Read RAW Machine Translation Novels"). Deleted `MtlNovelProvider`, its icon, deep link and README entry. |
+| Sonic MTL (sonicmtl.com), en | 2026-10-12 | MTL aggregator: MTL site ("Machine Translated (MTL) novels"). Deleted `SonicMTLProvider`, its icon, deep link and README entry. |
+| WTR-LAB (wtr-lab.com), en | 2026-10-12 | MTL aggregator: MTL site ("English MTL (Machine Translation) Novels", translated from raw). Deleted `WtrLabProvider`, its icon, deep link and README entry. |
+| Wuxia Box (wuxiabox.com), en | 2026-10-12 | MTL aggregator: MTL site ("English MTL Novels ... translated from raw"). Deleted `WuxiaBoxProvider`, its icon, deep link and README entry. |
+| FanMTL (fanmtl.com), en | 2026-10-12 | MTL aggregator: MTL fan-fiction site on the Wuxia Box engine. Deleted `FanMtlnProvider`, its icon, deep link and README entry. |
+| Wuxia Click (wuxia.click), en | 2026-10-12 | MTL aggregator: Aggregator whose entries are labelled MTL. Deleted `WuxiaClickProvider`, its icon, deep link and README entry. |
+| Ranovel (ranovel.com), en | 2026-10-12 | MTL aggregator: MTL site ("Read Korean MTL Novel"). Deleted `RanovelProvider` and its icon. |
+| MeioNovel (meionovels.com), id | 2026-10-12 | MTL aggregator: Indonesian, chapters labelled "MTL". `MeioNovelProvider` is unregistered and its deep link and README entry removed; the class and icon stay because `ArNoProvider` and `NovLoveProvider` extend it. |
+| NovelBuddy (novelbuddy.me), en | 2026-10-12 | MTL aggregator: Aggregator with an MTL section; its most popular list is led by "MTL - ..." entries. Deleted `NovelBuddyProvider`, its icon, deep link and README entry. |
+| NoBadNovel (nobadnovel.com), en | 2026-10-12 | MTL aggregator: Aggregator of long-tail recent Chinese web novels in machine-translated English. Deleted `NoBadNovelProvider`, its icon, deep link and README entry. |
+| PawRead (pawread.com), en | 2026-10-12 | MTL aggregator: Advertises machine translation of Chinese novels (site keywords). Deleted `PawReadProver`, its icon, deep link and README entry. |
 
 ## Tests
 
