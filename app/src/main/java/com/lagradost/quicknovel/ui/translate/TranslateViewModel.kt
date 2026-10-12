@@ -68,7 +68,8 @@ class TranslateViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val progressListener: (TranslationProgress?) -> Unit = { p ->
         progress.postValue(p)
-        if (p?.completed == true || p?.error != null) {
+        // null = idle again (user cancel, or an overnight batch was handed to OpenAI).
+        if (p == null || p.completed || p.error != null) {
             isRunning = false
             currentNovelId?.let { id -> loadTranslatedNums(id) }
         }

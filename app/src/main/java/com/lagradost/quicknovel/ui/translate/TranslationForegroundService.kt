@@ -828,22 +828,24 @@ class TranslationForegroundService : Service() {
                         break
                     }
                     if (SecurePrefs.getReadAheadChapters(ctx) <= 0) queue.clear()
-                    if (!queue.hasPending) break
-                    // Read-ahead stops silently at the monthly cap (the reader itself is never blocked).
-                    SpendLedger.stopMessage(ctx, null)?.let {
-                        Log.i(TAG, "Read-ahead stopped: $it")
-                        queue.clear()
+                    if (queue.hasPending) {
+                        // Read-ahead stops silently at the monthly cap (the reader itself is never blocked).
+                        SpendLedger.stopMessage(ctx, null)?.let {
+                            Log.i(TAG, "Read-ahead stopped: $it")
+                            queue.clear()
+                        }
+                        // Charging / battery conditions: wait between chapters, then resume.
+                        power.awaitAllowed(
+                            policy = { SecurePrefs.powerPolicy(ctx) },
+                            onPaused = { reason ->
+                                if (!TranslationState.isRunning) {
+                                    postNotification(buildReadAheadNotification(reason.message, queue.pendingChapters.size, 0f))
+                                }
+                            },
+                        )
+                        if (TranslationState.isRunning) continue // a main job started while waiting: yield (top of loop)
                     }
-                    // Charging / battery conditions: wait between chapters, then resume.
-                    power.awaitAllowed(
-                        policy = { SecurePrefs.powerPolicy(ctx) },
-                        onPaused = { reason ->
-                            if (!TranslationState.isRunning) {
-                                postNotification(buildReadAheadNotification(reason.message, queue.pendingChapters.size, 0f))
-                            }
-                        },
-                    )
-                    if (TranslationState.isRunning) continue // a main job started while waiting: yield (top of loop)
+                    // An empty queue releases the worker claim here.
                     val item = queue.poll() ?: break
                     try {
                         translateAhead(item, queue)
