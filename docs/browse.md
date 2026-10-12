@@ -139,7 +139,7 @@ never waits: the original is shown until the translation arrives.
    Settings > AI Translation > "Translate titles and synopses with AI" is on (default on;
    default preferences `translate_metadata_with_ai`), an API key is set and the monthly spend cap
    is not reached. Calls are recorded in the spend ledger as kind `metadata`.
-2. Otherwise the free Google endpoint, when "Auto-translate titles & synopses" is on. Google is
+2. Otherwise the free Google endpoint, when "Translate titles with Google (free)" is on. Google is
    also the fallback when an AI call fails.
 3. Neither: originals only (cached translations are not shown either).
 

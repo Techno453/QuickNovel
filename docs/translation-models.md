@@ -112,7 +112,7 @@ Korean web novels.
 | All | omissions grow with chunk size; glossary entries sometimes ignored; paragraphs skipped | small chunks, adherence check, paragraph-count check, strict retry |
 
 The app implements the "fall back to another model" column: with a **Fallback model** set
-(Settings → AI Translation, off by default), a passage is re-translated once with the fallback
+(Settings → AI translation, off by default), a passage is re-translated once with the fallback
 when the provider's content filter blocks it (DeepSeek "Content Exists Risk", Qwen
 `data_inspection_failed`, Kimi `content_filter`, Z.ai 1301 / `finish_reason: "sensitive"`,
 Gemini prohibited content or any finish reason other than stop/length, OpenAI

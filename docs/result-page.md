@@ -89,8 +89,8 @@ translated at all (`MetadataTranslations.anyEnabled`, see [browse.md](browse.md#
   mostly Latin already, at most 30) through the batched title path, so they share one small call
   per page and are cached in `novel_metadata_translations` under `label:<lang>/<text>` ids;
 - "Show original" / "Show translation" switches all of them (and the chapter names);
-- chapter names in the list are translated with the free Google endpoint when "Auto-translate
-  titles & synopses" is on, as on the XML page (kept in memory for the session).
+- chapter names in the list are translated with the free Google endpoint when "Translate titles
+  with Google (free)" is on, as on the XML page (kept in memory for the session).
 
 ## What the XML page is still for
 
