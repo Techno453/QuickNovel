@@ -180,4 +180,22 @@ class ChapterNameWindowTest {
         job.cancelAndJoin()
         assertEquals(0, w.requestedCount)
     }
+
+    @Test
+    fun windowsPassedWhileABatchIsInFlightAreSkipped() = runBlocking {
+        val calls = mutableListOf<List<String>>()
+        val driver = ChapterNameTranslator(
+            scope = this,
+            translate = { batch -> calls += batch; delay(150); batch.associateWith { "EN $it" } },
+            onTranslated = {},
+            window = window(debounce = 20, behind = 0, ahead = 0),
+        )
+        driver.visible(names, 0, 1)
+        delay(40) // first batch in flight until ~170 ms
+        driver.visible(names, 10, 11) // due at ~60 ms, while busy
+        delay(60)
+        driver.visible(names, 20, 21) // where the list stops
+        delay(400)
+        assertEquals(listOf(names.subList(0, 2), names.subList(20, 22)), calls)
+    }
 }

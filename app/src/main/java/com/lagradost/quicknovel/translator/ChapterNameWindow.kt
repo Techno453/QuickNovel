@@ -110,7 +110,9 @@ class ChapterNameWindow(
  * [ChapterNameWindow.maxPerRequest] names, which [MetadataTranslator] splits into AI calls of 20)
  * and the results to [onTranslated]. Translations already in memory ([cached]) are delivered at
  * once, without waiting for the debounce. A scroll cancels only the pending debounce, never a
- * request in flight. Use it from one thread (the main thread in the app).
+ * request in flight; while one is in flight nothing else is sent, so the windows a slow scroll
+ * passes do not queue up ahead of the one it stops on. Use it from one thread (the main thread
+ * in the app).
  */
 class ChapterNameTranslator(
     private val scope: CoroutineScope,
@@ -123,6 +125,7 @@ class ChapterNameTranslator(
     private var names: List<String> = emptyList()
     private var debounce: Job? = null
     private val delivered = HashSet<String>()
+    private var busy = false
 
     /** The list [names] shows rows [first]..[last]. */
     fun visible(names: List<String>, first: Int, last: Int) {
@@ -158,24 +161,32 @@ class ChapterNameTranslator(
         }
     }
 
+    /**
+     * Sends the current window's next batch. One batch at a time: windows the list passed while a
+     * batch was in flight are never sent; when it ends, the window the list is on *then* is.
+     */
     private fun pump() {
-        while (true) {
-            val batch = window.next(names, now()) { it in delivered }
-            if (batch.isEmpty()) return
-            scope.launch {
-                val result = try {
-                    translate(batch)
-                } catch (e: CancellationException) {
-                    window.release(batch)
-                    throw e
-                } catch (e: Throwable) {
-                    emptyMap()
-                }
-                if (result.isNotEmpty()) {
-                    delivered += result.keys
-                    onTranslated(result)
-                }
+        if (busy) return
+        val batch = window.next(names, now()) { it in delivered }
+        if (batch.isEmpty()) return
+        busy = true
+        scope.launch {
+            val result = try {
+                translate(batch)
+            } catch (e: CancellationException) {
+                window.release(batch)
+                busy = false
+                throw e
+            } catch (e: Throwable) {
+                emptyMap()
             }
+            busy = false
+            if (result.isNotEmpty()) {
+                delivered += result.keys
+                onTranslated(result)
+            }
+            // Still scrolling: the debounce pumps once the list stops.
+            if (window.isDue(now())) pump()
         }
     }
 }
