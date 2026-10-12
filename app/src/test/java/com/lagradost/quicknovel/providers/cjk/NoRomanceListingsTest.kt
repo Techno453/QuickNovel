@@ -39,7 +39,9 @@ class NoRomanceListingsTest {
 
     @Test
     fun romanceSourcesAreNotRegistered() {
-        val removed = Apis.apis.filter { "jjwxc" in it.mainUrl || "晋江" in it.name }
+        val removed = Apis.apis.filter {
+            "jjwxc" in it.mainUrl || "晋江" in it.name || "wattpad" in it.mainUrl
+        }
         assertTrue("romance sources registered: ${removed.map { it.name }}", removed.isEmpty())
     }
 }

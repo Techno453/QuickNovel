@@ -74,7 +74,6 @@ import com.lagradost.quicknovel.providers.ScrollersPubProvider
 import com.lagradost.quicknovel.providers.SkyNovelsProvider
 import com.lagradost.quicknovel.providers.SonicMTLProvider
 import com.lagradost.quicknovel.providers.SyosetuProvider
-import com.lagradost.quicknovel.providers.WattpadProvider
 import com.lagradost.quicknovel.providers.WtrLabProvider
 import com.lagradost.quicknovel.providers.WuxiaBoxProvider
 import com.lagradost.quicknovel.providers.WuxiaClickProvider
@@ -152,7 +151,6 @@ class Apis {
             SyosetuProvider(),
             SkyNovelsProvider(),
             SonicMTLProvider(),
-            WattpadProvider(),
             WtrLabProvider(),
             WuxiaBoxProvider(),
             WuxiaClickProvider(),
