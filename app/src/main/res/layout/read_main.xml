@@ -223,6 +223,15 @@
             </ScrollView>
         </LinearLayout>
 
+        <!-- Paged reading mode (PagedReaderController), shown instead of reader_lin_container -->
+        <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/read_pages"
+                android:visibility="gone"
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+
         <View
                 android:visibility="gone"
                 android:id="@+id/read_temp_bottom_margin"
@@ -317,6 +326,23 @@
                     android:layout_width="50dp" android:layout_height="match_parent">
             </TextView>-->
         </FrameLayout>
+
+        <!-- page number of the paged mode, above the clock/battery overlay -->
+        <TextView
+                android:id="@+id/read_page_number"
+                android:visibility="gone"
+                tools:visibility="visible"
+                tools:text="3 / 12"
+                android:layout_gravity="bottom|center_horizontal"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="@color/readerTextColor"
+                android:clickable="false"
+                android:focusable="false"
+                android:layout_width="wrap_content"
+                android:layout_height="25dp"
+                tools:ignore="SmallSp" />
 
         <androidx.core.widget.ContentLoadingProgressBar
 

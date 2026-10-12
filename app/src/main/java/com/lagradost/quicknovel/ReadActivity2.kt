@@ -20,6 +20,7 @@ import com.lagradost.quicknovel.translator.SecurePrefs
 import com.lagradost.quicknovel.ui.CONFIG_COLOR
 import com.lagradost.quicknovel.ui.CONFIG_FONT
 import com.lagradost.quicknovel.ui.CONFIG_FONT_BOLD
+import com.lagradost.quicknovel.util.toPx
 import com.lagradost.quicknovel.ui.TextAdapter
 import com.lagradost.quicknovel.ui.TextConfig
 import com.lagradost.quicknovel.ui.TextInteraction
@@ -30,6 +31,7 @@ import com.lagradost.quicknovel.ui.reader.ReaderLayoutController
 import com.lagradost.quicknovel.ui.reader.ReaderScrollController
 import com.lagradost.quicknovel.ui.reader.ReaderSettingsSheet
 import com.lagradost.quicknovel.ui.reader.ReaderTtsController
+import com.lagradost.quicknovel.ui.reader.paged.PagedReaderController
 import com.lagradost.quicknovel.util.GoogleTranslate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,6 +46,7 @@ import java.lang.ref.WeakReference
  * - [ReaderTtsController]: TTS buttons, status, sleep timer, media actions
  * - [ReaderSettingsSheet]: the settings bottom sheet
  * - [ReaderGlossaryController]: long-press / selection glossary lookup
+ * - [PagedReaderController]: the page-flip reading mode, shown instead of the scrolling list
  */
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayoutController.Host {
     companion object {
@@ -64,6 +67,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
     private lateinit var tts: ReaderTtsController
     private lateinit var settingsSheet: ReaderSettingsSheet
     private lateinit var glossary: ReaderGlossaryController
+    private lateinit var paged: PagedReaderController
+
+    /** Reading mode "Pages": the paged display replaces the scrolling list. */
+    private val isPaged: Boolean get() = paged.isActive
 
     private val textAdapter: TextAdapter get() = scroll.textAdapter
 
@@ -88,7 +95,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         val down = keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
         if (tts.onVolumeKey(down)) return true
         if (viewModel.scrollWithVolume) {
-            if (down) scroll.pageDown() else scroll.pageUp()
+            if (isPaged) {
+                if (down) paged.nextPage() else paged.previousPage()
+            } else {
+                if (down) scroll.pageDown() else scroll.pageUp()
+            }
             return true
         }
         return false
@@ -109,7 +120,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         // we save this just in case the user fucks it up somehow
-        scroll.postDesired()
+        if (!isPaged) scroll.postDesired()
         super.onConfigurationChanged(newConfig)
         layout.onConfigurationChanged(newConfig)
     }
@@ -123,7 +134,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
 
     // ReaderLayoutController.Host
     override fun onTextAreaChanged() {
-        scroll.scrollToDesired()
+        if (isPaged) paged.refresh() else scroll.scrollToDesired()
     }
 
     override fun onDensityChanged() {
@@ -131,13 +142,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
     }
 
     override fun keepPositionAfterLayout() {
-        scroll.postDesired()
+        if (isPaged) binding.root.post { paged.refresh() } else scroll.postDesired()
     }
 
     private fun updateOtherTextConfig(config: TextConfig) {
         config.setArgs(binding.loadingText, CONFIG_FONT or CONFIG_COLOR)
         config.setArgs(binding.readBattery, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readTimeClock, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
+        config.setArgs(binding.readPageNumber, CONFIG_FONT or CONFIG_COLOR or CONFIG_FONT_BOLD)
         config.setArgs(binding.readLoadingBar)
     }
 
@@ -145,6 +157,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         // this did not work so I just rebind everything, it does not happend often so idc
         scroll.rebindAll()
         updateOtherTextConfig(textAdapter.config)
+        if (this::paged.isInitialized) paged.refresh()
     }
 
     override fun onResume() {
@@ -196,9 +209,23 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         }
         scroll = ReaderScrollController(this, binding, viewModel, textAdapter) { chrome.topBarHeight }
         layout = ReaderLayoutController(this, binding, viewModel, this)
-        tts = ReaderTtsController(this, binding, viewModel) { line -> scroll.updateTTSLine(line) }
+        tts = ReaderTtsController(this, binding, viewModel) { line ->
+            if (isPaged) paged.updateTTSLine(line) else scroll.updateTTSLine(line)
+        }
         settingsSheet = ReaderSettingsSheet(this, viewModel) { layout.tabletopLowerHeight }
         glossary = ReaderGlossaryController(this, viewModel)
+        paged = PagedReaderController(
+            this, binding, viewModel,
+            config = { textAdapter.config },
+            insets = {
+                PagedReaderController.insetsFor(
+                    h = layout.horizontalPadding.takeIf { it > 0 } ?: 20.toPx,
+                    v = layout.verticalPadding,
+                    density = resources.displayMetrics.density
+                )
+            },
+            onLongPress = { span, offset -> glossary.lookupAt(span.text, offset, span.index) }
+        )
         textAdapter.interaction = object : TextInteraction {
             override fun onLongPress(span: TextSpan, offset: Int): Boolean =
                 glossary.lookupAt(span.text, offset, span.index)
@@ -216,10 +243,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         bindVisibility()
         bindLoadingStatus()
         scroll.bind()
+        paged.bind()
+
+        // before the chapter observer, so the first chapter goes to the right display
+        observe(viewModel.readingModeLive) { mode ->
+            paged.setActive(mode == READING_MODE_PAGES)
+        }
 
         //here inserted novel chapter text into recyclerview
         observe(viewModel.chapter) { chapter ->
-            scroll.submit(chapter)
+            if (isPaged) paged.submit(chapter) else scroll.submit(chapter)
         }
 
         binding.readActionSettings.setOnClickListener {
@@ -367,7 +400,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
                 chrome.hideSystemUI()
                 // otherwise we have a shitty bug with tts locking range
                 binding.root.post {
-                    scroll.updateTTSLine(viewModel.ttsLine.value)
+                    if (!isPaged) scroll.updateTTSLine(viewModel.ttsLine.value)
                 }
             }
         }

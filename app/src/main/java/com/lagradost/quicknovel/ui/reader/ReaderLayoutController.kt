@@ -67,7 +67,7 @@ class ReaderLayoutController(
         lastDensityDpi = activity.resources.configuration.densityDpi
         // Re-centre the text column whenever the window width changes (fold/unfold, split screen,
         // rotation). The host's onTextAreaChanged keeps the reading position.
-        binding.realText.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
+        binding.readNormalLayout.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
             if (right - left != oldRight - oldLeft) {
                 v.post { updatePadding() }
             }
@@ -136,7 +136,8 @@ class ReaderLayoutController(
         val v = (viewModel.paddingVertical * density).toInt()
         // Cap the line length on wide windows (foldable inner screen, tablets, landscape) by
         // centring a column of at most maxTextWidth dp; never narrower than the user's margin.
-        val width = binding.realText.width.takeIf { it > 0 }
+        // (the whole reader width: the scroll list and the paged view fill it)
+        val width = binding.readNormalLayout.width.takeIf { it > 0 }
             ?: (activity.resources.configuration.screenWidthDp * density).toInt()
         val h = AdaptiveLayout.centeredPadding(
             widthPx = width,

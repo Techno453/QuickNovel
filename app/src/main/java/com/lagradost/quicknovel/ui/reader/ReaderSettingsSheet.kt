@@ -34,6 +34,8 @@ import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_
 import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
 import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.ui.ReadingType
+import com.lagradost.quicknovel.READING_MODE_PAGES
+import com.lagradost.quicknovel.READING_MODE_SCROLL
 import com.lagradost.quicknovel.util.AdaptiveLayout.adaptToWindow
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
@@ -184,6 +186,25 @@ class ReaderSettingsSheet(
             override fun onTabUnselected(tab: TabLayout.Tab) {}
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
+
+        fun readingModeName(mode: Int) =
+            if (mode == READING_MODE_PAGES) R.string.reading_mode_pages else R.string.reading_mode_scroll
+        binding.readReadingMode.setText(readingModeName(viewModel.readingMode))
+        // the scroll types (infinite, buttons, overscroll) only apply to the scroll view
+        binding.readReadingType.isEnabled = !viewModel.pagedMode
+        binding.readReadingMode.setOnClickListener {
+            it.popupMenu(
+                items = listOf(
+                    READING_MODE_SCROLL to R.string.reading_mode_scroll,
+                    READING_MODE_PAGES to R.string.reading_mode_pages
+                ),
+                selectedItemId = viewModel.readingMode
+            ) {
+                binding.readReadingMode.setText(readingModeName(itemId))
+                viewModel.readingMode = itemId
+                binding.readReadingType.isEnabled = !viewModel.pagedMode
+            }
+        }
 
         binding.readReadingType.setText(viewModel.readerType.stringRes)
         binding.readReadingType.setOnLongClickListener {

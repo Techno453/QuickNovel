@@ -137,6 +137,10 @@ data class LiveChapterData(
     }
 }
 
+const val EPUB_READING_MODE: String = "reader_reading_mode"
+const val READING_MODE_SCROLL = 0
+const val READING_MODE_PAGES = 1
+
 data class ChapterUpdate(
     val data: ArrayList<SpanDisplay>,
     val seekToDesired: Boolean
@@ -444,7 +448,8 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
         val cIndex = currentIndex
         val chapters = ArrayList<SpanDisplay>()
         val canReload = this.book.canReload
-        when (readerType) {
+        // pages always use the continuous window; the scroll types only apply to the scroll view
+        when (if (pagedMode) ReadingType.DEFAULT else readerType) {
             ReadingType.DEFAULT, ReadingType.INF_SCROLL -> {
                 for (idx in cIndex - chapterPaddingBottom..cIndex + chapterPaddingTop) {
                     if (idx < chaptersTitlesInternal.size && idx >= 0)
@@ -1383,6 +1388,35 @@ class ReadActivityViewModel : ViewModel(), ReaderPreferences by ReaderPreference
             readerTypeInternal = value.prefValue
             updateReadArea(seekToDesired = true)
         }
+
+    /** Reading mode: [READING_MODE_SCROLL] (default) or [READING_MODE_PAGES], see PagedReaderController. */
+    val readingModeLive: MutableLiveData<Int> = MutableLiveData(null)
+    private var readingModeInternal by PreferenceDelegateLiveView(
+        EPUB_READING_MODE, READING_MODE_SCROLL, Int::class, readingModeLive
+    )
+
+    var readingMode: Int
+        get() = readingModeInternal
+        set(value) {
+            if (value == readingModeInternal) return
+            readingModeInternal = value
+            if (this::book.isInitialized) updateReadArea(seekToDesired = true)
+        }
+
+    val pagedMode: Boolean get() = readingModeInternal == READING_MODE_PAGES
+
+    /**
+     * Paged mode: the user turned to a page starting at [position] (char -1 = the chapter's
+     * title page). Same bookkeeping as [onScroll] for the scrolling view.
+     */
+    fun onPagedPosition(position: ScrollIndex) {
+        if (position.index !in chaptersTitlesInternal.indices) return
+        val current = currentIndex
+        desiredTTSIndex = position
+        changeIndex(position)
+        if (current != position.index) updateReadArea()
+        updateIndex(position.index)
+    }
 
 
     // scrollWithVolume, authorNotes, ttsLock: see ReaderPreferences
