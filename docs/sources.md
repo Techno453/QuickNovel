@@ -34,6 +34,8 @@ A source that mixes languages (Pixiv) is narrowed to one language at the request
 | **Pixiv Novels (pixiv小説)** | ja | yes | yes (by tag) | yes (all-ages works) | no | none | `japanese/PixivNovelProvider` |
 | Novelpia (노벨피아) | ko | yes | yes | yes (free episodes) | no | none | `korean/NovelpiaProvider` |
 | **Naver Webnovel (네이버 웹소설)** | ko | yes | yes | yes (best/challenge leagues) | no | none | `korean/NaverWebNovelProvider` |
+| **JJWXC (晋江文学城)** | zh | yes | yes (作品库: popular, latest, completed…) | yes (free chapters) | VIP chapters need an account (left out) | none seen | `chinese/JjwxcProvider` |
+| **czbooks (小說狂人)** | zh (Traditional) | yes | yes (rankings, per-genre latest/completed) | yes | no | Cloudflare `__cf_bm` + rocket-loader only, no challenge | `chinese/CzbooksProvider` |
 
 Bold rows were added in this pass. Each one has fixture tests and a gated live test (below).
 
@@ -176,6 +178,66 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   still show in search, with 0 chapters and a note in the synopsis. Adult works redirect to a
   Naver login and raise an error.
 
+### JJWXC (晋江文学城), zh — https://www.jjwxc.net
+- The main site for female-oriented web novels (言情, 纯爱/danmei, 百合, modern drama). Desktop
+  pages are used; they are scrapeable without a token, so the mobile site (m.jjwxc.net) is not.
+- Encoding: GB18030. The meta tag says `gb18030` (some pages `GBK`), the `Content-Type` header has
+  no charset, and the small lock-notice page even declares `utf-8` while being GBK, so
+  `JjwxcParser.decode` always decodes GB18030 unless the header says UTF-8. Search keywords are
+  sent GB18030 %-encoded.
+- Search `GET /search.php?kw=<GB18030>&t=1` (by title; 25 results a page, no covers).
+- Browse is the 作品库 `GET /bookbase.php?[xx{n}={n}&]sortType=&isfinish=&page=` (100 rows a
+  page). Lists (`orderBys`, default first): Popular (积分, `sortType=2`), Most favourited
+  (收藏数, 4), Latest updates (最近更新, 1), Newest (最新发表, 3), Completed, top rated
+  (完结高分, 10). `mainCategories`: All (0), Completed (完结, 2), Ongoing (连载, 1). `tags` (性向):
+  All, Romance 言情 (1), BL 纯爱 (2), GL 百合 (3), No romance 无CP (5), Multiple 多元 (6).
+  Logged out the site serves pages 1–10 only (page 11 says "请登入后再访问此页面"), so the provider
+  returns an empty page after 10. The ranking pages (`topten.php`) are single unpaged lists and are
+  not used.
+- Novel page `onebook.php?novelid=N`: title, author, cover, 文案 (`#novelintro`), 内容标签 and
+  文章类型 as tags, 文章进度 as status, and the whole chapter table in reading order. Many
+  authors give every chapter the book title as its headline; then the one-line summary
+  (内容提要) is used as the chapter name ("第1章 <summary>").
+- **VIP / locked chapters are left out of the chapter list.** Free rows link to
+  `onebook.php?novelid=N&chapterid=M`; VIP rows have no href, only
+  `rel=//my.jjwxc.net/onebook_vip.php?...` and a red [VIP] marker, and that URL 302s to the login
+  page. Rows locked by the author or the site ([锁]) have no link, and their URL returns a
+  `#lockpage` notice. Leaving them out means downloads and new-chapter checks never hit a login
+  wall; the synopsis ends with a note like "[JJWXC: 75 VIP chapters (from chapter 15) need a
+  JJWXC account and purchase, and are not listed.]". If an old VIP/locked URL is loaded anyway,
+  `loadHtml` throws a readable "VIP chapter" / "locked chapter" error. Logging in is not
+  supported (VIP text is also font-obfuscated).
+- Chapter text is `#paragraph_comment_content`, split on `<br>`. The author's note (作者有话说,
+  `#note_str`) is not included. The first lines are the author's own header (《title》,
+  date/author, chapter heading), kept as written.
+- Politeness: browser UA, `Referer` (the book page for chapters, `/bookbase.php` for lists),
+  `rateLimitTime` 1.2 s. No rate limiting or block page was seen during testing; HTTP blocks go
+  through `SourceGuard`.
+
+### czbooks (小說狂人), zh (Traditional Chinese) — https://czbooks.net
+- Taiwanese aggregator. **Text is Traditional Chinese**; the source still declares `lang = "zh"`,
+  because the translator handles Traditional and Simplified alike. Searching with Simplified
+  characters works (the site converts the query).
+- UTF-8, simple server-rendered HTML, no login. Cloudflare is in front but only sets `__cf_bm` and
+  injects rocket-loader; plain requests with a browser UA get the real pages, so the provider
+  does not opt into `usesCloudFlareKiller` (the `/cdn-cgi/` false positive would trigger on every
+  page). (It timed out from here in an earlier check; it was reachable on 2026-10-12.)
+- Search `GET /s/<q>` (first page). Novel `GET /n/{id}`: title, author, cover, 連載狀態, synopsis,
+  category + the first 12 reader hashtags as tags, and the whole `ul#chapter-list` in reading
+  order. Chapter `GET /n/{id}/{cid}?chapterNumber=n`, text in `div.content`. Chapter 0 is often
+  the "作品相關" intro page.
+- Browse: `orderBys` (default first) Popular this week (週排行), Popular today (日排行), Popular all
+  time (總排行), Latest updates (最新), Completed (完本); `tags`: All genres plus 17 genres. With
+  All genres, Popular uses the site's 精選排行 `/c/normal/{day|week|total}/{page}` (the homepage's
+  main ranking; the 人氣榜 `/c/all` mixes in adult titles) and Completed uses the 完本榜
+  `/c/finish/week/{page}`, which can include adult titles. With a genre it is
+  `/c/{genre}/{day|week|total|new|finish}/{page}`. The site has no all-genre latest list
+  (`/c/all/new` silently shows the daily ranking), so Latest with All genres raises "pick a genre".
+  The two adult categories (情色工口, 耽美工口) and 工口榜 are not offered. 70 cards a page.
+- Paging: a page past the end comes back as some other page instead of an empty one, so the
+  provider checks the active link in `ul.paginate` and returns an empty page when it does not
+  match.
+
 ## Cloudflare and blocks
 
 - **Solving challenges**: the fork already ships what CloudStream uses.
@@ -185,7 +247,7 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   for the session, and replays the request with the WebView's user agent and client hints. A
   provider opts in with `override val usesCloudFlareKiller = true` (its `app` then goes through
   `MainActivity.appWithInterceptor`, and posters get the matching header). Nine existing
-  (non-CJK) providers use it. None of the five new sources needs `cf_clearance`, so none of them opts in.
+  (non-CJK) providers use it. None of the new sources (including JJWXC and czbooks) needs `cf_clearance`, so none of them opts in.
 - **Challenge detection** (`CloudflareKiller.isCloudflareChallenge`, fixed 2026-10): a response
   counts as a challenge only with `cf-mitigated: challenge`, a redirect into `/cdn-cgi/`, challenge
   markup (`_cf_chl_opt`, `__cf_chl_`, `cf-chl-`, `/cdn-cgi/challenge-platform/h/`,
@@ -221,7 +283,7 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 | Naver Series / Kakao Page / Qidian VIP | Paid or DRM. Out of scope. |
 | uukanshu.cc, hetushu, trxs, xbanxia, linovelib/bilinovel, zh | Reachable (HTTP 200), not evaluated further. Ixdzs and Piaotia already cover the zh web-novel catalogue. |
 | xbiquge.so, ttkan, 69shu.com, zh | HTTP 403 from here (non-Cloudflare 403 or redirect to blocked mirror). |
-| biquge.com.cn, bqgui.cc, biqukan.cc, shuquge, czbooks, uukanshu.net | Connection failures or timeouts from here. |
+| biquge.com.cn, bqgui.cc, biqukan.cc, shuquge, uukanshu.net | Connection failures or timeouts from here. (czbooks timed out too in that check; it was reachable later and is now a source.) |
 
 ## Tests
 
@@ -235,11 +297,12 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   ./gradlew :app:testDebugUnitTest --tests '*BrowseListingsLiveTest*' --tests '*ProviderFixesLiveTest*' -Dlive=1
   ```
 - Fixture tests: `app/src/test/java/com/lagradost/quicknovel/providers/cjk/*ProviderTest.kt`,
-  fixtures under `app/src/test/resources/providers/{ixdzs,piaotia,alphapolis,pixiv,naver}/`. The
+  fixtures under `app/src/test/resources/providers/{ixdzs,piaotia,alphapolis,pixiv,naver,jjwxc,czbooks}/`. The
   fixtures keep each site's real markup (class names, inline JSON, scripts, broken HTML). Titles,
-  names and prose are replaced with placeholders. The Piaotia fixtures are stored GBK-encoded.
+  names and prose are replaced with placeholders. The Piaotia fixtures are stored GBK-encoded and the JJWXC fixtures GB18030-encoded.
 - Live tests (one search, one novel, one chapter, and the first main page per source; plus
-  pagination checks for Pixiv and Naver) are skipped unless enabled:
+  pagination checks for Pixiv and Naver, and page 1 vs page 2 of each Browse list for JJWXC and
+  czbooks) are skipped unless enabled:
 
   ```
   JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew :app:testDebugUnitTest --tests '*providers.cjk*' -Dlive=1

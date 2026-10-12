@@ -13,6 +13,8 @@ import com.lagradost.quicknovel.providers.AllNovelProvider
 import com.lagradost.quicknovel.providers.chinese.BiqugeProvider
 import com.lagradost.quicknovel.providers.chinese.IxdzsProvider
 import com.lagradost.quicknovel.providers.chinese.PiaotiaProvider
+import com.lagradost.quicknovel.providers.chinese.JjwxcProvider
+import com.lagradost.quicknovel.providers.chinese.CzbooksProvider
 import com.lagradost.quicknovel.providers.japanese.AlphapolisProvider
 import com.lagradost.quicknovel.providers.japanese.PixivNovelProvider
 import com.lagradost.quicknovel.providers.korean.NaverWebNovelProvider
@@ -166,6 +168,8 @@ class Apis {
             AlphapolisProvider(),
             PixivNovelProvider(),
             NaverWebNovelProvider(),
+            JjwxcProvider(),
+            CzbooksProvider(),
         ).sortedBy { it.name }
 
         fun getApiFromName(name: String): APIRepository {
