@@ -199,11 +199,15 @@ class APIRepository(val api: MainAPI) {
         mainCategory: String?,
         orderBy: String?,
         tag: String?,
+        length: LengthRange? = null,
     ): Result<ImmutableHeadMainPageResponse> = runCatching {
         ImmutableHeadMainPageResponse.from(
-            api.loadMainPage(page, mainCategory, orderBy, tag).also { rememberPosters(it.list) }
+            api.loadMainPage(page, mainCategory, orderBy, tag, length).also { rememberPosters(it.list) }
         )
     }
+
+    /** The source's length filter (unit, server- or client-side), or null. */
+    val lengthFilter: LengthFilterSupport? get() = api.lengthFilter
 
     /**
      * Automatically strips adsbygoogle

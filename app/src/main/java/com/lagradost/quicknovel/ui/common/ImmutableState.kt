@@ -45,6 +45,7 @@ import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.getFilenameIMG
 import com.lagradost.quicknovel.BookDownloader2Helper.sanitizeFilename
 import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.imported.ImportedLibraryCard
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_LAST_ACCESS
@@ -65,6 +66,7 @@ import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.updates.LibraryUpdateStore
 import com.lagradost.quicknovel.updates.NovelUpdateState
@@ -274,6 +276,8 @@ data class ImmutableSearchResponse(
     val newChapters: Int = 0,
     /** The time the library update checker last found new chapters */
     val timeOfNewChapters: Long? = null,
+    /** Length from the listing (Browse length filter, docs/browse.md); null when unknown */
+    val length: NovelLength? = null,
 ) {
 
     fun matchesQuery(query: String): Boolean =
@@ -485,7 +489,8 @@ data class ImmutableSearchResponse(
                 apiName = response.apiName,
                 posterHeaders = response.posterHeaders?.toImmutableMap(),
                 timeOfCached = System.currentTimeMillis(),
-                chaptersRead = chaptersRead(response.name)
+                chaptersRead = chaptersRead(response.name),
+                length = response.length ?: LengthFilter.fromLatestChapter(response.latestChapter),
             )
 
         fun from(response: LoadResponse): ImmutableSearchResponse {

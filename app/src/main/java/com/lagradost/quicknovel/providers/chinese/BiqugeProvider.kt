@@ -6,6 +6,8 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.MainActivity.Companion.app
@@ -58,6 +60,9 @@ class BiqugeProvider : MainAPI() {
     override val mainUrl = "https://www.69shuba.com"
     override val lang = "zh"
     override val hasMainPage = true
+
+    /** Chapters (the latest chapter number; no 字数 in the lists); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHAPTERS)
 
     private val headers = mapOf(
         "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
@@ -147,7 +152,14 @@ class BiqugeProvider : MainAPI() {
             val cover = el.selectFirst("img")?.let {
                 it.attr("data-src").ifBlank { it.attr("src") }
             }?.let { if (it.startsWith("http")) it else "$mainUrl$it" }
-            results.add(newSearchResponse(title, href, fix = false) { posterUrl = cover })
+            // "最近章节 第568章 …": the latest chapter's number is an approximate chapter count.
+            val latest = el.selectFirst("div.zxzj p")?.let { p ->
+                p.clone().apply { select("span").remove() }.text().trim().ifEmpty { null }
+            }
+            results.add(newSearchResponse(title, href, fix = false) {
+                posterUrl = cover
+                latestChapter = latest
+            })
         }
 
         // Latest updates (/last.html): div.recentupdate2 ul li > a[book] a[chapter] span[date].
@@ -156,7 +168,8 @@ class BiqugeProvider : MainAPI() {
                 ?: return@forEach
             val title = linkEl.text().trim().ifBlank { return@forEach }
             val href = linkEl.absUrl("href").ifBlank { "$mainUrl${linkEl.attr("href")}" }
-            results.add(newSearchResponse(title, href, fix = false))
+            val latest = el.select("a[href]").firstOrNull { it.attr("href").contains("/txt/") }?.text()?.trim()
+            results.add(newSearchResponse(title, href, fix = false) { latestChapter = latest?.ifEmpty { null } })
         }
 
         return results

@@ -6,9 +6,12 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.MainActivity.Companion.app
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
@@ -50,6 +53,9 @@ class NovelpiaProvider : MainAPI() {
     override val mainUrl = "https://novelpia.com"
     override val lang = "ko"
     override val hasMainPage = true
+
+    /** Chapters (N회차 / EP.N on the cards); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHAPTERS)
     override val rateLimitTime = 1000L
 
     private val baseHeaders = mapOf(
@@ -223,6 +229,7 @@ object NovelpiaParser {
             val title = item.str("novel_name") ?: return@mapNotNull null
             api.newSearchResponse(title, "${api.mainUrl}/novel/$no", fix = false) {
                 posterUrl = fixImage(item.str("cover_url") ?: item.str("novel_img_all"))
+                length = item.get("count_book")?.takeIf { it.isNumber }?.asLong()?.let { NovelLength(chapters = it) }
             }
         }
     }
@@ -247,8 +254,19 @@ object NovelpiaParser {
             if (!seen.add(no)) return@mapNotNull null
             api.newSearchResponse(titleEl.text().trim(), "${api.mainUrl}/novel/$no", fix = false) {
                 posterUrl = fixImage((box.selectFirst("img.cover_style") ?: box.selectFirst("img.scale"))?.attr("src"))
+                length = episodes(box)?.let { NovelLength(chapters = it) }
             }
         }
+    }
+
+    private val episodesRegex = Regex("""([\d,]+)\s*회차""")
+    private val epRegex = Regex("""EP\.?\s*([\d,]+)""", RegexOption.IGNORE_CASE)
+
+    /** Episodes of a list card: "1573회차" (free lists, next to the book icon) or "EP.138" (Top 100). */
+    fun episodes(box: Element): Long? {
+        val text = box.selectFirst("span.info_t_box")?.text() ?: box.selectFirst(".thumb_s2")?.text() ?: return null
+        val m = episodesRegex.find(text) ?: epRegex.find(text) ?: return null
+        return m.groupValues[1].replace(",", "").toLongOrNull()
     }
 
     data class NovelInfo(

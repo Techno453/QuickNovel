@@ -12,6 +12,7 @@ import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.UiImage
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import com.lagradost.quicknovel.ui.img
 import com.lagradost.quicknovel.util.DefaultImagesHeaders
 import kotlinx.coroutines.sync.Mutex
@@ -57,6 +58,26 @@ abstract class MainAPI {
     ): HeadMainPageResponse {
         throw NotImplementedError()
     }
+
+    /**
+     * Length filter of the source's browse page (docs/browse.md, "Length filter"): the unit the
+     * listings give a length in, and whether the site filters by it ([LengthFilterSupport.serverSide],
+     * the range reaches [loadMainPage] with 5 arguments) or the app drops items outside the range.
+     * Null: no length filter (the chip is hidden).
+     */
+    open val lengthFilter: LengthFilterSupport? = null
+
+    /**
+     * [loadMainPage] with a length range in [lengthFilter]'s unit (only passed to sources that
+     * filter server-side; null = no range). The default ignores the range.
+     */
+    open suspend fun loadMainPage(
+        page: Int,
+        mainCategory: String?,
+        orderBy: String?,
+        tag: String?,
+        length: LengthRange?,
+    ): HeadMainPageResponse = loadMainPage(page, mainCategory, orderBy, tag)
 
     open val hasReviews: Boolean = false
     open suspend fun loadReviews(
@@ -214,10 +235,46 @@ data class SearchResponse(
     var rating: Int? = null,
     var latestChapter: String? = null,
     val apiName: String,
-    var posterHeaders: Map<String, String>? = null
+    var posterHeaders: Map<String, String>? = null,
+    /** Length as the listing shows it; [newSearchResponse] falls back to [latestChapter]'s number. */
+    var length: NovelLength? = null,
 ) {
     val image get() = img(posterUrl, posterHeaders)
 }
+
+/** Unit of a source's length filter (docs/browse.md, "Length filter"). */
+enum class LengthUnit { CHAPTERS, CHARACTERS, PAGES }
+
+/**
+ * A novel's length as a listing gives it; every count is optional. [approximate]: estimated, e.g.
+ * the chapter number of the latest chapter, or characters derived from a size in kilobytes.
+ */
+data class NovelLength(
+    val chapters: Long? = null,
+    val characters: Long? = null,
+    val pages: Long? = null,
+    val approximate: Boolean = false,
+) {
+    /** The count in [unit], or null when the listing does not give it. */
+    fun valueIn(unit: LengthUnit): Long? = when (unit) {
+        LengthUnit.CHAPTERS -> chapters
+        LengthUnit.CHARACTERS -> characters
+        LengthUnit.PAGES -> pages
+    }
+
+    companion object {
+        /** A length with at least one count, else null. */
+        fun of(chapters: Long? = null, characters: Long? = null, pages: Long? = null, approximate: Boolean = false): NovelLength? =
+            if (chapters == null && characters == null && pages == null) null
+            else NovelLength(chapters, characters, pages, approximate)
+    }
+}
+
+/** An inclusive range in a source's [LengthUnit]; a null end is open. */
+data class LengthRange(val min: Long? = null, val max: Long? = null)
+
+/** A source's length filter: its [unit], and whether the site applies the range itself. */
+data class LengthFilterSupport(val unit: LengthUnit, val serverSide: Boolean = false)
 
 
 fun MainAPI.newSearchResponse(
@@ -233,6 +290,8 @@ fun MainAPI.newSearchResponse(
     )
     builder.initializer()
     builder.posterHeaders = fixPosterHeaders(builder.posterHeaders)
+    // Every source: the number of the latest chapter is an approximate chapter count.
+    if (builder.length == null) builder.length = LengthFilter.fromLatestChapter(builder.latestChapter)
     return builder
 }
 

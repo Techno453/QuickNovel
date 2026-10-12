@@ -3,8 +3,11 @@ package com.lagradost.quicknovel.providers
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.UserReview
@@ -23,6 +26,9 @@ class ScrollersPubProvider : MainAPI() {
     override val iconId = R.drawable.icon_scrollerspub
     override val iconBackgroundId = R.color.black
     override val hasMainPage = true
+
+    /** Chapters (chapterCount of the API); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHAPTERS)
     override val hasReviews = true
 
     override val mainCategories = listOf(
@@ -93,6 +99,7 @@ class ScrollersPubProvider : MainAPI() {
             ) {
                 posterUrl = fixPoster(item.coverFile)
                 latestChapter = item.chapterCount?.let { "$it Chapters" }
+                length = item.chapterCount?.toLong()?.let { NovelLength(chapters = it) }
             }
         } ?: emptyList()
 
@@ -114,6 +121,7 @@ class ScrollersPubProvider : MainAPI() {
             ) {
                 posterUrl = fixPoster(item.coverFile)
                 latestChapter = item.chapterCount?.let { "$it Chapters" }
+                length = item.chapterCount?.toLong()?.let { NovelLength(chapters = it) }
             }
         } ?: emptyList()
     }

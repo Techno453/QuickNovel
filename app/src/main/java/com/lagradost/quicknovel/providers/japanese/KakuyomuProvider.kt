@@ -6,9 +6,12 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.MainActivity.Companion.app
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
@@ -89,6 +92,9 @@ class KakuyomuProvider : MainAPI() {
         }
         return "$mainUrl/search" + if (params.isEmpty()) "" else "?" + params.joinToString("&")
     }
+
+    /** Characters (totalCharacterCount); the search has no length parameter, so the app filters. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHARACTERS)
 
     override suspend fun loadMainPage(
         page: Int,
@@ -194,7 +200,12 @@ object KakuyomuParser {
             val id = work.str("id") ?: return@mapNotNull null
             val title = work.str("title") ?: return@mapNotNull null
             api.newSearchResponse(title, "${api.mainUrl}/works/$id", fix = false) {
-                latestChapter = work.get("publicEpisodeCount")?.asInt()?.let { "Episode $it" }
+                val episodes = work.get("publicEpisodeCount")?.takeIf { it.isNumber }?.asLong()
+                latestChapter = episodes?.let { "Episode $it" }
+                length = NovelLength.of(
+                    chapters = episodes,
+                    characters = work.get("totalCharacterCount")?.takeIf { it.isNumber }?.asLong(),
+                )
             }
         }
     }

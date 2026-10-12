@@ -64,6 +64,7 @@ import com.lagradost.cloudstream4.compose.rounded
 import com.lagradost.cloudstream4.theme.CloudStreamPreviewTheme
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.NotificationHelper.etaToString
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.imported.ImportedBooks
 import com.lagradost.quicknovel.imported.ImportedLibraryCard
@@ -72,6 +73,7 @@ import com.lagradost.quicknovel.compose.AdaptiveAtLeast
 import com.lagradost.quicknovel.compose.centeredGutter
 import com.lagradost.quicknovel.compose.PosterMinCellWidth
 import com.lagradost.quicknovel.compose.RowMinCellWidth
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
@@ -112,6 +114,8 @@ fun SearchList(
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
     footer: @Composable (() -> Unit)? = null,
+    /** Show each item's listing length (Browse source page, docs/browse.md "Length filter"). */
+    showLength: Boolean = false,
 ) {
     if (isRow) {
         SearchListRow(
@@ -120,6 +124,7 @@ fun SearchList(
             items = items,
             searchAction = searchAction,
             footer = footer,
+            showLength = showLength,
         )
     } else {
         SearchResponseGrid(
@@ -128,6 +133,7 @@ fun SearchList(
             items = items,
             searchAction = searchAction,
             footer = footer,
+            showLength = showLength,
         )
     }
 }
@@ -139,6 +145,7 @@ fun SearchListRow(
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
     footer: @Composable (() -> Unit)? = null,
+    showLength: Boolean = false,
 ) {
     // Rows are capped at MaxContentWidth and centred on wide windows, but the list itself stays
     // full width so it can be scrolled from the side gutters too.
@@ -157,7 +164,8 @@ fun SearchListRow(
                     item.randomUuid
                 }) { item ->
                 SearchResponseRow(
-                    response = item, action = searchAction, modifier = Modifier.animateItem()
+                    response = item, action = searchAction, modifier = Modifier.animateItem(),
+                    showLength = showLength,
                 )
             }
             if (footer != null) {
@@ -209,6 +217,7 @@ fun SearchResponseRow(
     response: ImmutableSearchResponse,
     action: (SearchResponseAction) -> Unit,
     modifier: Modifier = Modifier,
+    showLength: Boolean = false,
 ) {
     val imageRequest = response.imageRequest()
 
@@ -337,7 +346,9 @@ fun SearchResponseRow(
                         }"
                     }
                 } else {
-                    response.latestChapterName
+                    // On a source page the listing's length ("2,932 pages · 109 ch") replaces the
+                    // latest chapter's name when known.
+                    (if (showLength) lengthCardText(response.length) else null) ?: response.latestChapterName
                 }
 
             if (text != null || response.isImported) {
@@ -550,6 +561,7 @@ fun SearchResponseItem(
     response: ImmutableSearchResponse,
     action: (SearchResponseAction) -> Unit,
     modifier: Modifier = Modifier,
+    showLength: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val imageRequest = response.imageRequest()
@@ -650,7 +662,37 @@ fun SearchResponseItem(
         }
 
         PosterTitle(response)
+        if (showLength) {
+            lengthCardText(response.length)?.let { text ->
+                Text(
+                    text = text,
+                    fontSize = 11.sp,
+                    lineHeight = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    textAlign = TextAlign.Center,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 5.dp, end = 5.dp, bottom = 2.dp),
+                )
+            }
+        }
     }
+}
+
+/** A listing's length as a card's small secondary line ([LengthFilter.cardText]), or null. */
+@Composable
+fun lengthCardText(length: NovelLength?): String? {
+    if (length == null) return null
+    val labels = LengthFilter.CardLabels(
+        pages = stringResource(R.string.browse_length_card_pages),
+        chapters = stringResource(R.string.browse_length_card_chapters),
+        chaptersApprox = stringResource(R.string.browse_length_card_chapters_approx),
+        characters = stringResource(R.string.browse_length_card_chars),
+        charactersApprox = stringResource(R.string.browse_length_card_chars_approx),
+    )
+    return remember(length, labels) { LengthFilter.cardText(length, labels) }
 }
 
 /** Small "Imported" mark on library cards of imported EPUB / TXT / PDF books. */
@@ -800,6 +842,7 @@ fun SearchResponseGrid(
     searchAction: (SearchResponseAction) -> Unit,
     modifier: Modifier,
     footer: @Composable (() -> Unit)? = null,
+    showLength: Boolean = false,
 ) {
     LazyVerticalGrid(
         columns = AdaptiveAtLeast(PosterMinCellWidth, minCount = 3),
@@ -816,6 +859,7 @@ fun SearchResponseGrid(
             SearchResponseItem(
                 response = response,
                 action = searchAction,
+                showLength = showLength,
                 modifier = Modifier
                     .animateItem()
                     .fillMaxWidth()

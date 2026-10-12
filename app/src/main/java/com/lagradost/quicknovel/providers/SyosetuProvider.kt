@@ -1,6 +1,7 @@
 package com.lagradost.quicknovel.providers
 
 import com.lagradost.quicknovel.*
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import kotlinx.coroutines.delay
 import org.jsoup.nodes.Document
 import java.net.URLEncoder
@@ -59,15 +60,26 @@ class SyosetuProvider : MainAPI() {
         "Short stories (短編)" to "t",
     )
 
+    /** Characters (文字数); with a range every listing becomes search.php with minlen / maxlen. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHARACTERS, serverSide = true)
+
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
         orderBy: String?,
         tag: String?
+    ): HeadMainPageResponse = loadMainPage(page, mainCategory, orderBy, tag, null)
+
+    override suspend fun loadMainPage(
+        page: Int,
+        mainCategory: String?,
+        orderBy: String?,
+        tag: String?,
+        length: LengthRange?,
     ): HeadMainPageResponse {
-        val url = mainPageUrl(page, mainCategory, orderBy, tag)
+        val url = mainPageUrl(page, mainCategory, orderBy, tag, length)
         val document = app.get(url).document
-        val items = if (orderBy == LATEST) parseSearch(document) else parseRanking(document)
+        val items = if (url.contains("/search.php")) parseSearch(document) else parseRanking(document)
         return HeadMainPageResponse(url, items)
     }
 
@@ -76,12 +88,20 @@ class SyosetuProvider : MainAPI() {
      * `/rank/isekailist/type/total_2/?p=1` (isekai fantasy), or for [LATEST] the search sorted by
      * last update, e.g. `/search.php?order=new&genre=201&type=er&p=2`.
      */
-    internal fun mainPageUrl(page: Int, mainCategory: String?, orderBy: String?, tag: String?): String {
+    internal fun mainPageUrl(
+        page: Int,
+        mainCategory: String?,
+        orderBy: String?,
+        tag: String?,
+        length: LengthRange? = null,
+    ): String {
         val genre = mainCategory?.takeIf { it.isNotBlank() } ?: mainCategories.first().second
         val order = orderBy?.takeIf { it.isNotBlank() } ?: orderBys.first().second
         val status = tag?.takeIf { it.isNotBlank() }
         val p = page.coerceAtLeast(1)
-        if (order == LATEST) {
+        if (order == LATEST || length != null) {
+            // search.php has the ranking periods as orders (hyoka = total points, dailypoint, ...)
+            // and filters by length in characters (minlen / maxlen).
             val filter = when (genre) {
                 // The isekai rankings are works tagged 異世界転生/転移 (istt) in a big genre:
                 // fantasy, or literature/SF/other/non-genre (isekai romance, i1, is not offered).
@@ -90,8 +110,9 @@ class SyosetuProvider : MainAPI() {
                 ALL_GENRES -> null
                 else -> "genre=$genre"
             }
-            return "$mainUrl/search.php?order=new" + (filter?.let { "&$it" } ?: "") +
-                    (status?.let { "&type=$it" } ?: "") + "&p=$p"
+            val lengthParams = (length?.min?.let { "&minlen=$it" } ?: "") + (length?.max?.let { "&maxlen=$it" } ?: "")
+            return "$mainUrl/search.php?order=${searchOrder(order)}" + (filter?.let { "&$it" } ?: "") +
+                    (status?.let { "&type=$it" } ?: "") + lengthParams + "&p=$p"
         }
         val suffix = status?.let { "_$it" } ?: ""
         return "$mainUrl/rank/" + when {
@@ -101,12 +122,37 @@ class SyosetuProvider : MainAPI() {
         }
     }
 
-    /** Pure: a ranking page's entries. */
+    /** search.php `order` for a ranking period ([orderBys] value); [LATEST] is "new". */
+    internal fun searchOrder(order: String): String = when (order) {
+        "total" -> "hyoka"
+        "daily" -> "dailypoint"
+        "weekly" -> "weeklypoint"
+        "monthly" -> "monthlypoint"
+        "quarter" -> "quarterpoint"
+        "yearly" -> "yearlypoint"
+        else -> "new"
+    }
+
+    /** Pure: a ranking page's entries, with 文字数 and エピソード counts. */
     internal fun parseRanking(document: Document): List<SearchResponse> =
         document.select(".p-ranklist-item").mapNotNull { container ->
             val a = container.selectFirst(".p-ranklist-item__title a") ?: return@mapNotNull null
-            newSearchResponse(a.text().trim(), a.attr("href"))
+            newSearchResponse(a.text().trim(), a.attr("href")) {
+                length = lengthOf(container.selectFirst(".p-ranklist-item__infomation")?.text())
+            }
         }
+
+    /** "連載中(全662エピソード) 2,209,879文字" / "(全286エピソード) … （2,830,123文字）"; 短編 is one episode. */
+    internal fun lengthOf(text: String?): NovelLength? {
+        if (text == null) return null
+        val episodes = episodesRegex.find(text)?.groupValues?.get(1)?.let { LengthFilter.parseCount(it) }
+            ?: if (text.contains("短編")) 1L else null
+        val characters = charactersRegex.find(text)?.groupValues?.get(1)?.let { LengthFilter.parseCount(it) }
+        return NovelLength.of(chapters = episodes, characters = characters)
+    }
+
+    private val episodesRegex = Regex("""全\s*([\d,]+)\s*(?:エピソード|部分|話)""")
+    private val charactersRegex = Regex("""([\d,]+)\s*文字(?!数)""")
 
     override suspend fun load(url: String): LoadResponse {
         val fixedUrl = url.replace(mainUrl, ncodeUrl)
@@ -279,6 +325,11 @@ class SyosetuProvider : MainAPI() {
 
             newSearchResponse(titleElement.text().trim(), titleElement.attr("href")) {
                 posterUrl = ""
+                // Status cell (全N エピソード) and the reading-time line (N文字); not the synopsis.
+                length = lengthOf(
+                    result.selectFirst("td.left")?.text().orEmpty() + " " +
+                            result.text().substringAfter("読了時間", "")
+                )
             }
         }
     }

@@ -9,14 +9,15 @@ Recorded pages for the JVM provider tests in `app/src/test/java/com/lagradost/qu
 | `quanben/` | `QuanbenProvider` | `search.html` (`斗罗`), `novel.html` (douluodalu), `amp_list.html` (AMP chapter list, all 688 chapters), `list.html` (regular list with the collapsed middle), `home.html`, `category.html` + `category_page2.html` (`/c/xuanhuan.html`, `_2.html`), `chapter.html` |
 | `syosetu/` | `SyosetuProvider` | `search.html` (`転生`), `novel.html` + `novel_page2.html` + `novel_last_page.html` (n9669bk, table of contents pages 1-3), `infotop.html` (n9669bk, 完結済) + `infotop_serialized.html` (n3159fs, 連載中), `oneshot.html` (n7399mv, 短編, trimmed), `rank.html` + `rank_page2.html` (all-genre all-time ranking, five entries each), `chapter.html` |
 | `cloudflare/` | `CloudflareKiller` | `challenge_69shuba.html`: the managed challenge 69shuba served for `/novels/newhot_0_0_1.htm` (HTTP 403, `cf-mitigated: challenge`); `challenge_hameln.html`: the managed challenge (`cType: 'managed'`) syosetu.org answers every JVM request with (HTTP 403, `cf-mitigated: challenge`, recorded 2026-10-12) |
-| `kakuyomu/` | `KakuyomuProvider` | `search.html` (`転生`), `work.html`, `episode.html` |
+| `kakuyomu/` | `KakuyomuProvider` | `search.html` (`転生`; `totalCharacterCount` of each work added 2026-10-12 from the live page, which the first trim had dropped), `work.html`, `episode.html` |
+| `royalroad/` | `RoyalRoadProvider` | `best_rated.html` (`/fictions/best-rated`), `search_pages.html` (`/fictions/search?minPages=500&maxPages=1500&orderBy=popularity`), `latest_updates.html` (`/fictions/latest-updates`, first two chapters per card), recorded 2026-10-12: first three cards each, synopses removed |
 | `novelpia/` | `NovelpiaProvider` | `search.json` (`회귀`), `novel.html` (26536), `episode_list.html` (page 0), `viewer.json` |
 | `czbooks/` | `CzbooksProvider` | `search.html` (`难哄`), `novel.html` (shhmoa, chapter list trimmed), `chapter.html`, `list_popular.html` (`/c/normal/week/1`), `list_latest.html` (`/c/yanqing/new/2`), `list_completed.html` (`/c/finish/week/1`, one adult-titled card removed) |
 | `hameln/` | `HamelnProvider` | Smartphone layout (what the Cloudflare WebView user agent gets), fetched 2026-10-12 through a mobile Chrome that had passed Cloudflare, because the JVM client only ever gets the challenge. `rank.html` (`?mode=rank_day`, six cards; the fifth card's title and tags were edited to an R-18 test card), `search.html` (`転生`, `type=28`, five cards), `latest.html` (`type=45`, three cards), `search_empty.html`, `novel.html` (425756, 33 episodes in two sections), `detail.html` (`?mode=ss_detail`, 連載中), `chapter.html` (first 40 lines), `oneshot.html` + `oneshot_detail.html` (428992, 短編 1話, text on the novel page). Recommendation, search-board and similar-works boxes were removed |
 
 `synthetic_*` files are small hand-written pages (structure copied from the sites, text
 invented) that pin edge cases such as adult-work filtering, locked episodes, watermarks and
-non-kana ruby; they are used by `ProviderParserTest`.
+non-kana ruby (and, since the length filter, the length markup copied from the live pages: Novelpia "N회차" / "EP.N", Pixiv `character_count`); they are used by `ProviderParserTest`.
 
 ## No copyrighted prose
 

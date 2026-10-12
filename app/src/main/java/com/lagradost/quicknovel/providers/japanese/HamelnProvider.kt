@@ -3,8 +3,11 @@ package com.lagradost.quicknovel.providers.japanese
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.newChapterData
@@ -47,6 +50,9 @@ open class HamelnProvider : MainAPI() {
     override val mainUrl = "https://syosetu.org"
     override val lang = "ja"
     override val hasMainPage = true
+
+    /** Characters (episodes x average per episode on each card); filtered in the app. */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.CHARACTERS)
     override val usesCloudFlareKiller = true
     override val rateLimitTime = MIN_INTERVAL_MS
 
@@ -204,6 +210,19 @@ object HamelnParser {
     fun <T> page(all: List<T>, page: Int, size: Int): List<T> =
         all.drop((page.coerceAtLeast(1) - 1) * size).take(size)
 
+    private val averageRegex = Regex("""平均：\s*([\d,]+)字""")
+
+    /**
+     * "連載：37話　平均：1,942字": 37 episodes and 37 x 1,942 characters (the card shows the
+     * average per episode; the product is within a few characters of the total).
+     */
+    fun lengthOf(count: MatchResult?, lines: List<String>): NovelLength? {
+        val episodes = count?.groupValues?.get(2)?.replace(",", "")?.toLongOrNull() ?: return null
+        val average = lines.firstNotNullOfOrNull { averageRegex.find(it) }
+            ?.groupValues?.get(1)?.replace(",", "")?.toLongOrNull()
+        return NovelLength.of(chapters = episodes, characters = average?.let { it * episodes })
+    }
+
     /** Cards of a ranking, search or latest-updates page (`div.search_box`), R-18 works removed. */
     fun parseList(api: MainAPI, html: String): List<SearchResponse> {
         val doc = Jsoup.parse(html, "${api.mainUrl}/")
@@ -219,6 +238,7 @@ object HamelnParser {
             if (isAdult(tagLine.removePrefix("タグ：").split(' ', '　'))) return@mapNotNull null
             val count = lines.firstNotNullOfOrNull { countRegex.find(it) }
             api.newSearchResponse(title, "${api.mainUrl}/novel/${novelId(url)}/", fix = false) {
+                length = lengthOf(count, lines)
                 latestChapter = count?.let {
                     val n = it.groupValues[2].replace(",", "")
                     if (it.groupValues[1] == "短編" && n == "1") "One-shot" else "Episode $n"

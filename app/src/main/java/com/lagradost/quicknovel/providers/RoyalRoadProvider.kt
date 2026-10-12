@@ -4,8 +4,12 @@ import android.annotation.SuppressLint
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LengthFilterSupport
+import com.lagradost.quicknovel.LengthRange
+import com.lagradost.quicknovel.LengthUnit
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.NovelLength
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.UserReview
@@ -17,6 +21,7 @@ import com.lagradost.quicknovel.newReview
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
+import com.lagradost.quicknovel.ui.browse.LengthFilter
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -246,49 +251,103 @@ class RoyalRoadProvider : MainAPI() {
         }
     }
 
+    /** Pages, as the lists show them; with a range the search page filters (minPages / maxPages). */
+    override val lengthFilter = LengthFilterSupport(LengthUnit.PAGES, serverSide = true)
+
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
         orderBy: String?,
         tag: String?,
     ): HeadMainPageResponse {
-        val url =
-            "$mainUrl/fictions/$orderBy?page=$page${if (tag == null || tag == "") "" else "&genre=$tag"}"
+        val url = listUrl(page, orderBy, tag)
         if (page > 1 && arrayOf("trending","rising-stars").contains(orderBy)) return HeadMainPageResponse(
             url,
             ArrayList()
         ) // TRENDING ONLY HAS 1 PAGE
 
         val response = app.get(url)
+        return HeadMainPageResponse(url, parseFictionList(Jsoup.parse(response.text), orderBy == "latest-updates"))
+    }
 
-        val document = Jsoup.parse(response.text)
+    /**
+     * With a page range the list becomes the fiction search, which filters by length; without
+     * one the usual list (docs/browse.md, "Length filter").
+     */
+    override suspend fun loadMainPage(
+        page: Int,
+        mainCategory: String?,
+        orderBy: String?,
+        tag: String?,
+        length: LengthRange?,
+    ): HeadMainPageResponse {
+        if (length == null) return loadMainPage(page, mainCategory, orderBy, tag)
+        val url = searchListUrl(page, orderBy, tag, length)
+        return HeadMainPageResponse(url, parseFictionList(app.get(url).document, latestUpdates = false))
+    }
 
-        val returnValue = document.select("div.fiction-list-item").mapNotNull { h ->
-            val head = h.selectFirst("> div")
-            val hInfo = head?.selectFirst("> h2.fiction-title > a")
+    /** One of the `/fictions/<list>` pages, e.g. `/fictions/best-rated?page=2&genre=fantasy`. */
+    internal fun listUrl(page: Int, orderBy: String?, tag: String?): String =
+        "$mainUrl/fictions/$orderBy?page=$page${if (tag == null || tag == "") "" else "&genre=$tag"}"
 
+    /**
+     * The fiction search standing in for list [orderBy] with a page range, e.g.
+     * `/fictions/search?minPages=500&maxPages=1500&tagsAdd=fantasy&orderBy=rating&page=1`. The
+     * search has no trending, rising-stars, weekly or writathon order: those use popularity
+     * ([searchOrder]); "Ongoing" and "Completed" become a status filter.
+     */
+    internal fun searchListUrl(page: Int, orderBy: String?, tag: String?, length: LengthRange): String {
+        val params = buildList {
+            length.min?.let { add("minPages=$it") }
+            length.max?.let { add("maxPages=$it") }
+            if (!tag.isNullOrBlank()) add("tagsAdd=$tag")
+            when (orderBy) {
+                "active-popular" -> add("status=ONGOING")
+                "complete" -> add("status=COMPLETED")
+            }
+            add("orderBy=${searchOrder(orderBy)}")
+            add("page=${page.coerceAtLeast(1)}")
+        }
+        return "$mainUrl/fictions/search?" + params.joinToString("&")
+    }
+
+    /** The search order nearest to list [orderBy] (the search's `orderBy` values). */
+    internal fun searchOrder(orderBy: String?): String = when (orderBy) {
+        "best-rated" -> "rating"
+        "latest-updates" -> "last_update"
+        "new-releases" -> "release_date"
+        // active-popular, complete, weekly-popular, trending, rising-stars, writathon
+        else -> "popularity"
+    }
+
+    /**
+     * Pure: the fiction cards of a list (`/fictions/best-rated`) or search page. Pages and
+     * chapters come from the stats row (the book and list icons); latest-updates cards have no
+     * stats but their newest chapter instead.
+     */
+    internal fun parseFictionList(document: Document, latestUpdates: Boolean): List<SearchResponse> =
+        document.select("div.fiction-list-item").mapNotNull { h ->
+            val hInfo = h.selectFirst("h2.fiction-title > a")
             val name = hInfo?.text() ?: return@mapNotNull null
             val cUrl = hInfo.attr("href")
+            fun stat(icon: String): String? =
+                h.select("div.stats > div").firstOrNull { it.selectFirst("i.$icon") != null }
+                    ?.selectFirst("span")?.text()
+            val pages = stat("fa-book")?.let { LengthFilter.parseCount(it) }
+            val chaptersText = stat("fa-list")
+            val chapters = chaptersText?.let { LengthFilter.parseCount(it) }
 
             //val tags = ArrayList(h.select("span.tags > a").map { t -> t.text() })
             newSearchResponse(name = name, url = cUrl) {
-                latestChapter = try {
-                    if (orderBy == "latest-updates") {
-                        head.selectFirst("> ul.list-unstyled > li.list-item > a > span")?.text()
-                    } else {
-                        h.select("div.stats > div.col-sm-6 > span")[4].text()
-                    }
-                } catch (_: Throwable) {
-                    null
-                }
-                rating =
-                    head.selectFirst("> div.stats")?.select("> div")?.get(1)?.selectFirst("> span")
-                        ?.attr("title")?.toFloatOrNull()?.times(200)?.toInt()
-                posterUrl = fixUrlNull(h.selectFirst("> figure > a > img")?.attr("src"))
+                latestChapter = if (latestUpdates) {
+                    h.selectFirst("ul.list-unstyled > li.list-item > a > span")?.text()
+                } else chaptersText
+                rating = h.selectFirst("div.stats span.star[title]")?.attr("title")
+                    ?.toFloatOrNull()?.times(200)?.toInt()
+                posterUrl = fixUrlNull(h.selectFirst("figure img")?.attr("src"))
+                length = NovelLength.of(chapters = chapters, pages = pages)
             }
         }
-        return HeadMainPageResponse(url, returnValue)
-    }
 
 
     override suspend fun search(query: String): List<SearchResponse> {
