@@ -25,7 +25,7 @@ A source that mixes languages (Pixiv) is narrowed to one language at the request
 | Source | Lang | Search | Browse (main page) | Chapter text | Login | Cloudflare / geo | Class |
 |---|---|---|---|---|---|---|---|
 | 69shuba (Biquge) | zh | yes (Turnstile; WebView fallback) | yes | yes | no | Cloudflare; geo-blocked from some regions (HTTP 403 here) | `chinese/BiqugeProvider` |
-| Quanben | zh | yes | yes | yes | no | none seen | `QuanbenProvider` |
+| Quanben | zh | yes | yes (genres; no rankings on the site) | yes | no | none seen | `QuanbenProvider` |
 | **Ixdzs (爱下电子书)** | zh | yes | yes | yes | no | none; own token check on chapter pages (handled) | `chinese/IxdzsProvider` |
 | **Piaotia (飘天文学)** | zh | yes | yes | yes | no | Cloudflare passive script only, no challenge | `chinese/PiaotiaProvider` |
 | Kakuyomu (カクヨム) | ja | yes | yes | yes | no | none | `japanese/KakuyomuProvider` |
@@ -37,16 +37,52 @@ A source that mixes languages (Pixiv) is narrowed to one language at the request
 
 Bold rows were added in this pass. Each one has fixture tests and a gated live test (below).
 
+### Status mapping
+
+`providers/CjkStatus.parse(text)` maps the status words the sites print to the app's
+`ReleaseStatus` (the generic `setStatus(String)` only knows English words, so CJK text left the
+status empty). Substring match, checked in this order:
+
+| Text | Status |
+|---|---|
+| 未完结, 未完結, 未完本, 미완결 | Ongoing |
+| 已完结, 完结, 已完本, 完本, 全本, 已完成, 完結 (完結済), 완결 | Completed |
+| 断更, 停更, 休載, 休止, 휴재 | Paused |
+| 连载 (连载中), 連載 (連載中), 연재 (연재중) | Ongoing |
+
+Used by 69shuba, Quanben and Syosetu. Pass the status field only, not a whole page (全本小说网 is a
+site name).
+
 ## Per-source notes
 
 ### 69shuba (Biquge), zh
 GBK, Cloudflare. Plain GETs work, but search POSTs need a Turnstile token (the provider runs the
 search in a WebView) and Cloudflare challenges after about 30 quick chapter fetches (the provider
-spaces downloads and pauses in bursts). This machine gets HTTP 403 from the site (geo/IP), so it
-could not be re-tested here.
+spaces downloads and pauses in bursts). curl gets HTTP 403 from this machine, but the app's
+OkHttp client gets through (fixtures and live checks use it).
+- Browse (re-done 2026-10-11; the old `/paihang/...` and `/novels/class/{tag}/{order}/{page}/`
+  URLs return 404): rankings `/novels/{order}_{category}_{status}_{page}.htm`, 50 per page.
+  Orders: Popular, monthly (人气榜, `monthvisit`, default), Popular, weekly (`weekvisit`),
+  Recommended (推荐榜, `allvote`), Latest updates (最近更新, `/last.html`: one page of 30 books, page 2
+  is empty, ignores category and status). Status (main category): All, Ongoing (连载, `2`),
+  Completed (全本, `1`). Tags: the site's 12 category ids (`/novels/class/{id}.htm`).
+- Not offered: 新书榜 (`newhot`) answers with a Cloudflare managed challenge outside a browser;
+  `lastupdate`/`allvisit`/`goodnum`/`postdate`/`dayvisit` rankings are empty. The site has no
+  monthly-ticket (月票) or bookmark (收藏) ranking.
+- Status from `og:novel:status` (连载 / 全本 / 完本) through `CjkStatus`. Tags: the category followed by
+  the `tags: '...|...'` list of the page's `bookinfo` script (the visible tag list is filled by JS).
 
-### Quanben, zh
-Upstream provider. Reachable (HTTP 200). Not re-tested in depth in this pass.
+### Quanben, zh — https://www.quanben.io
+- Chapter list: the AMP list page `/amp/n/{slug}/list.html` has every chapter on one page (688 for
+  斗罗大陆, 2451 for the longest seen). Names and URLs are taken from the same link. Until
+  2026-10 the provider took names from the quanben5.com mirror (610 entries for 斗罗大陆) and
+  numbered quanben.io URLs in list order, so names and chapters drifted apart. The regular
+  `list.html` shows only the first and last ~24 chapters and loads the rest through a signed
+  JSONP call; it is used only as a fallback when it is complete.
+- Status from `og:novel:status` (完结) through `CjkStatus`.
+- Browse: no ranking or latest-updates page exists. Default "Recommended (推荐小说)" is the home
+  page (18 books, one page). Genre listings `/c/{genre}.html`, `/c/{genre}_{page}.html` (12 per
+  page, site order). Every book on the site is complete (全本), so there is no status filter.
 
 ### Ixdzs (爱下电子书), zh — https://ixdzs8.com
 - UTF-8, server-rendered. Search `/bsearch?q=`, category browse `/sort/{cat}/index-0-{status}-{order}-{page}.html`.
@@ -77,10 +113,22 @@ Upstream provider. Reachable (HTTP 200). Not re-tested in depth in this pass.
 ### Kakuyomu (カクヨム), ja
 Next.js Apollo state. All episodes are embedded on the work page. No login is needed.
 
-### Syosetu, ja
-Upstream provider. Chapter titles are placeholders ("Episode N") built from the last episode
-number, and one-shot (短編) works, which have no episode list, come back with no chapters. The adult sister sites (Noc/Novel18, which need an
-`over18=yes` cookie) are not covered.
+### Syosetu (小説家になろう), ja
+- Episode titles: the table of contents lists 100 episodes per page (`?p=2`, ...). The provider
+  reads every page (250 ms apart) and uses the real episode titles. A page that fails twice gets
+  "Episode N" placeholders so later numbering stays right. One-shots (短編) have no episode list
+  and become a single chapter on the work page.
+- Status and tags come from the info page `/novelview/infotop/ncode/{ncode}/` (one more request):
+  `p-infotop-type__type--completed` 完結済 → Completed, `--serialized` 連載中 → Ongoing, `--short`
+  短編 → Completed; tags are the genre (ジャンル) and the keywords (キーワード). The novel page no
+  longer has a type label, so before 2026-10 every work showed as Ongoing with no tags.
+- Browse: main category = genre, with "All genres (総合)" first (`/rank/list/type/{period}_total/`),
+  then the isekai lists and the genres. Orders: All-time ranking (累計, default), Daily (日間),
+  Weekly (週間), Monthly (月間), Quarterly (四半期), Yearly (年間), all 50 per page, and Latest
+  updates (最新掲載: `/search.php?order=new`, 20 per page; isekai categories map to `istt=1` plus the
+  big genre). Tags = status: All, Ongoing (連載中, `_r` / `type=r`), Completed (完結済, `_er` /
+  `type=er`), Short stories (短編, `_t` / `type=t`).
+- The adult sister sites (Noc/Novel18, which need an `over18=yes` cookie) are not covered.
 
 ### Alphapolis (アルファポリス), ja — https://www.alphapolis.co.jp
 - Search `/search?query=&category=novel`. Browse `/novel/index?sort=&category_ids=` (24h,
@@ -138,10 +186,20 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
   provider opts in with `override val usesCloudFlareKiller = true` (its `app` then goes through
   `MainActivity.appWithInterceptor`, and posters get the matching header). Nine existing
   (non-CJK) providers use it. None of the five new sources needs `cf_clearance`, so none of them opts in.
-- **Known false positive**: `CloudflareKiller.looksLikeCloudflareChallenge` returns true for *any*
-  response whose first 10 KB contains `/cdn-cgi/`, even a 200. Sites that embed Cloudflare's passive
-  bot script near the top of short pages (piaotia does this on every page) would trigger a
-  WebView solve on each request. That is why Piaotia stays on the plain client.
+- **Challenge detection** (`CloudflareKiller.isCloudflareChallenge`, fixed 2026-10): a response
+  counts as a challenge only with `cf-mitigated: challenge`, a redirect into `/cdn-cgi/`, challenge
+  markup (`_cf_chl_opt`, `__cf_chl_`, `cf-chl-`, `/cdn-cgi/challenge-platform/h/`,
+  `cf-browser-verification`, `challenge-form`, a "Just a moment..." / "One moment" / "Un momento"
+  `<title>`, the old IUAM `jschl` fields), or a Turnstile form on a 403/429/503 (or on a short
+  Cloudflare page). Before, any response with `/cdn-cgi/` in its first 10 KB counted, including
+  normal 200 pages with Cloudflare's passive `/cdn-cgi/challenge-platform/scripts/jsd/` script or
+  email protection, and any Cloudflare 403/429/503 (a firewall ban or a plain 403, which a WebView
+  cannot clear). The cookie cache is unchanged. Tested on a recorded 69shuba challenge and a
+  recorded piaotia chapter (`CloudflareKillerTest`).
+- **Piaotia** still uses the plain client: it shows no challenge today (only the passive script),
+  its live test passes without the interceptor, and the interceptor cannot run in the JVM tests
+  (it needs Android's `CookieManager`), so enabling it could not be verified here. With the
+  detection fixed it is safe to enable after a check on a device.
 - **69shuba**: the interceptor could help with the managed challenge that appears after bursts of
   chapter requests (GETs). It would not help with the Turnstile on the search POST, because the
   WebView reloads the URL as a GET; `BiqugeProvider` already runs that search in its own WebView.
@@ -157,7 +215,7 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 |---|---|
 | Hameln (syosetu.org), ja | Cloudflare managed challenge (`cf-mitigated: challenge`) on every page from here. It would need `usesCloudFlareKiller`, and the JVM tests could not verify it. Good next candidate to try on a device. |
 | wenku8, zh | Same Cloudflare managed challenge. |
-| Novel18 / Noc (syosetu adult), ja | Reachable (HTTP 200; the age gate wants an `over18=yes` cookie), but adult-only, and the existing Syosetu provider (not changed in this pass) has placeholder chapter titles. Skipped. |
+| Novel18 / Noc (syosetu adult), ja | Reachable (HTTP 200; the age gate wants an `over18=yes` cookie), but adult-only. Skipped. |
 | Munpia (문피아), ko | Desktop and mobile are SPAs over `/api/v1/...`. Search and the episode list are plain JSON, but chapter text (`/entries/{id}/content`) is empty without a timestamp signature computed in WebAssembly (`novel_wasm_bg.wasm`). Rejected. |
 | Joara (조아라), ko | `api.joara.com` works for lists, but `chapter.joa` answers "로그인 후 이용하시기 바랍니다" (login required) even for free chapters. Rejected. |
 | Naver Series / Kakao Page / Qidian VIP | Paid or DRM. Out of scope. |
@@ -167,6 +225,15 @@ Free and "free serial" episodes only. PLUS/19+ need an account and are skipped.
 
 ## Tests
 
+- Older sources (69shuba, Quanben, Syosetu, Kakuyomu, Novelpia): `providers/*FixtureTest.kt`, with
+  `CjkStatusTest` for the status mapping and `network/CloudflareKillerTest` for challenge detection.
+  Gated live checks for them: `CjkProvidersLiveSmokeTest`, `ProviderFixesLiveTest` (Quanben chapter
+  names against the chapter pages' headings, Syosetu titles/status/tags, 69shuba status/tags) and
+  `BrowseListingsLiveTest` (every browse listing: page 1 non-empty, page 2 brings new works):
+
+  ```
+  ./gradlew :app:testDebugUnitTest --tests '*BrowseListingsLiveTest*' --tests '*ProviderFixesLiveTest*' -Dlive=1
+  ```
 - Fixture tests: `app/src/test/java/com/lagradost/quicknovel/providers/cjk/*ProviderTest.kt`,
   fixtures under `app/src/test/resources/providers/{ixdzs,piaotia,alphapolis,pixiv,naver}/`. The
   fixtures keep each site's real markup (class names, inline JSON, scripts, broken HTML). Titles,

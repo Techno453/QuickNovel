@@ -1,5 +1,6 @@
 package com.lagradost.quicknovel.providers
 
+import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.providers.ProviderFixtures.assertCleanChapter
 import com.lagradost.quicknovel.providers.ProviderFixtures.document
@@ -38,6 +39,66 @@ class Shuba69FixtureTest {
     }
 
     @Test
+    fun rankingPageIsTheBrowseListing() {
+        // Recorded from /novels/monthvisit_0_0_1.htm (2026-10-11), trimmed to five entries.
+        val url = "https://www.69shuba.com/novels/monthvisit_0_0_1.htm"
+        val results = api.parseBookList(document("69shuba/rank.html", url))
+        assertEquals(5, results.size)
+        assertEquals("诡秘之主", results[0].name)
+        assertEquals("https://www.69shuba.com/book/29590.htm", results[0].url)
+        assertEquals("https://cdn.cdnshu.com/files/article/image/29/29590/29590s.jpg", results[0].posterUrl)
+        assertEquals("我所有职业，天赋全是神级？", results[4].name)
+        assertEquals("https://www.69shuba.com/book/90509.htm", results[4].url)
+    }
+
+    @Test
+    fun browseUrlsUseTheRankingPages() {
+        // Defaults (first order, all categories, any status).
+        assertEquals("https://www.69shuba.com/novels/monthvisit_0_0_1.htm", api.mainPageUrl(1, null, null, null))
+        assertEquals(
+            "https://www.69shuba.com/novels/monthvisit_0_0_1.htm",
+            api.mainPageUrl(1, api.mainCategories.first().second, api.orderBys.first().second, api.tags.first().second),
+        )
+        // Romance (3), ongoing (2), weekly popularity, page 2 (verified live: 50 ongoing romance works).
+        assertEquals("https://www.69shuba.com/novels/weekvisit_3_2_2.htm", api.mainPageUrl(2, "2", "weekvisit", "3"))
+        assertEquals("https://www.69shuba.com/novels/allvote_0_1_1.htm", api.mainPageUrl(0, "1", "allvote", ""))
+        // Latest updates is a single page that ignores category and status.
+        assertEquals("https://www.69shuba.com/last.html", api.mainPageUrl(1, "1", BiqugeProvider.LATEST, "3"))
+        // No dead URL shapes from before the redesign.
+        for (o in api.orderBys) for (c in api.mainCategories) for (t in api.tags) {
+            val url = api.mainPageUrl(2, c.second, o.second, t.second)
+            assertTrue(url, url.matches(Regex("""https://www\.69shuba\.com/(novels/[a-z]+_\d+_[012]_2\.htm|last\.html)""")))
+        }
+        assertEquals(api.tags.size, api.tags.map { it.second }.toSet().size)
+    }
+
+    @Test
+    fun browseListingsCoverPopularLatestAndCompleted() {
+        // Default (first) entries are the most-popular listing over everything.
+        assertEquals("monthvisit", api.orderBys.first().second)
+        assertEquals("0", api.mainCategories.first().second)
+        assertEquals("0", api.tags.first().second)
+        assertTrue(api.orderBys.any { it.second == BiqugeProvider.LATEST })
+        assertTrue(api.mainCategories.any { it.second == "1" && it.first.startsWith("Completed") })
+        // English labels (the site's term may follow in parentheses).
+        for ((label, _) in api.orderBys + api.mainCategories + api.tags) {
+            assertTrue(label, label.first() in 'A'..'Z')
+        }
+    }
+
+    @Test
+    fun latestUpdatesPage() {
+        // Recorded from /last.html (2026-10-11): the 30 most recently updated books.
+        val results = api.parseBookList(document("69shuba/latest.html", "https://www.69shuba.com/last.html"))
+        assertEquals(30, results.size)
+        assertEquals("这个影帝只想考证", results.first().name)
+        assertEquals("https://www.69shuba.com/book/77771.htm", results.first().url)
+        assertEquals("八小时工作制的朝廷鹰犬", results.last().name)
+        assertTrue(results.all { it.url.matches(Regex("""https://www\.69shuba\.com/book/\d+\.htm""")) })
+        assertEquals(30, results.map { it.url }.toSet().size)
+    }
+
+    @Test
     fun catalogUrlFromInfoUrl() {
         assertEquals(listUrl, api.catalogUrl(infoUrl))
     }
@@ -54,6 +115,9 @@ class Shuba69FixtureTest {
         assertEquals(infoUrl, load.url)
         assertEquals("https://cdn.cdnshu.com/files/article/image/90/90435/90435s.jpg", load.posterUrl)
         assertTrue(!load.synopsis.isNullOrBlank())
+        // og:novel:status 连载; tags = category + the bookinfo script's tag list.
+        assertEquals(ReleaseStatus.Ongoing, load.status)
+        assertEquals(listOf("官场职场", "穿越", "篮球", "天才流", "成熟", "热血", "嘴炮", "正能量"), load.tags)
 
         // The catalog is newest-first on the site; the provider reverses it.
         val chapters = load.data

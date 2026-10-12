@@ -24,6 +24,68 @@ class CloudflareKiller : Interceptor {
     companion object {
         const val TAG = "CloudflareKiller"
         private val mutex = Mutex() // Ensures only one bypass runs at a time
+
+        /** How much of the body [isCloudflareChallenge] looks at. */
+        const val BODY_SAMPLE_BYTES = 10L * 1024
+
+        /**
+         * Markup that only a Cloudflare challenge page has. Deliberately not a bare `/cdn-cgi/`:
+         * healthy pages embed Cloudflare's passive bot script
+         * (`/cdn-cgi/challenge-platform/scripts/jsd/main.js`, piaotia has it on every page) or
+         * email obfuscation (`/cdn-cgi/l/email-protection`), and treating those as challenges
+         * started a WebView solve on every request. A real challenge loads
+         * `/cdn-cgi/challenge-platform/h/.../orchestrate/...` and sets `window._cf_chl_opt`.
+         * Titles are matched as `<title>` so prose such as "Just a moment," in a chapter does
+         * not count; "One moment..." / "Un momento…" are localized challenge titles.
+         */
+        private val challengeMarkers = listOf(
+            "_cf_chl_opt",
+            "__cf_chl_",
+            "cf-chl-",
+            "cf_chl_",
+            "/cdn-cgi/challenge-platform/h/",
+            "cf-browser-verification",
+            "id=\"challenge-form\"",
+            "id=\"challenge-running\"",
+            "<title>just a moment",
+            "<title>one moment",
+            "<title>un momento",
+            "checking your browser before accessing",
+            "jschl-answer", "jschl_vc", // pre-2023 IUAM challenge
+            "cf_captcha_kind",
+        )
+
+        /** A Turnstile widget; a challenge only on a block status or on a short Cloudflare page. */
+        private val turnstileMarkers = listOf("cf-turnstile", "challenges.cloudflare.com/turnstile")
+
+        /**
+         * True when a response is a Cloudflare challenge that a WebView solve can clear:
+         * - `cf-mitigated: challenge` (Cloudflare's own signal, any status);
+         * - a redirect into `/cdn-cgi/`;
+         * - 403/429/503 with challenge markup or a Turnstile form;
+         * - any other status only with challenge markup, or a Turnstile form on a short page
+         *   served by Cloudflare (the whole body fit in the sample, so it is not a normal page
+         *   with a Turnstile login widget).
+         * A normal page that merely contains a `/cdn-cgi/` script is not a challenge.
+         * [header] looks a header up case-insensitively; [bodySample] is the first
+         * [BODY_SAMPLE_BYTES] of the body. Pure, covered by `CloudflareKillerTest`.
+         */
+        fun isCloudflareChallenge(code: Int, header: (String) -> String?, bodySample: String): Boolean {
+            if (header("cf-mitigated")?.contains("challenge", ignoreCase = true) == true) return true
+            if (header("location").orEmpty().contains("/cdn-cgi/", ignoreCase = true)) return true
+
+            val body = bodySample.take(BODY_SAMPLE_BYTES.toInt()).lowercase()
+            val hasChallengeMarkup = challengeMarkers.any { body.contains(it) }
+            val hasTurnstile = turnstileMarkers.any { body.contains(it) }
+            if (code == 403 || code == 429 || code == 503) {
+                return hasChallengeMarkup || hasTurnstile
+            }
+            if (hasChallengeMarkup) return true
+            val isCloudflare = header("cf-ray") != null ||
+                    header("server")?.contains("cloudflare", ignoreCase = true) == true
+            val isShortPage = bodySample.length < BODY_SAMPLE_BYTES // the whole body fit in the sample
+            return hasTurnstile && isCloudflare && isShortPage
+        }
     }
 
     /*//this is used to testing
@@ -85,30 +147,11 @@ class CloudflareKiller : Interceptor {
     }
 
     private fun looksLikeCloudflareChallenge(response: Response): Boolean {
-        val hasCloudflareHeaders =
-            response.header("cf-ray") != null ||
-                    response.header("server")?.contains("cloudflare", ignoreCase = true) == true
-
-        // Read a small sample of the body to check for challenge scripts.
+        // Read a small sample of the body to check for challenge markup.
         val bodySample = runCatching {
-            response.peekBody(1024 * 10).string().lowercase()
+            response.peekBody(BODY_SAMPLE_BYTES).string()
         }.getOrDefault("")
-
-        val isChallengeBody = bodySample.contains("cf-browser-verification") ||
-                bodySample.contains("checking your browser") ||
-                bodySample.contains("just a moment") ||
-                bodySample.contains("/cdn-cgi/") ||
-                bodySample.contains("one moment...") ||
-                bodySample.contains("un momento…")
-
-        if (response.code in listOf(403, 429, 503)) {
-            if (hasCloudflareHeaders || isChallengeBody) return true
-        }
-
-        return response.header("location")
-            .orEmpty()
-            .lowercase()
-            .contains("/cdn-cgi/") || isChallengeBody
+        return isCloudflareChallenge(response.code, { response.header(it) }, bodySample)
     }
 
     /**

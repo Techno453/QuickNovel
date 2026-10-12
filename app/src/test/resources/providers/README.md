@@ -5,9 +5,10 @@ Recorded pages for the JVM provider tests in `app/src/test/java/com/lagradost/qu
 
 | Folder | Provider | Pages (recorded 2026-10) |
 |---|---|---|
-| `69shuba/` | `BiqugeProvider` | `booklist.html` (category listing; same `div.newbox` markup as search results), `info.html` + `catalog.html` (book 90435), `chapter.html` |
-| `quanben/` | `QuanbenProvider` | `search.html` (`斗罗`), `novel.html` (douluodalu), `mirror_list.html` (quanben5.com chapter list), `chapter.html` |
-| `syosetu/` | `SyosetuProvider` | `search.html` (`転生`), `novel.html` + `novel_last_page.html` (n9669bk, pages 1 and 3 of the table of contents), `chapter.html` |
+| `69shuba/` | `BiqugeProvider` | `booklist.html` (category listing; same `div.newbox` markup as search results), `rank.html` (`/novels/monthvisit_0_0_1.htm`, the default browse ranking, five entries), `latest.html` (`/last.html`), `info.html` (with the `bookinfo` tag script) + `catalog.html` (book 90435), `chapter.html` |
+| `quanben/` | `QuanbenProvider` | `search.html` (`斗罗`), `novel.html` (douluodalu), `amp_list.html` (AMP chapter list, all 688 chapters), `list.html` (regular list with the collapsed middle), `home.html`, `category.html` + `category_page2.html` (`/c/xuanhuan.html`, `_2.html`), `chapter.html` |
+| `syosetu/` | `SyosetuProvider` | `search.html` (`転生`), `novel.html` + `novel_page2.html` + `novel_last_page.html` (n9669bk, table of contents pages 1-3), `infotop.html` (n9669bk, 完結済) + `infotop_serialized.html` (n3159fs, 連載中), `oneshot.html` (n7399mv, 短編, trimmed), `rank.html` + `rank_page2.html` (all-genre all-time ranking, five entries each), `chapter.html` |
+| `cloudflare/` | `CloudflareKiller` | `challenge_69shuba.html`: the managed challenge 69shuba served for `/novels/newhot_0_0_1.htm` (HTTP 403, `cf-mitigated: challenge`) |
 | `kakuyomu/` | `KakuyomuProvider` | `search.html` (`転生`), `work.html`, `episode.html` |
 | `novelpia/` | `NovelpiaProvider` | `search.json` (`회귀`), `novel.html` (26536), `episode_list.html` (page 0), `viewer.json` |
 
