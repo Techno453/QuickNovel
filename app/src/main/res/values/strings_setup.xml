@@ -33,7 +33,7 @@
     <string name="setup_key_hide">Hide</string>
     <string name="setup_key_paste">Paste</string>
     <string name="setup_key_where">Create a key on the provider\'s site and paste it here. It stays on this device.</string>
-    <string name="setup_key_get">Get a %1$s key</string>
+    <string name="setup_key_get">Get a key from %1$s</string>
     <string name="setup_key_saved">A key is already saved (…%1$s). Leave it as is or paste a new one.</string>
     <string name="setup_key_open_failed">No browser found to open %1$s</string>
     <string name="setup_key_plain_warning">Secure storage is unavailable on this device; the key is stored unencrypted.</string>

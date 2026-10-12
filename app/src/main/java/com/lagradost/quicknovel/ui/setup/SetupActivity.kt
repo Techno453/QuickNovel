@@ -7,7 +7,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import com.lagradost.cloudstream4.rememberAppSettings
 import com.lagradost.cloudstream4.theme.CloudStreamTheme
 import com.lagradost.cloudstream4.theme.perfToColor
@@ -36,6 +41,15 @@ class SetupActivity : ComponentActivity() {
             val mode by settings.ui.theme.collectAsState()
             val primaryColor by settings.ui.primaryColor.collectAsState()
             CloudStreamTheme(mode = perfToMode(mode), primaryColor = perfToColor(primaryColor)) {
+                // Bar icons follow the app theme (which may differ from the system's dark mode).
+                val lightBackground = MaterialTheme.colorScheme.background.luminance() > 0.5f
+                val view = LocalView.current
+                SideEffect {
+                    WindowCompat.getInsetsController(window, view).apply {
+                        isAppearanceLightStatusBars = lightBackground
+                        isAppearanceLightNavigationBars = lightBackground
+                    }
+                }
                 SetupWizardScreen(
                     onClose = { finish() },
                     // From Settings the full settings are right below; on first run open the tab.
