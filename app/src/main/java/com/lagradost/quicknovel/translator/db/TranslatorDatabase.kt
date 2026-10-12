@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         NovelContext::class,
         ChapterSummary::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class TranslatorDatabase : RoomDatabase() {
@@ -98,13 +98,37 @@ abstract class TranslatorDatabase : RoomDatabase() {
             }
         }
 
+        /** SQL of [MIGRATION_4_5] (kept separate so a JVM unit test can check it). */
+        val MIGRATION_4_5_SQL = listOf(
+            "ALTER TABLE novel_context ADD COLUMN analyzed_at INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE novel_context ADD COLUMN analysis_chapters INTEGER NOT NULL DEFAULT 0",
+            // The pre-pass is the only thing that writes a premise automatically, so a novel with a
+            // premise was analyzed (manually, before v5): do not analyze it again on its own.
+            "UPDATE novel_context SET analyzed_at = CASE WHEN updated_at > 0 THEN updated_at ELSE 1 END " +
+                "WHERE premise != ''",
+        )
+
+        /**
+         * v5: per-novel analysis state (novel_context.analyzed_at / analysis_chapters), so the
+         * pre-pass runs automatically before a novel's first translation. Additive.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_4_5_SQL.forEach { db.execSQL(it) }
+            }
+        }
+
+        /** Every migration, oldest first; all registered in [getInstance]. */
+        val ALL_MIGRATIONS: Array<Migration>
+            get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+
         fun getInstance(context: Context): TranslatorDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     TranslatorDatabase::class.java,
                     "translator_database"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                ).addMigrations(*ALL_MIGRATIONS)
                     .build().also { instance = it }
             }
         }

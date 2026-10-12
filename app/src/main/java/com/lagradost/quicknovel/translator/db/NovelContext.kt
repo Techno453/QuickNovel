@@ -3,9 +3,10 @@ package com.lagradost.quicknovel.translator.db
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 
-/** Per-novel translation context: story premise and translation style. */
+/** Per-novel translation context: story premise, translation style and analysis state. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Entity(tableName = "novel_context")
 data class NovelContext(
@@ -19,4 +20,14 @@ data class NovelContext(
     /** "keep", "drop" or "adapt"; blank = global default for the source language. */
     @ColumnInfo(name = "honorific_style", defaultValue = "") val honorificStyle: String = "",
     @ColumnInfo(name = "updated_at", defaultValue = "0") val updatedAt: Long = 0,
-)
+    /**
+     * When the "Analyze novel" pre-pass last succeeded (epoch ms); 0 = never, so the next
+     * translation runs it first (see NovelAnalyzer). Not exported with the Story Bible.
+     */
+    @ColumnInfo(name = "analyzed_at", defaultValue = "0") @get:JsonIgnore val analyzedAt: Long = 0,
+    /** Number of chapters that analysis read (0 = never analyzed or unknown). Not exported. */
+    @ColumnInfo(name = "analysis_chapters", defaultValue = "0") @get:JsonIgnore val analysisChapters: Int = 0,
+) {
+    @get:JsonIgnore
+    val isAnalyzed: Boolean get() = analyzedAt > 0
+}
