@@ -75,38 +75,72 @@ object ChapterTranslationRepository {
          */
         retranslateStale: Boolean = false,
     ): String? = withChapterLock(novelId, chapterIndex) {
-        // Another caller may have finished translating while we waited.
-        val cached = getCachedEntry(ctx, novelId, chapterIndex)
-        if (cached != null && !(retranslateStale && cached.stale)) return@withChapterLock cached.englishText
+        translateIfMissingCore(
+            dbStore(ctx), novelId, chapterIndex, retranslateStale, fetchSource, beforeTranslate,
+        ) { source, hash ->
+            val engine = TranslationEngine(config, lang, fallback = SecurePrefs.fallbackEngineConfig(ctx))
+            // Loaded after beforeTranslate so a fresh analysis is used.
+            val inputs = StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIndex, lang)
+            val outer = coroutineContext[SpendTag]
+            val tag = SpendTag(spendKind, novelId, chapterIndex, outer?.batchId, outer?.meter)
+            val result = withContext(tag) {
+                engine.translateChapter(
+                    sourceText = source,
+                    novelId = novelId,
+                    chapterNum = chapterIndex,
+                    glossaryTerms = inputs.bible,
+                    context = inputs.context,
+                    options = inputs.options,
+                    onProgress = onProgress,
+                )
+            }
+            if (result.englishText.isBlank()) return@translateIfMissingCore null
 
-        val source = fetchSource()?.takeIf { it.isNotBlank() } ?: return@withChapterLock null
+            StoryBibleRepository.persistChapter(ctx, novelId, chapterIndex, result, config.model, lang, hash)
+            result.englishText
+        }
+    }
+
+    /** The stored-translation lookups the decisions below need (the translator DB; fakes in tests). */
+    internal interface ChapterStore {
+        suspend fun entry(novelId: String, chapterIndex: Int): TranslatedChapter?
+        suspend fun markSourceState(novelId: String, chapterIndex: Int, hash: String, stale: Boolean)
+    }
+
+    private fun dbStore(ctx: Context) = object : ChapterStore {
+        override suspend fun entry(novelId: String, chapterIndex: Int) = getCachedEntry(ctx, novelId, chapterIndex)
+        override suspend fun markSourceState(novelId: String, chapterIndex: Int, hash: String, stale: Boolean) =
+            this@ChapterTranslationRepository.markSourceState(ctx, novelId, chapterIndex, hash, stale)
+    }
+
+    /**
+     * What [translateIfMissing] decides, for every kind of novel (online provider or imported
+     * book; the chapter source only differs in [fetchSource]): serve the stored translation;
+     * otherwise fetch the source, keep a stale translation whose source is back to the stored
+     * hash, else run [beforeTranslate] and [translate] (which stores the result with the hash).
+     */
+    internal suspend fun translateIfMissingCore(
+        store: ChapterStore,
+        novelId: String,
+        chapterIndex: Int,
+        retranslateStale: Boolean,
+        fetchSource: suspend () -> String?,
+        beforeTranslate: suspend (source: String) -> Unit,
+        translate: suspend (source: String, hash: String) -> String?,
+    ): String? {
+        // Another caller may have finished translating while we waited.
+        val cached = store.entry(novelId, chapterIndex)
+        if (cached != null && !(retranslateStale && cached.stale)) return cached.englishText
+
+        val source = fetchSource()?.takeIf { it.isNotBlank() } ?: return null
         val hash = SourceHash.of(source)
         if (cached != null && SourceHash.compare(cached.sourceHash, hash) == SourceHash.Check.MATCH) {
             // The source is back to what was translated: reuse it, skip the paid call.
-            markSourceState(ctx, novelId, chapterIndex, hash, stale = false)
-            return@withChapterLock cached.englishText
+            store.markSourceState(novelId, chapterIndex, hash, stale = false)
+            return cached.englishText
         }
         beforeTranslate(source)
-        val engine = TranslationEngine(config, lang, fallback = SecurePrefs.fallbackEngineConfig(ctx))
-        // Loaded after beforeTranslate so a fresh analysis is used.
-        val inputs = StoryBibleRepository.loadChapterInputs(ctx, novelId, chapterIndex, lang)
-        val outer = coroutineContext[SpendTag]
-        val tag = SpendTag(spendKind, novelId, chapterIndex, outer?.batchId, outer?.meter)
-        val result = withContext(tag) {
-            engine.translateChapter(
-                sourceText = source,
-                novelId = novelId,
-                chapterNum = chapterIndex,
-                glossaryTerms = inputs.bible,
-                context = inputs.context,
-                options = inputs.options,
-                onProgress = onProgress,
-            )
-        }
-        if (result.englishText.isBlank()) return@withChapterLock null
-
-        StoryBibleRepository.persistChapter(ctx, novelId, chapterIndex, result, config.model, lang, hash)
-        result.englishText
+        return translate(source, hash)
     }
 
     // ---- Source-hash cache invalidation ----
@@ -141,18 +175,25 @@ object ChapterTranslationRepository {
      *   changes are detected.
      * Cheap (one hash + one DB read). Never fetch a source only to call this.
      */
-    suspend fun checkSourceHash(ctx: Context, novelId: String, chapterIndex: Int, source: String): SourceHash.Check {
+    suspend fun checkSourceHash(ctx: Context, novelId: String, chapterIndex: Int, source: String): SourceHash.Check =
+        checkSourceHashCore(dbStore(ctx), novelId, chapterIndex, source)
+
+    internal suspend fun checkSourceHashCore(store: ChapterStore, novelId: String, chapterIndex: Int, source: String): SourceHash.Check {
         if (source.isBlank()) return SourceHash.Check.NO_TRANSLATION
-        val stored = getCachedEntry(ctx, novelId, chapterIndex) ?: return SourceHash.Check.NO_TRANSLATION
+        val stored = store.entry(novelId, chapterIndex) ?: return SourceHash.Check.NO_TRANSLATION
         val hash = SourceHash.of(source)
         val check = SourceHash.compare(stored.sourceHash, hash)
         when (check) {
             SourceHash.Check.CHANGED -> if (!stored.stale) {
-                Log.i(TAG, "Source of $novelId #$chapterIndex changed since it was translated: marked stale")
-                markSourceState(ctx, novelId, chapterIndex, stored.sourceHash, stale = true)
+                try {
+                    Log.i(TAG, "Source of $novelId #$chapterIndex changed since it was translated: marked stale")
+                } catch (_: RuntimeException) {
+                    // android.util.Log is not available in plain JVM tests
+                }
+                store.markSourceState(novelId, chapterIndex, stored.sourceHash, stale = true)
             }
-            SourceHash.Check.MATCH -> if (stored.stale) markSourceState(ctx, novelId, chapterIndex, hash, stale = false)
-            SourceHash.Check.UNKNOWN -> markSourceState(ctx, novelId, chapterIndex, hash, stale = false)
+            SourceHash.Check.MATCH -> if (stored.stale) store.markSourceState(novelId, chapterIndex, hash, stale = false)
+            SourceHash.Check.UNKNOWN -> store.markSourceState(novelId, chapterIndex, hash, stale = false)
             SourceHash.Check.NO_TRANSLATION -> Unit
         }
         return check
