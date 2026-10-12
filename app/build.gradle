@@ -30,14 +30,38 @@ android {
         versionCode 56
         versionName "3.8.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // GitHub Actions run number of a CI build (0 for local builds); the in-app updater uses it
+        // to order builds on the rolling pre-release channel. See docs/ci.md.
+        buildConfigField("int", "CI_BUILD_NUMBER", (System.getenv("QN_BUILD_NUMBER") ?: "0").toInteger().toString())
+    }
+
+    // Release signing comes from the environment (GitHub secrets in .github/workflows, see
+    // docs/ci.md); nothing is read from local files. Without KEYSTORE_FILE the release build is
+    // signed with the debug key so assembleRelease always produces an installable APK.
+    def releaseKeystore = System.getenv("KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore) {
+            release {
+                storeFile file(releaseKeystore)
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfig releaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
+            // The pre-release workflow signs debug builds with the release key so successive
+            // pre-releases install over each other (every CI runner has a different debug key).
+            if (releaseKeystore && System.getenv("SIGN_DEBUG_WITH_RELEASE_KEY") == "true") {
+                signingConfig signingConfigs.release
+            }
             buildConfigField("boolean", "BETA", "true")
             applicationIdSuffix ".debug"
             versionNameSuffix '-DEBUG'
