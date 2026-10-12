@@ -462,8 +462,8 @@
     <string name="style_name_pinyin">Pinyin for all names (Lin Feng, Qingyun Sect)</string>
     <string name="style_name_meaning">Translate meaningful names (Azure Cloud Sect, Old Ghost)</string>
     <string name="style_name_mixed">Mixed: Pinyin for people and places, meaning for titles and techniques</string>
-    <string name="style_name_family_given">Family name first (Sato Yuuma)</string>
-    <string name="style_name_given_family">Given name first (Yuuma Sato)</string>
+    <string name="style_name_family_given">Family name first (Sato Yuuma, Kim Minjun)</string>
+    <string name="style_name_given_family">Given name first (Yuuma Sato, Minjun Kim)</string>
     <string name="style_hon_keep">Keep (-san, hyung, shixiong)</string>
     <string name="style_hon_drop">Drop</string>
     <string name="style_hon_adapt">Adapt to English (Senior Brother, Lord)</string>

@@ -610,6 +610,18 @@ private fun DonePage(
     Spacer(modifier = Modifier.height(4.dp))
     Text(stringResource(R.string.setup_done_background_title), style = MaterialTheme.typography.titleMedium)
 
+    // The same switch as Settings → AI translation → "Translate chapters when opened" (off by
+    // default): without it the reader shows the original and read ahead has nothing to follow.
+    var onDemand by remember { mutableStateOf(SecurePrefs.isTranslateOnDemandEnabled(context)) }
+    ToggleRow(
+        title = stringResource(R.string.tr_on_demand),
+        description = stringResource(R.string.tr_on_demand_desc),
+        checked = onDemand,
+    ) { on ->
+        SecurePrefs.setTranslateOnDemandEnabled(context, on)
+        onDemand = on
+    }
+
     var readAhead by remember { mutableStateOf(SecurePrefs.getReadAheadChapters(context)) }
     val readAheadPreset = preset ?: ModelPresets.DEFAULT
     val perChapter = CostEstimator.estimateForPreset(readAheadPreset, 1, lang, SecurePrefs.isStrictModeEnabled(context))
