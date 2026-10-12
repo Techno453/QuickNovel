@@ -258,7 +258,9 @@ so.
    rule), the snapshot glossary selection (`selectPromptTerms` with the chunk's own terms plus
    characters seen in earlier chunks of the same chapter), and no previous-English tail or
    previous-chapter summary. `custom_id = "<novelId>|<chapter>|<chunkIndex>"` (parsed from the
-   right, so a '|' in the novel id is safe). The chunk texts and the chapter's source hash are
+   right, so a '|' in the novel id is safe; OpenAI documents no length or character limit, and a
+   254-character Japanese custom_id was accepted and returned byte-for-byte in the live check
+   below). The chunk texts and the chapter's source hash are
    stored in `batch_chapters`, so reassembly never re-derives the chunks.
 3. **Cap check** with the precise estimate (live per-chapter estimate on the real character
    counts × 0.5), then `POST /v1/files` (purpose `batch`, JSONL), `POST /v1/batches`
@@ -269,14 +271,16 @@ so.
    constraint while a batch is unfinished (cancelled when none are left), plus a one-off poll on
    app start, when the translate dialog opens and when the Spending screen opens. All polls are
    serialized. Status mapping (`BatchStatus.fromOpenAi`): validating → Queued, in_progress,
-   finalizing, cancelling, failed; completed / expired / cancelled with an output file →
-   PROCESSING (results still to store), then DONE / EXPIRED / CANCELLED; without an output file
-   → FAILED / EXPIRED / CANCELLED. A PREPARING row older than two hours without an OpenAI id
-   (killed process) becomes FAILED.
+   finalizing, cancelling, failed; completed / expired / cancelled with an output **or error**
+   file → PROCESSING (results still to store), then DONE / EXPIRED / CANCELLED; with neither
+   → FAILED / EXPIRED / CANCELLED. Requests that got an HTTP error are written to the error
+   file only, so a batch whose every request failed ends `completed` with just an error file;
+   it is still processed so each chapter is marked NEEDS_LIVE with OpenAI's reason. A PREPARING
+   row older than two hours without an OpenAI id (killed process) becomes FAILED.
 5. **Store** (`BatchManager.processResults`): download the output and error files, parse
    (`BatchOutputParser`), reassemble per chapter in chunk order (`BatchAssembler`: a success line
-   wins over an error line; `finish_reason` length / content filter, empty replies and HTTP errors
-   are failures; absent lines are missing). Then, **in chapter order** and under the per-chapter
+   wins over an error line; `finish_reason` length / content filter, empty replies, a
+   `message.refusal` without content and HTTP errors are failures; absent lines are missing). Then, **in chapter order** and under the per-chapter
    lock, each PENDING chapter goes through `BatchChapterProcessor`, which runs the live chapter
    loop (`TranslationEngine.assembleChapter`) with the batch replies: the `===TERMS===` tail is
    parsed and merged into the **live** bible with BibleMerger (so later chapters see names found
@@ -321,8 +325,46 @@ does not see:
 
 Expect slightly more glossary deviations and pronoun slips at chunk and chapter boundaries for
 names introduced after the analysed chapters; for a novel that has been analysed (or partly
-translated) the difference should be small. Not measured yet: no batch has been run against the
-real API.
+translated) the difference should be small. Not measured at scale yet: the live check below
+translated a single 612-character passage (13/13 paragraphs, no glossary deviation).
+
+### Verified against the live API on 2026-10-12
+
+`BatchLiveTest` (app/src/test/.../bench/) ran the app's own classes against api.openai.com with
+gpt-6-luna on 2026-10-12 (UTC). Three batches:
+
+- **A** (2 requests): a 612-character slice of the doupo sample (13 paragraphs, two locked
+  bible terms, custom_id `Ixdzs/斗破苍穹|live|0|0`, `max_completion_tokens` 1,200, metadata with a
+  Chinese value) plus one request with `temperature: 5`. Validating ~1 min, completed ~3 min after creation.
+  The chapter came back in the output file, `finish_reason` stop; `BatchChapterProcessor`
+  (no live calls allowed) produced 13 English paragraphs, no `===TERMS===` / `===SUMMARY===`
+  residue, no glossary violation, a summary, and three discovered terms (乌坦城 → Wutan City,
+  斗之力 → Dou Qi, 族长 → clan leader). The bad request came back **in the error file** as
+  `{"id","custom_id","response":{"status_code":400,"request_id","body":{"error":{...}}},"error":null}`
+  and was classified as a failed chunk with OpenAI's message, unbilled. 1,277 input + 641 output
+  tokens; the per-line usage matched the batch object's `usage` exactly.
+- **B** (1 request): custom_id of 254 characters / 734 UTF-8 bytes (Japanese novel id with '|')
+  — accepted and returned unchanged; 13 + 4 tokens.
+- **C** (1 request): cancelled right after creation while `validating`. It stayed `cancelling`
+  for about 10 minutes before `cancelled`, with no output or error file, `request_counts` all 0
+  and zero usage (no charge).
+
+Total spend: **$0.000226** (A $0.000224, B $0.000002, at $0.05 / $0.25 per 1M batch price).
+Output lines matched the documented shape (`{"id","custom_id","response":{"status_code",
+"request_id","body":{chat.completion}},"error":null}`; the message also carries `refusal` and
+`annotations`, usage carries `prompt_tokens_details.cached_tokens`, which the app does not
+discount, so cost is slightly overstated when caching applies). The unit-test fixtures in
+`BatchTest` follow these shapes.
+
+Run it again (spends well under a cent; needs `OPENAI_API_KEY` in the environment or
+`bench.local.properties`, and `app/build/translation-bench/cache/sample-zh-doupo.json` from a
+bench run; otherwise it skips):
+
+    ./gradlew :app:testDebugUnitTest -Dlive.batch=1 --tests "com.lagradost.quicknovel.bench.BatchLiveTest"
+
+(`LIVE_BATCH=1` in the environment works too.) It polls every 20 s for at most 25 minutes,
+cancels any of its batches still running at the end, lists the five most recent batches, and
+writes the raw API responses (never the key) to `app/build/batch-live/<timestamp>/`.
 
 ### Limits
 
