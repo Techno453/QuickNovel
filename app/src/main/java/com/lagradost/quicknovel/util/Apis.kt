@@ -26,19 +26,16 @@ import com.lagradost.quicknovel.providers.AsianNovelProvider
 import com.lagradost.quicknovel.providers.BrightNovelProvider
 import com.lagradost.quicknovel.providers.ChikariProvider
 import com.lagradost.quicknovel.providers.DevilNovelsProvider
-import com.lagradost.quicknovel.providers.ChrysanthemumGardenProvider
 import com.lagradost.quicknovel.providers.FaqWikiProvider
 import com.lagradost.quicknovel.providers.FenrirRealProvider
 import com.lagradost.quicknovel.providers.FreewebnovelProvider
 import com.lagradost.quicknovel.providers.GalaxyNovelsProvider
 import com.lagradost.quicknovel.providers.GraycityProvider
-import com.lagradost.quicknovel.providers.HiraethTranslationProvider
 import com.lagradost.quicknovel.providers.IndoWebNovelProvider
 import com.lagradost.quicknovel.providers.LnoriProvider
 import com.lagradost.quicknovel.providers.KolNovelProvider
 import com.lagradost.quicknovel.providers.LibReadProvider
 import com.lagradost.quicknovel.providers.LightNovelTranslationsProvider
-import com.lagradost.quicknovel.providers.LuxonScansProvider
 import com.lagradost.quicknovel.providers.NovLoveProvider
 import com.lagradost.quicknovel.providers.NovelBinProvider
 import com.lagradost.quicknovel.providers.NovelFireProvider
@@ -54,7 +51,6 @@ import com.lagradost.quicknovel.providers.QuanbenProvider
 import com.lagradost.quicknovel.providers.RanobeHubProvider
 import com.lagradost.quicknovel.providers.RanobesProvider
 import com.lagradost.quicknovel.providers.ReadNovelFullProvider
-import com.lagradost.quicknovel.providers.ReadOnlineFreeBookProvider
 import com.lagradost.quicknovel.providers.ReadfromnetProvider
 import com.lagradost.quicknovel.providers.ReadhiveProvider
 import com.lagradost.quicknovel.providers.RedditProvider
@@ -79,7 +75,6 @@ class Apis {
             //AzynovelProvider(), // dont exist anymore
             //BestLightNovelProvider(), //dont exist anymore
             BrightNovelProvider(),
-            ChrysanthemumGardenProvider(),
             ChikariProvider(),
             //ComrademaoProvider(), // domain sold/down?
             DevilNovelsProvider(),
@@ -90,7 +85,6 @@ class Apis {
             FreewebnovelProvider(),
             GraycityProvider(),
             GalaxyNovelsProvider(),
-            HiraethTranslationProvider(),
             IndoWebNovelProvider(),
             KolNovelProvider(),
             LibReadProvider(),
@@ -98,7 +92,6 @@ class Apis {
             LightNovelTranslationsProvider(),
            // LightNovelWorldProvider(), // Replaced with chikari.moe
             LnoriProvider(),
-            LuxonScansProvider(),
             //MNovelFreeProvider(), // same as NovelFullVipProvider
             NovelasLigerasProvider(),
             NovelBinProvider(),
@@ -122,7 +115,6 @@ class Apis {
             ReadhiveProvider(),
             //ReadLightNovelProvider(), // NOT WORKING?
             ReadNovelFullProvider(),
-            ReadOnlineFreeBookProvider(),
             RewayatProvider(),
             RoyalRoadProvider(),
             SakuraNovelProvider(), // cloudflare?

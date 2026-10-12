@@ -14,6 +14,17 @@ class RemovedSourcesTest {
         "ranovel.com", "meionovels.com", "novelbuddy", "nobadnovel.com", "pawread.com",
     )
 
+    /** Romance-focused English sites dropped on the user's decision (docs/sources.md, "Removed sources"). */
+    private val romanceHosts = listOf(
+        "chrysanthemumgarden.com", "hiraethtranslation.com", "readonlinefreebook.com", "lunoxscans.com", "wattpad.com",
+    )
+
+    @Test
+    fun romanceFocusedSitesAreNotRegistered() {
+        val registered = Apis.apis.filter { api -> romanceHosts.any { it in api.mainUrl } }
+        assertTrue("Romance-focused sites registered: ${registered.map { it.name }}", registered.isEmpty())
+    }
+
     @Test
     fun mtlAggregatorsAreNotRegistered() {
         val registered = Apis.apis.filter { api -> mtlHosts.any { it in api.mainUrl } }

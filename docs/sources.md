@@ -338,6 +338,10 @@ and `providers/cjk/NoRomanceListingsTest` check that none is registered again.
 |---|---|---|
 | JJWXC (晋江文学城), zh | 2026-10-12 | A romance / danmei (BL) / GL site (言情, 纯爱, 百合); the user does not read romance. It was a working source (search, 作品库 browse, free chapters; VIP chapters left out). |
 | Wattpad, en (upstream provider) | 2026-10-12 | Romance-centric user-generated site; the user does not read romance. `WattpadProvider`, its icon and colour were deleted. |
+| Chrysanthemum Garden (chrysanthemumgarden.com), en | 2026-10-12 | Romance-focused (mostly danmei / BL and female-lead romance; the site also announced its closure). Dropped on the user's decision. |
+| Hiraeth Translation (hiraethtranslation.com), en | 2026-10-12 | Romance-heavy catalogue (yaoi genre among its light novels). Dropped on the user's decision. |
+| ReadOnlineFreeBook (readonlinefreebook.com), en | 2026-10-12 | Romance-forward ebook site. Dropped on the user's decision. |
+| Luxon Scan (lunoxscans.com), en | 2026-10-12 | Lists romance first in its own description. Dropped on the user's decision. |
 | LNMTL (lnmtl.com), en | 2026-10-12 | MTL aggregator: MTL site ("Place where Web Novels are being MTLed"). Deleted `LnMTLProvider`, its icon, deep link and README entry. |
 | MTLNovel (mtlnovel.me), en | 2026-10-12 | MTL aggregator: MTL site ("Read RAW Machine Translation Novels"). Deleted `MtlNovelProvider`, its icon, deep link and README entry. |
 | Sonic MTL (sonicmtl.com), en | 2026-10-12 | MTL aggregator: MTL site ("Machine Translated (MTL) novels"). Deleted `SonicMTLProvider`, its icon, deep link and README entry. |

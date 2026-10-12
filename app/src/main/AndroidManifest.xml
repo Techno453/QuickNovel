@@ -106,10 +106,6 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="chrysanthemumgarden.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
                     android:host="fenrirealm.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
@@ -127,10 +123,6 @@
                     android:scheme="https" />
                 <data
                     android:host="graycity.net"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="hiraethtranslation.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -175,10 +167,6 @@
                     android:scheme="https" />
                 <data
                     android:host="readnovelfull.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="readonlinefreebook.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
