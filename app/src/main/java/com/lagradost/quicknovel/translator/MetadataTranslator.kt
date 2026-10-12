@@ -4,6 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.translator.db.NovelMetadataTranslation
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -208,9 +213,16 @@ class MetadataTranslator(
                 }
             }
         }
-        for (request in todo) {
-            if (fresh.containsKey(request.novelId) || out.containsKey(request.novelId)) continue
-            val google = usable(safeGoogle(lang, request.original), request.original)
+        // The free endpoint takes one text per request: a few at a time, not one after the other.
+        val googleTodo = todo.filter { !fresh.containsKey(it.novelId) && !out.containsKey(it.novelId) }
+        val googled = coroutineScope {
+            val gate = Semaphore(GOOGLE_PARALLEL)
+            googleTodo.map { request ->
+                async { gate.withPermit { usable(safeGoogle(lang, request.original), request.original) } }
+            }.awaitAll()
+        }
+        googleTodo.forEachIndexed { i, request ->
+            val google = googled[i]
             if (google != null) fresh[request.novelId] = google to MetadataEngine.GOOGLE
             else failed += request.novelId + "|" + hashOf(request.original)
         }
@@ -359,6 +371,9 @@ class MetadataTranslator(
     companion object {
         const val DEFAULT_BATCH_WINDOW_MS = 150L
         const val MAX_TITLES_PER_CALL = 20
+
+        /** Free Google requests of one batch running at the same time. */
+        const val GOOGLE_PARALLEL = 4
     }
 }
 

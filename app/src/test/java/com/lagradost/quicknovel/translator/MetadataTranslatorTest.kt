@@ -197,4 +197,27 @@ class MetadataTranslatorTest {
         val user = MetadataPrompts.novelUserPrompt("題", "x".repeat(MetadataPrompts.MAX_SYNOPSIS_CHARS + 50))
         assertTrue(user.length < MetadataPrompts.MAX_SYNOPSIS_CHARS + 40)
     }
+
+    @Test
+    fun googleFallbackRunsAFewRequestsAtATime() = runBlocking {
+        val running = AtomicInteger()
+        val peak = AtomicInteger()
+        val backend = object : MetadataBackend {
+            override suspend fun policy() = MetadataPolicy(ai = false, google = true)
+            override fun aiModel() = "none"
+            override suspend fun aiTitles(lang: String, titles: List<String>): List<String?> = error("no AI")
+            override suspend fun aiNovel(lang: String, novelId: String, title: String, synopsis: String) = error("no AI")
+            override suspend fun google(lang: String, text: String): String {
+                val now = running.incrementAndGet()
+                peak.updateAndGet { maxOf(it, now) }
+                kotlinx.coroutines.delay(30)
+                running.decrementAndGet()
+                return "G $text"
+            }
+        }
+        val translator = MetadataTranslator(MapStore(), backend, this, batchWindowMs = 20)
+        val results = (1..12).map { i -> async { translator.title(req(i)) } }.awaitAll()
+        assertEquals((1..12).map { "G 標題$it" }, results)
+        assertTrue("peak ${peak.get()}", peak.get() in 2..MetadataTranslator.GOOGLE_PARALLEL)
+    }
 }
