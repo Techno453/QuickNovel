@@ -14,3 +14,5 @@ nul
 .kotlin/
 # Local secrets for the translation benchmark (never commit)
 *.local.properties
+# Translation benchmark: user-provided sample chapters (may be copyrighted; never commit)
+/bench/samples/
