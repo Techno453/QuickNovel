@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Library new-chapter checks (updates/LibraryUpdate*.kt) -->
+    <string name="library_updates_settings">Library updates</string>
+    <string name="library_update_frequency">Check for new chapters</string>
+    <string name="library_update_frequency_off">Off</string>
+    <string name="library_update_frequency_6h">Every 6 hours</string>
+    <string name="library_update_frequency_12h">Every 12 hours</string>
+    <string name="library_update_frequency_daily">Daily</string>
+    <string name="library_update_unmetered">Only on unmetered network</string>
+    <string name="library_update_unmetered_desc">Wi-Fi or other networks without data limits</string>
+    <string name="library_update_categories">Categories to check</string>
+    <string name="library_update_downloads">Downloaded novels</string>
+    <string name="library_update_categories_none">Nothing selected</string>
+    <string name="library_update_check_now">Check for new chapters now</string>
+    <string name="library_update_check_now_desc">Uses any network connection</string>
+    <string name="library_update_checking">Checking for new chapters %1$d/%2$d</string>
+    <string name="library_update_started">Checking for new chapters…</string>
+    <string name="library_update_already_running">A check is already running</string>
+    <string name="library_update_none_found">No new chapters</string>
+    <string name="library_update_permission_denied">Notifications are off, new chapters only show in the library</string>
+    <string name="library_update_new_badge">+%d new</string>
+
+    <string name="library_update_channel_name">New chapters</string>
+    <string name="library_update_channel_desc">New chapters in novels in your library</string>
+    <plurals name="library_update_title">
+        <item quantity="one">New chapters in %d novel</item>
+        <item quantity="other">New chapters in %d novels</item>
+    </plurals>
+    <plurals name="library_update_novel_text">
+        <item quantity="one">%d new chapter</item>
+        <item quantity="other">%d new chapters</item>
+    </plurals>
+    <plurals name="library_update_more">
+        <item quantity="one">and %d more</item>
+        <item quantity="other">and %d more</item>
+    </plurals>
+</resources>
