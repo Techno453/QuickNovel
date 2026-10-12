@@ -136,46 +136,71 @@ Chinese (斗破苍穹), Japanese (無職転生) and Korean (빙의가 체질), t
 Story Bible, reasoning off or lowest. Cost is measured, scaled to 100 chapters of 4,500
 characters (bible pre-pass included).
 
-| Model (reasoning) | Judge | Adherence % | Para fidelity | Refusals | Latency s | $/100 ch |
-|---|---|---|---|---|---|---|
-| gpt-6-sol (none) | 8.44 | 100 | 1.00 | 0 | 20.6 | 3.73 |
-| gpt-6-luna (none) | 8.11 | 100 | 1.00 | 0 | 16.8 | 0.19 |
-| gpt-4o | 8.11 | 97 | 0.99 | 0 | 11.5 | 3.82 |
-| gemini-3.1-flash-lite (thinking off) | 8.00 | 100 | 0.98 | 0 | 7.9 | 0.57 |
-| gpt-6.1-sol (low) | 8.00 | 100 | 1.00 | 0 | 35.4 | 3.86 |
-| gpt-5.6-terra (none) | 8.00 | 100 | 1.00 | 0 | 20.0 | 4.47 |
-| gpt-5.4-mini (none) | 7.89 | 100 | 1.00 | 0 | 11.6 | 1.69 |
-| qwen3.8-flash (off) | 7.78 | 100 | 1.00 | 0 | 38.8 | 0.19 |
-| kimi-k2.6 (off) | 7.67 | 97 | 0.96 | 0 | 46.2 | 1.25 |
-| deepseek-v4.1-flash (off) | 7.56 | 100 | 1.00 | 0 | 12.6 | 0.26 |
-| mistral-small-2603 | 7.11 | 91 | 0.86 | 0 | 18.9 | 0.18 |
-| gpt-4o-mini | 7.11 | 97 | 0.97 | 0 | 13.6 | 0.23 |
-| glm-5.3-flash (low) | 7.11 | 97 | 1.00 | 0 | 31.8 | 0.32 |
-| claude-sonnet-5.5 (low) | 7.00 | 97 | 1.00 | 0 | 23.5 | 5.81 |
-| gpt-5-mini (minimal) | 6.33 | 100 | 0.99 | 0 | 10.4 | 0.64 |
-| claude-haiku-5.5 (off) | 4.56 | 91 | 0.67 | 2 | 13.4 | 0.22 |
+Scores are from a five-judge panel: four LLM judges (gpt-6-luna, gpt-5.4-mini,
+gemini-3.1-flash-lite, deepseek-v4.1-flash; blind rubric, a judge never scores its own model,
+leniency-adjusted) plus a manual pass in which every one of the 48 outputs was read against the
+source and the Story Bible (the "Manual" column; accuracy, fluency and consistency 1–10,
+averaged). Treat panel differences under ~0.5 as ties.
 
-Non-OpenAI models ran through OpenRouter's default route.
+| Model (reasoning) | Panel (5 judges) | Manual | Adherence % | Para fidelity | Refusals | Latency s | $/100 ch |
+|---|---|---|---|---|---|---|---|
+| gpt-6-sol (none) | 8.69 | 9.22 | 100 | 1.00 | 0 | 20.6 | 3.73 |
+| gpt-6.1-sol (low) | 8.53 | 8.78 | 100 | 1.00 | 0 | 35.4 | 3.86 |
+| gemini-3.1-flash-lite (thinking off) | 8.36 (raw 7.92) | 8.33 | 100 | 0.98 | 0 | 7.9 | 0.57 |
+| gpt-5.6-terra (none) | 8.33 | 7.78 | 100 | 1.00 | 0 | 20.0 | 4.47 |
+| gpt-6-luna (none) | 8.33 | 8.89 | 100 | 1.00 | 0 | 16.8 | 0.19 |
+| gpt-5.4-mini (none) | 8.15 | 7.89 | 100 | 1.00 | 0 | 11.7 | 1.69 |
+| deepseek-v4.1-flash (off) | 8.07 | 8.11 | 100 | 1.00 | 0 | 12.6 | 0.26 |
+| kimi-k2.6 (off) | 7.93 | 7.78 | 97 | 0.96 | 0 | 46.2 | 1.25 |
+| gpt-4o | 7.89 | 7.44 | 97 | 0.99 | 0 | 11.5 | 3.82 |
+| qwen3.8-flash (off) | 7.75 | 6.89 | 100 | 1.00 | 0 | 38.7 | 0.19 |
+| claude-sonnet-5.5 (low) | 7.75 | 8.33 | 97 | 1.00 | 0 | 23.5 | 5.81 |
+| glm-5.3-flash (low) | 7.69 | 7.44 | 97 | 1.00 | 0 | 31.8 | 0.32 |
+| gpt-4o-mini | 7.40 | 6.56 | 97 | 0.97 | 0 | 13.6 | 0.23 |
+| gpt-5-mini (minimal) | 7.09 | 6.22 | 100 | 0.99 | 0 | 10.4 | 0.64 |
+| mistral-small-2603 | 6.84 | 5.56 | 91 | 0.86 | 0 | 18.9 | 0.18 |
+| claude-haiku-5.5 (off) | 5.31 | 4.44 | 91 | 0.67 | 2 | 13.4 | 0.22 |
 
-- **Claude Haiku 5.5 refused** the Chinese and Korean samples, citing copyright, and abridged
-  what it did return (paragraph fidelity 0.67). It is not offered as a preset.
-- **Judge bias:** the judge was gpt-6-luna, a small OpenAI model scoring its own family and
-  larger models. Treat judge differences under ~0.5 as ties and lean on the objective columns
-  (adherence, leaks, paragraph fidelity, refusals) and on reading the outputs.
-- Every model except Haiku, Mistral Small and Kimi kept ≥ 0.98 paragraph fidelity; glossary
-  adherence was 97–100% for all but Mistral Small and Haiku (91%). With the Story Bible in the
-  prompt, terminology is no longer what separates models; fluency and price are.
+Non-OpenAI models ran through OpenRouter's default route. Gemini's adjusted panel score is
+lifted by the correction for its own absence from its row (it is the most lenient judge, mean
+9.5 against 6.5 for gpt-5.4-mini); its raw mean is 7.92. The judges agree on the order at
+Spearman 0.62–0.89; the manual pass correlates best with deepseek (0.85) and gemini (0.80).
+
+- **The Story Bible held.** Every model rendered the bible's names exactly (adherence 97–100%
+  except Mistral Small and Haiku at 91%), and no output changed a character's gender; the
+  rebuilt Korean bible even carried the goddess's gender through 16 outputs with one slip
+  (qwen3.8-flash and Mistral Small called her "he"). Terminology is no longer what separates
+  models.
+- **What does separate them, from the manual pass:** implied subjects in Japanese (the
+  source says Paul was panicking before the birth; 9 of 16 models gave the panic to Zenith or
+  Lilia, including gpt-4o, gpt-4o-mini, gemini, qwen, glm, sonnet and haiku); softened
+  profanity in the Korean chapter (gpt-4o-mini, gpt-5-mini, gpt-4o); gestures and idioms
+  translated literally ("fist potato", "fern-like hands", "bright red lie"); the Chinese
+  author's note dropped entirely (gpt-4o-mini, Mistral Small) or garbled (qwen renamed the
+  author "Batato"); and point-of-view slips (Mistral Small switched the Japanese chapter to
+  first person for a paragraph).
+- **Glossary category tags leaked into prose** for gpt-5.6-terra and Mistral Small on the
+  Korean sample and gpt-5-mini on the Chinese one ("Ranael [character]", "Earth [location]").
+  The prompt never shows terms in that form; the models appear to be echoing the
+  `category` field of the `===TERMS===` output protocol. This is a per-model prompt issue, not
+  a bible issue, and is on the list for the prompt-profile work.
+- **Claude Haiku 5.5 refused** the Korean chapter outright and stopped the Chinese one 60% in,
+  citing copyright, and abridged what it did return (paragraph fidelity 0.67). It is not
+  offered as a preset.
+- **Manual-judge disclosure:** the manual pass was done by a Claude model (Claude Fable 5.1).
+  Its Sonnet 5.5 scores (8.33) sit above the LLM panel's (7.75); read the Claude rows with that
+  in mind. It scored Haiku lowest of all judges.
 
 ## Recommendations
 
 | Use | Model (app preset) | ≈ $/100 ch measured | Notes |
 |---|---|---|---|
-| **Default** | gpt-6-luna, reasoning none | 0.19 | Second-best judge score, 100% adherence, cheapest OpenAI model. Default for new installs. |
-| **Quality** | gpt-6-sol, reasoning none | 3.73 | Best judge score; inside the $3–5 target. |
-| Fast / cheap alternative | gemini-3.1-flash-lite, lowest thinking | 0.57 | Fastest (7.9 s/chapter), judge 8.0. Gemini's PROHIBITED_CONTENT block cannot be disabled, so mature novels may fail; keep a fallback. |
-| Cheapest, Chinese-trained | deepseek-flash (thinking disabled) or qwen3.8-flash (enable_thinking false) | 0.19–0.26 | DeepSeek is half price off-peak but rejects politically sensitive text; Qwen is slow (39 s/chapter) and its keys are region-locked. |
+| **Default** | gpt-6-luna, reasoning none | 0.19 | Panel 8.33, manual 8.89 (behind only the two gpt-6 sol models), 100% adherence, no errors in the manual pass, cheapest OpenAI model. Default for new installs. |
+| **Quality** | gpt-6-sol, reasoning none | 3.73 | Best on every judge (panel 8.69, manual 9.22); inside the $3–5 target. gpt-6.1-sol is a close second at the same price but twice the latency. |
+| Fast / cheap alternative | gemini-3.1-flash-lite, lowest thinking | 0.57 | Fastest (7.9 s/chapter), panel 8.36 (raw 7.92), manual 8.33; a statistical tie with Luna at 3× the price. Gemini's PROHIBITED_CONTENT block cannot be disabled, so mature novels may fail; keep a fallback. |
+| Cheapest, Chinese-trained | deepseek-flash (thinking disabled) | 0.26 | Panel 8.07, manual 8.11; now clearly ahead of qwen3.8-flash (7.75 / 6.89: garbled the author's name, one gender slip, 39 s/chapter). DeepSeek is half price off-peak but rejects politically sensitive text. |
 | Fallback | gemini-3.1-flash-lite (cheap) or gpt-6-sol (quality) | — | Off by default. Pick a model from a different provider than the main one, so the same filter does not block it twice. |
-| Not recommended | gpt-5.4-mini, gpt-4o, gpt-4o-mini, claude-sonnet-5.5, claude-haiku-5.5 | | 5.4-mini costs 9× Luna for a lower score; 4o costs 20× Luna for the same score; 4o-mini scores lower; Sonnet is over budget and scored 7.0; Haiku refuses. |
+| Not recommended | gpt-5.6-terra, gpt-5.4-mini, gpt-4o, gpt-4o-mini, gpt-5-mini, mistral-small, claude-sonnet-5.5, claude-haiku-5.5 | | Terra ties Luna at 23× the price and leaked glossary tags; 5.4-mini costs 9× Luna for a lower score; 4o costs 20× Luna for less; 4o-mini, 5-mini and Mistral Small have real accuracy errors; Sonnet is over budget; Haiku refuses. |
 
 Each preset is also available through OpenRouter (one key for all providers, with
 `reasoning: {enabled: false}`), except Claude Sonnet, which is offered direct only. Local and
