@@ -31,7 +31,7 @@ Overrides, as `-Dbench.<name>=…`, environment `BENCH_<NAME>=…`, or a line in
 | `bench.judges` | `-Dbench.judges=gpt-5.4-mini,deepseek/deepseek-v4.1-flash` | run only these judges (ids from `judge.model` / `judges.panel`) |
 | `bench.reportOnly` | `-Dbench.reportOnly=true` | no API calls: rebuild the report from stored results, stored judge scores and manual judge files (metrics recomputed) |
 | `bench.rejudge` | `-Dbench.rejudge=true` | judging only, on stored outputs: no smoke test, bible or translation calls; cells already scored are skipped |
-| `bench.analyzeOnly` | `-Dbench.analyzeOnly=true -Dbench.analyzeModels=gpt-6-luna,gpt-6-sol -Dbench.analyzeRuns=2` | Story Bible pre-pass only: runs the app's "Analyze novel" prompt with each listed model on every sample, `analyzeRuns` times each, and writes `<run>/analysis/*.json` plus `<run>/analysis-compare.md`; no translation or judging |
+| `bench.analyzeOnly` | `-Dbench.analyzeOnly=true -Dbench.analyzeModels=gpt-6-luna,gpt-6-sol -Dbench.analyzeRuns=2` | Story Bible pre-pass only: runs the app's "Analyze novel" prompt with each listed model on every sample, `analyzeRuns` times each, and writes `<run>/analysis/*.json` plus `<run>/analysis-compare.md` (author's notes stripped from the excerpt as in the app; a `Kept` column and `filtered: <reason>` flags show what the app's `AnalysisFilter` would drop); no translation or judging |
 | `bench.budget` / `BENCH_BUDGET_USD` | `BENCH_BUDGET_USD=1.50` | cost cap (default 2.50) |
 | `bench.parallelism` | `-Dbench.parallelism=2` | concurrent translations (default 4) |
 

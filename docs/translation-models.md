@@ -258,6 +258,14 @@ Verdict: sol is cleaner and more stable but not more accurate where it matters; 
 is filtering author-note artifacts and unnamed roles out of the extraction, which is a prompt
 or filter change rather than a model change. The comparison spent $0.112 (ledger $1.58 → $1.69).
 
+Follow-up (same day): the analysis prompt now asks for proper nouns and setting-specific terms
+only, with a `"proper"` flag, and a deterministic `AnalysisFilter` drops unnamed roles, short
+or plain-word common nouns and terms found only in author's notes, and merges duplicates. On
+the 12 saved extractions above (filter only, no new API calls) it cut 189 entries to 130 and
+kept every named character. The analysis runs automatically before a novel's first
+translation, and an optional "Analysis model" setting lets it use sol while translating with
+Luna (about $0.06 per 3-chapter analysis). Details: [translation-pipeline.md](translation-pipeline.md).
+
 ## Recommendations
 
 | Use | Model (app preset) | ≈ $/100 ch measured | Notes |
