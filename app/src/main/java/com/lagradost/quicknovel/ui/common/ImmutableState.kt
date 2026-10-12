@@ -44,6 +44,8 @@ import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.getFilenameIMG
 import com.lagradost.quicknovel.BookDownloader2Helper.sanitizeFilename
 import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.imported.ImportedBooks
+import com.lagradost.quicknovel.imported.ImportedLibraryCard
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_LAST_ACCESS
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_SIZE
 import com.lagradost.quicknovel.DownloadExtractLink
@@ -303,6 +305,15 @@ data class ImmutableSearchResponse(
             }
         }
 
+    /** Where an imported book's cover (`poster.jpg`) is stored. */
+    fun importedCoverFile(context: Context): java.io.File = java.io.File(
+        context.filesDir.toString() + getFilenameIMG(
+            sanitizeFilename(apiName),
+            sanitizeFilename(author ?: ""),
+            sanitizeFilename(name)
+        )
+    )
+
     fun ImageRequest(
         context: Context,
         radius: Int = 0,
@@ -316,11 +327,7 @@ data class ImmutableSearchResponse(
         ) else emptyList()
 
         return if (isImported) {
-            val uri = (context.filesDir.toString() + getFilenameIMG(
-                sanitizeFilename(apiName),
-                sanitizeFilename(author ?: ""),
-                sanitizeFilename(name)
-            )).toUri()
+            val uri = importedCoverFile(context).path.toUri()
             ImageRequest.Builder(context)
                 .data(uri)
                 .crossfade(true).transformations(transformations)
@@ -421,6 +428,13 @@ data class ImmutableSearchResponse(
         ) ?: 0L
 
         fun epubSize(id: Int): Int = getKey(DOWNLOAD_EPUB_SIZE, id.toString()) ?: 0
+
+        /** An imported book's real chapter count from its import record (its download entry says 1). */
+        fun importedChapterCount(name: String, author: String?, downloadState: ImmutableDownloadState?): Long? =
+            ImportedLibraryCard.chapterCount(
+                ImportedBooks.record(ImportedBooks.novelIdOf(name, author))?.chapterCount,
+                downloadState?.total,
+            )
 
         fun libraryUpdateState(id: Int): NovelUpdateState? =
             getKey<NovelUpdateState>(LibraryUpdateStore.FOLDER, id.toString())
@@ -554,6 +568,7 @@ data class ImmutableSearchResponse(
                 timeOfChapterDownloaded = cache.lastDownloaded,
                 author = cache.author,
                 downloadState = downloadState,
+                totalChapters = if (cache.apiName == IMPORT_SOURCE) importedChapterCount(cache.name, cache.author, downloadState) else null,
                 synopsis = cache.synopsis,
                 tags = cache.tags?.toImmutableList(),
                 timeOfPageOpened = timeOfPageOpened(id),

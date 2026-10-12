@@ -115,6 +115,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import com.lagradost.quicknovel.imported.ImportedBooks
+import com.lagradost.quicknovel.imported.ImportedCover
 import com.lagradost.quicknovel.imported.TextDecoding
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
@@ -2616,8 +2617,9 @@ object BookDownloader2 {
         }
 
     /**
-     * The common end of an import: library entry, cover, the book file (`local_epub.epub`),
-     * "done" state and notification, then the translator record ([ImportedBooks.register]).
+     * The common end of an import: library entry, cover, the book file (`local_epub.epub`), the
+     * translator record ([ImportedBooks.register]), a placeholder cover when the book has none
+     * ([ImportedCover]), then the "done" state and notification.
      */
     private suspend fun finishImport(
         context: Context,
@@ -2652,6 +2654,20 @@ object BookDownloader2 {
             // A re-import replaces the book: regenerate the reader's copy on the next open.
             setKey(DOWNLOAD_EPUB_SIZE, id.toString(), 0)
 
+            // The translator record (chapter count, language) before the library entry, so the
+            // card shows the real chapter count as soon as it appears.
+            try {
+                ImportedBooks.register(context, name, author, format)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                logError(t)
+            }
+            // TXT imports and cover-less EPUBs get a generated title cover.
+            ImportedCover.writeIfMissing(
+                ImportedBooks.coverFile(context, name, author), name, ImportedBooks.novelIdOf(name, author)
+            )
+
             setSuffixData(load, apiName)
             changeDownload(id) {
                 state = DownloadState.IsDone
@@ -2667,13 +2683,6 @@ object BookDownloader2 {
             }
         } finally {
             currentDownloads -= id
-        }
-        try {
-            ImportedBooks.register(context, name, author, format)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (t: Throwable) {
-            logError(t)
         }
     }
 
