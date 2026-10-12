@@ -27,8 +27,8 @@ android {
         applicationId "com.lagradost.quicknovel"
         minSdkVersion 23
         targetSdkVersion 37
-        versionCode 59
-        versionName "3.9.2"
+        versionCode 60
+        versionName "3.9.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // GitHub Actions run number of a CI build (0 for local builds); the in-app updater uses it
         // to order builds on the rolling pre-release channel. See docs/ci.md.
