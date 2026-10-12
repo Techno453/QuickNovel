@@ -66,7 +66,7 @@ import com.lagradost.quicknovel.providers.RedditProvider
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
-import com.lagradost.quicknovel.ui.result.ResultFragment
+import com.lagradost.quicknovel.ui.result.ResultFragment2
 import com.lagradost.quicknovel.ui.result.ResultViewModel
 import com.lagradost.quicknovel.ui.common.MetadataTranslationViews
 import com.lagradost.quicknovel.updates.LibraryUpdateNotifier
@@ -209,7 +209,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 this.navigate(
                     R.id.global_to_navigation_results,
-                    ResultFragment.newInstance(url, apiName, startAction)
+                    ResultFragment2.newInstance(url, apiName, startAction)
                 )
                 /*supportFragmentManager.beginTransaction()
                         .setCustomAnimations(
