@@ -62,6 +62,12 @@ class TranslationBench {
         }
 
         val api = BenchOpenAi({ env.key(it) }, cfg.baseUrl, ledger)
+        if (flag(env, "analyzeOnly")) {
+            // Story Bible pre-pass only: the app's analysis prompt, several models, side-by-side comparison.
+            AnalysisCompare.run(env, cfg, api, samples, runDir, ::log)
+            File(env.outputRoot, "LATEST").writeText(runId)
+            return@runBlocking
+        }
         if (flag(env, "rejudge")) {
             rejudge(env, base, cfg, api, samples, notes, runDir, runId, ledger)
             return@runBlocking

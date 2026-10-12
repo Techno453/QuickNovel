@@ -238,6 +238,26 @@ Adherence was 100% and CJK leaks 0 in every run.
   not run separately (same model, different endpoint and `reasoning_effort: minimal`). The A/B
   spent $0.317 (ledger $1.26 → $1.58).
 
+### Analysis-model comparison (2026-10-11)
+
+The Story Bible pre-pass ("Analyze novel") was run with gpt-6-luna and gpt-6-sol on all three
+benchmark excerpts, twice each (`-Dbench.analyzeOnly=true`; report in `analysis-compare.md`).
+Both models found every named character on every sample and gave each the right gender, so on
+the things the glossary is for they tie. The differences are in the noise around them. Luna
+lists unnamed roles as characters (assassin, mastermind, senior guard-maid, examiner) and common
+nouns as terms (poison, dagger, wheat fields, amniotic fluid, kitchen knife, pigeon, scroll,
+"Miss", "prodigy", low/high level): 20-22 Japanese terms per run against 11-15 for sol. It also
+drifts between runs (Roa/Roar, Fittoa Territory/Region, Dou Qi vortex/cyclone): 18 of 22 shared
+Japanese sources kept the same English across runs, against 14 of 15 for sol. Sol has slips of
+its own: on the Chinese sample both runs listed the author pen name 土豆 as a character and
+pulled Sichuan and 剑圣 ("Jiansheng", left untranslated) out of the afterword, and one Korean
+run added "that woman" as a character and "Your-Mom Dimension" as a location. Both render
+Korean names without hyphens and 斗者 as "Dou Zhe". Cost per 3,000-char excerpt: Luna about
+$0.001, sol about $0.02 (20x), so a five-chapter analysis is roughly $0.005 against $0.10.
+Verdict: sol is cleaner and more stable but not more accurate where it matters; the bigger win
+is filtering author-note artifacts and unnamed roles out of the extraction, which is a prompt
+or filter change rather than a model change. The comparison spent $0.112 (ledger $1.58 → $1.69).
+
 ## Recommendations
 
 | Use | Model (app preset) | ≈ $/100 ch measured | Notes |
