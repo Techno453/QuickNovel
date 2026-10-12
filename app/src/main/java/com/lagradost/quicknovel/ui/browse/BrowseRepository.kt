@@ -24,7 +24,8 @@ import java.util.concurrent.ConcurrentHashMap
  * - Session cache: every page loaded for (source, listing, page) is kept in memory until the app
  *   process ends; pull to refresh / retry bypass it. Failures are not cached.
  * - Politeness: the Browse home loads at most [RAIL_CONCURRENCY] sources at a time, the "All
- *   sources" feed at most [FEED_CONCURRENCY]; each load times out after [TIMEOUT_MS]. Concurrent
+ *   sources" feed at most [FEED_CONCURRENCY]; each load times out after [TIMEOUT_MS]
+ *   ([CLOUDFLARE_TIMEOUT_MS] behind the Cloudflare interceptor). Concurrent
  *   requests for the same page share one network call. The provider's own rate limit still
  *   applies on top.
  */
@@ -32,6 +33,13 @@ object BrowseRepository {
     const val RAIL_CONCURRENCY = 2
     const val FEED_CONCURRENCY = 3
     const val TIMEOUT_MS = 25_000L
+
+    /**
+     * Sources behind the Cloudflare interceptor (`usesCloudFlareKiller`): the first request has
+     * to clear the challenge in a hidden WebView (about 25-30 s on Hameln, including the 5 s
+     * cookie settle); later requests reuse the cookie and are as fast as anywhere else.
+     */
+    const val CLOUDFLARE_TIMEOUT_MS = 60_000L
 
     /** Gate for the Browse home rails. */
     val railGate = Semaphore(RAIL_CONCURRENCY)
@@ -83,14 +91,15 @@ object BrowseRepository {
     private suspend fun load(apiName: String, listing: BrowseCatalog.Listing, page: Int): Result<ImmutableHeadMainPageResponse> =
         withContext(Dispatchers.IO) {
             val api = getApiFromName(apiName)
-            withTimeoutOrNull(TIMEOUT_MS) {
+            val timeoutMs = if (api.api.usesCloudFlareKiller) CLOUDFLARE_TIMEOUT_MS else TIMEOUT_MS
+            withTimeoutOrNull(timeoutMs) {
                 api.loadMainPageResult(
                     page = page,
                     mainCategory = api.mainCategories.getOrNull(listing.category)?.second,
                     orderBy = api.orderBys.getOrNull(listing.orderBy)?.second,
                     tag = api.tags.getOrNull(listing.tag)?.second,
                 )
-            } ?: Result.failure(java.util.concurrent.TimeoutException("$apiName did not answer in ${TIMEOUT_MS / 1000} s"))
+            } ?: Result.failure(java.util.concurrent.TimeoutException("$apiName did not answer in ${timeoutMs / 1000} s"))
         }
 
     /** Every source with a browsable main page, as [BrowseCatalog.Source]. */

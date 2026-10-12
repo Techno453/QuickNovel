@@ -53,7 +53,7 @@ with those providers).
   set or comma-separated; absent = no preference), then the remaining CJK languages in the order
   Chinese, Japanese, Korean, then every other language in one "Other sources" group, collapsed.
 - Each source card: name, language chip, the name of its default listing, and a horizontal
-  "Popular" rail with the first 12 entries. Tapping a poster opens the result page
+  "Popular" rail with the first 12 entries. The label under the source name is the provider's default listing: the first label of the first axis that is not a bare "All" (JJWXC's status axis defaults to "All", so its ranking "Popular (积分)" is shown instead), or "Popular" when there is none. Tapping a poster opens the result page
   (`loadResult`), a long press the preview sheet; the card title or "See all" opens the
   source page.
 - Layout: full-width cards on phones and the Fold cover screen, two cards per row from 840 dp
@@ -71,7 +71,7 @@ with those providers).
   all" shows the rail's page instantly). Failures and empty pages are not cached. Pull to refresh and Retry
   reload page 1 bypassing the cache.
 - **Politeness**: at most 2 sources load at a time for the rails and 3 for the All sources feed;
-  requests for the same page share one network call; each load times out after 25 s; the
+  requests for the same page share one network call; each load times out after 25 s (60 s for sources behind the Cloudflare interceptor, whose first request may spend about 30 s clearing the challenge in a hidden WebView); the
   provider's own `rateLimitTime` still applies. A source page the user is looking at is not
   throttled.
 - **Never blocking**: a failing source shows "Unavailable right now" with Retry on its own card

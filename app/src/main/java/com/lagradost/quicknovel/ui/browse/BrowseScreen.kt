@@ -250,7 +250,7 @@ private fun SourceCard(source: BrowseCatalog.Source, rail: RailState?, actions: 
             }
         }
         Text(
-            text = source.mainCategories.firstOrNull() ?: source.orderBys.firstOrNull() ?: stringResource(R.string.browse_popular),
+            text = BrowseCatalog.defaultRailLabel(source) ?: stringResource(R.string.browse_popular),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
             modifier = Modifier.padding(start = 12.dp, bottom = 6.dp),

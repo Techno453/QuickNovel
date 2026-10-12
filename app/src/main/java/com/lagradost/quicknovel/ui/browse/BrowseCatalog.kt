@@ -17,6 +17,17 @@ object BrowseCatalog {
         val tags: List<String> = emptyList(),
     )
 
+    /**
+     * Label under a source card on the Browse home: what the provider's default listing is
+     * called. The default is index 0 of every axis, so the first label that is not a bare "All"
+     * (a status or filter axis whose default means "no filter", as on JJWXC) wins; null when every
+     * axis is "All" or the source has no listings (the caller shows "Popular").
+     */
+    fun defaultRailLabel(source: Source): String? =
+        listOf(source.mainCategories, source.orderBys, source.tags)
+            .mapNotNull { it.firstOrNull()?.trim() }
+            .firstOrNull { it.isNotEmpty() && !it.equals("All", ignoreCase = true) }
+
     /** One section of the Browse home. [lang] null = "Other sources" (collapsed by default). */
     data class Group(val lang: String?, val sources: List<Source>) {
         val isOther: Boolean get() = lang == null

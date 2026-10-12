@@ -188,4 +188,17 @@ class BrowseLogicTest {
         assertNull(CombinedBrowse.chapterCount("最新章节"))
         assertFalse(feed("A").isComplete)
     }
+
+    @Test
+    fun railLabelSkipsBareAllAxes() {
+        // JJWXC: status axis defaults to "All", the ranking lives in orderBys.
+        val jjwxc = Source("JJWXC", "zh", mainCategories = listOf("All", "Completed (完结)"), orderBys = listOf("Popular (积分)", "Newest"))
+        assertEquals("Popular (积分)", BrowseCatalog.defaultRailLabel(jjwxc))
+        // 69shuba: the ranking is the first main category.
+        val shuba = Source("69shuba", "zh", mainCategories = listOf("Popular, monthly (人气榜)", "Latest"))
+        assertEquals("Popular, monthly (人气榜)", BrowseCatalog.defaultRailLabel(shuba))
+        // Only "All" everywhere, or no listings: the caller falls back to "Popular".
+        assertNull(BrowseCatalog.defaultRailLabel(Source("X", "ja", mainCategories = listOf("all"), tags = listOf("All"))))
+        assertNull(BrowseCatalog.defaultRailLabel(Source("Y", "ko")))
+    }
 }
