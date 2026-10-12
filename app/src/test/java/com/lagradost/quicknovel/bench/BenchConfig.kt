@@ -135,7 +135,10 @@ data class BenchConfig(
     /** Engine options for translations (the app's defaults: strict mode and story context on). */
     val strictMode: Boolean = true,
     val carryStoryContext: Boolean = true,
+    /** The v1 single judge; it is also the panel's first member and the "luna-only" comparison column. */
     val judge: JudgeSpec = JudgeSpec(),
+    /** LLM judge panel (see Judge.kt / docs/translation-bench.md). */
+    val judges: JudgePanelSpec = JudgePanelSpec(),
     val samples: List<SampleSpec> = emptyList(),
     val models: List<ModelSpec> = emptyList(),
 ) {

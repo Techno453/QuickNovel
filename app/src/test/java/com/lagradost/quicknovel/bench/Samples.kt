@@ -34,6 +34,7 @@ class SampleFetcher(private val cacheDir: File, private val config: BenchConfig)
 
     /** [SampleSpec.url] may list several comma-separated pages (consecutive episodes) that are concatenated. */
     fun load(spec: SampleSpec): Sample {
+        snapshot(spec)?.let { return it }
         val urls = spec.url.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         val paragraphs: List<String> = urls.flatMapIndexed { i, url ->
             val key = if (i == 0) spec.id else "${spec.id}-$i"
@@ -48,7 +49,26 @@ class SampleFetcher(private val cacheDir: File, private val config: BenchConfig)
         }.map { it.trim() }.filter { it.isNotEmpty() }
         require(paragraphs.isNotEmpty()) { "Sample ${spec.id}: no text extracted from ${spec.url}" }
         val full = paragraphs.joinToString("\n")
-        return Sample(spec.id, spec.lang, spec.title, spec.url, trim(paragraphs), full.length)
+        return Sample(spec.id, spec.lang, spec.title, spec.url, trim(paragraphs), full.length).also { saveSnapshot(it) }
+    }
+
+    /**
+     * cache/sample-<id>.json: the exact excerpt that was translated, so later report/rejudge runs judge
+     * the same text even if the site changes. Used while its origin still matches the configured url.
+     */
+    private fun snapshotFile(id: String) = File(cacheDir, "sample-$id.json")
+
+    private fun snapshot(spec: SampleSpec): Sample? = snapshotFile(spec.id).takeIf { it.isFile }
+        ?.let { runCatching { benchMapper.readValue(it, Sample::class.java) }.getOrNull() }
+        ?.takeIf { it.origin == spec.url && it.lang == spec.lang && it.text.isNotBlank() }
+        ?.copy(title = spec.title)
+
+    private fun saveSnapshot(sample: Sample) {
+        cacheDir.mkdirs()
+        benchMapper.writeValue(snapshotFile(sample.id), mapOf(
+            "id" to sample.id, "lang" to sample.lang, "title" to sample.title, "origin" to sample.origin,
+            "text" to sample.text, "fullChars" to sample.fullChars,
+        ))
     }
 
     /** bench/samples/<lang>-<name>.txt */

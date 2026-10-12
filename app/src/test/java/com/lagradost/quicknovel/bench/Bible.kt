@@ -15,6 +15,11 @@ data class BibleEntry(
     val gender: String = "unknown",
     val role: String = "",
     val aliases: List<String> = emptyList(),
+    /**
+     * Placeholder in a bible reconstructed after the original was lost: counted by the metrics
+     * (keeps the old adherence denominators) but not shown to the judges.
+     */
+    val inferred: Boolean = false,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

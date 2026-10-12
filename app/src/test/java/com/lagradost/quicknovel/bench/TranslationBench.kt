@@ -4,6 +4,7 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -38,7 +39,7 @@ class TranslationBench {
         val ledger = CostLedger(File(env.outputRoot, "ledger.json"), cfg.budgetUsd, runId)
         log("run $runId → $runDir")
         cfg.models.map { it.keyName }.distinct().forEach { log(env.keyDescription(it)) }
-        log("ledger total so far ${usd(ledger.totalUsd)} of cap ${usd(cfg.budgetUsd)}; dryRun=${cfg.dryRun}, judge=${cfg.judge.enabled}")
+        log("ledger total so far ${usd(ledger.totalUsd)} of cap ${usd(cfg.budgetUsd)}; dryRun=${cfg.dryRun}, judge=${cfg.judge.enabled && cfg.judges.enabled}")
         log("models: " + cfg.models.filter { it.enabled }.joinToString { it.id })
 
         val notes = mutableListOf<String>()
@@ -51,7 +52,7 @@ class TranslationBench {
             dryRun(env, cfg, samples, runDir, ledger, notes)
             return@runBlocking
         }
-        if (env.setting("reportOnly")?.let { it == "1" || it.toBoolean() } == true) {
+        if (flag(env, "reportOnly")) {
             // No API calls: rebuild the report from stored results and cached bibles.
             val seeder = BibleSeeder(null, cfg.models.first(), env.cacheDir)
             val bibles = samples.associate { s -> s.id to (seeder.cached(s.id) ?: Bible(s.id, seededBy = "missing")) }
@@ -61,6 +62,10 @@ class TranslationBench {
         }
 
         val api = BenchOpenAi({ env.key(it) }, cfg.baseUrl, ledger)
+        if (flag(env, "rejudge")) {
+            rejudge(env, base, cfg, api, samples, notes, runDir, runId, ledger)
+            return@runBlocking
+        }
         val cheap = cfg.model(cfg.bibleModel) ?: error("bibleModel ${cfg.bibleModel} not in models")
 
         // 1. Smoke test: one tiny call.
@@ -86,7 +91,10 @@ class TranslationBench {
 
         // 4. Translate, one provider phase at a time.
         val adapter = BenchEngineAdapter()
-        val judge = if (cfg.judge.enabled) cfg.model(cfg.judge.model)?.let { Judge(api, it) } else null
+        val judgeSpecs = panelJudgeSpecs(env, cfg)
+        val judges = judgeSpecs.map { Judge(api, it, cfg.judges) }
+        val judgeStore = JudgeStore(File(env.outputRoot, "judges"))
+        if (judges.isNotEmpty()) log("judge panel: " + judges.joinToString { it.model.id })
         val options = RunOptions({ env.key(it) }, cfg.baseUrl, ledger, cfg.engineOptions())
         val aborted = AtomicBoolean(false)
         val store = ResultStore(File(env.outputRoot, "results"))
@@ -104,14 +112,14 @@ class TranslationBench {
                 continue
             }
             val models = phaseModels.toMutableList()
-            var estimate = models.sumOf { estimateModelUsd(it, samples, cfg, cheap) }
+            var estimate = models.sumOf { estimateModelUsd(it, samples, cfg, judgeSpecs) }
             var drops = 0
             while (ledger.totalUsd + estimate > cfg.budgetUsd * 0.9 && drops < cfg.maxDropsPerPhase && models.size > 1) {
-                val priciest = models.maxByOrNull { estimateModelUsd(it, samples, cfg, cheap) }!!
+                val priciest = models.maxByOrNull { estimateModelUsd(it, samples, cfg, judgeSpecs) }!!
                 models.remove(priciest)
                 drops++
-                notes.add("Dropped ${priciest.id} from phase $provider to stay under the cap (estimate ${usd(estimateModelUsd(priciest, samples, cfg, cheap))}).")
-                estimate = models.sumOf { estimateModelUsd(it, samples, cfg, cheap) }
+                notes.add("Dropped ${priciest.id} from phase $provider to stay under the cap (estimate ${usd(estimateModelUsd(priciest, samples, cfg, judgeSpecs))}).")
+                estimate = models.sumOf { estimateModelUsd(it, samples, cfg, judgeSpecs) }
             }
             log("phase $provider: ${models.size} models, estimate ${usd(estimate)}, ledger ${usd(ledger.totalUsd)}")
 
@@ -129,17 +137,21 @@ class TranslationBench {
                         }
                         if (output.budgetHit) aborted.set(true)
                         val metrics = if (output.text.isNotBlank()) MetricsCalculator.compute(s, bible, output.text) else null
-                        val score = if (judge != null && output.text.isNotBlank() && !aborted.get()) {
-                            withContext(Dispatchers.IO) { judge.score(s, bible, output.text) }.also {
-                                if (it.error?.contains("budget cap") == true) aborted.set(true)
-                            }
-                        } else null
                         val raw = File(runDir, "raw/${safe(m.id)}/${s.id}.txt")
                         raw.parentFile.mkdirs()
                         raw.writeText(output.text.ifBlank { "(no output) ${output.error.orEmpty()}" })
-                        val result = PairResult(runId, s.id, m.id, output, metrics, score)
+                        val result = PairResult(runId, s.id, m.id, output, metrics, null)
                         store.save(result)
-                        log("${m.id} / ${s.id}: ${output.error ?: "ok"} · ${usd(output.usage.usd)} · ${output.latencyMs / 1000}s · judge ${score?.average?.let { "%.1f".format(Locale.US, it) } ?: "–"}")
+                        // Panel judges (never the contestant's own model); scores are stored per judge.
+                        val scores = judges.filterNot { isSelfJudgment(it.model.id, m.id) }.mapNotNull { j ->
+                            if (output.text.isBlank() || aborted.get()) return@mapNotNull null
+                            withContext(Dispatchers.IO) { j.score(s, bible, output.text, m.id, runId) }.also {
+                                judgeStore.save(it)
+                                if (it.error?.contains("budget cap") == true) aborted.set(true)
+                            }
+                        }
+                        val panel = scores.mapNotNull { it.average }.takeIf { it.isNotEmpty() }?.average()
+                        log("${m.id} / ${s.id}: ${output.error ?: "ok"} · ${usd(output.usage.usd)} · ${output.latencyMs / 1000}s · panel ${panel?.let { "%.1f".format(Locale.US, it) } ?: "–"}")
                         result
                     }
                 }
@@ -168,16 +180,96 @@ class TranslationBench {
                 r.copy(metrics = r.output.text.takeIf { it.isNotBlank() }?.let { MetricsCalculator.compute(s, bibles.getValue(s.id), it) })
             }
         val runs = results.map { it.runId }.distinct().sorted()
-        val allNotes = notes + if (runs.size > 1) listOf("Results merged from runs: ${runs.joinToString()}.") else emptyList()
-        writeReport(reportCfg, samples, bibles, results, adjustments, allNotes, runDir, runId, ledger, dryRun = false)
+        val allNotes = (notes + if (runs.size > 1) listOf("Results merged from runs: ${runs.joinToString()}.") else emptyList()).toMutableList()
+        val manual = ManualJudges.load(File(env.outputRoot, "manual-judges"), allNotes)
+        if (manual.isNotEmpty()) allNotes.add("Manual judges merged: " + manual.entries.joinToString { "${it.key} (${it.value.size} scores)" } + ".")
+        val board = JudgeBoard.build(reportCfg, results, JudgeStore(File(env.outputRoot, "judges")), manual,
+            samples.map { it.id }, reportModels.filter { it.enabled }.map { it.id })
+        writeReport(reportCfg, samples, bibles, results, adjustments, allNotes, runDir, runId, ledger, dryRun = false, board = board)
     }
+
+    /**
+     * -Dbench.rejudge=true: judging only, on stored outputs. No smoke test, bible or translation
+     * calls; (judge, sample, model) cells that already have a score for that judge are skipped.
+     */
+    private suspend fun rejudge(
+        env: BenchEnv, base: BenchConfig, cfg: BenchConfig, api: BenchOpenAi, samples: List<Sample>,
+        notes: MutableList<String>, runDir: File, runId: String, ledger: CostLedger,
+    ) = coroutineScope {
+        val seeder = BibleSeeder(null, cfg.models.first(), env.cacheDir)
+        val bibles = samples.associate { s ->
+            s.id to (seeder.cached(s.id) ?: error("No cached bible for ${s.id}; rejudge never seeds bibles (run the bench first)"))
+        }
+        val results = ResultStore(File(env.outputRoot, "results"))
+            .loadAll(samples.map { it.id }.toSet(), cfg.models.filter { it.enabled }.map { it.id }.toSet())
+            .filter { it.output.text.isNotBlank() && !it.output.unavailable }
+        val store = JudgeStore(File(env.outputRoot, "judges"))
+        val bySample = samples.associateBy { it.id }
+        fun currentHash(r: PairResult): String =
+            Judge.prompt(bySample.getValue(r.sampleId), bibles.getValue(r.sampleId), r.output.text).let { (sy, us) -> Judge.promptHash(sy, us) }
+        // Scored = a stored score for this judge on this translation with the same prompt (rubric, bible, text).
+        fun done(j: ModelSpec, r: PairResult): Boolean =
+            (j.id == cfg.judge.model && r.judge?.average != null) || // v1 score already paid for
+                    store.load(j.id, r.sampleId, r.modelId)?.let {
+                        it.translationRunId == r.runId && it.average != null && it.promptHash == currentHash(r)
+                    } == true
+
+        var specs = panelJudgeSpecs(env, cfg).filter { j ->
+            env.hasKey(j.keyName).also { if (!it) notes.add("Judge ${j.id} skipped: no ${j.keyName}.") }
+        }
+        val pending = specs.associateWith { j -> results.filter { r -> !isSelfJudgment(j.id, r.modelId) && !done(j, r) } }
+        fun estimate(j: ModelSpec): Double = pending.getValue(j).sumOf { r ->
+            val (system, user) = Judge.prompt(bySample.getValue(r.sampleId), bibles.getValue(r.sampleId), r.output.text)
+            j.costUsd(TokenEstimate.tokens(system + user), cfg.judges.maxCompletionTokens.toLong())
+        }
+        specs.forEach { j ->
+            val skippedSelf = results.count { isSelfJudgment(j.id, it.modelId) }
+            log("judge ${j.id}: ${pending.getValue(j).size} cells to score (${results.size - pending.getValue(j).size - skippedSelf} already scored, $skippedSelf self-judgments excluded), estimate ${usd(estimate(j))}")
+        }
+        while (specs.isNotEmpty() && ledger.totalUsd + specs.sumOf { estimate(it) } > cfg.budgetUsd) {
+            val priciest = specs.maxByOrNull { estimate(it) }!!
+            notes.add("Judge ${priciest.id} dropped to stay under the cap (estimate ${usd(estimate(priciest))}).")
+            log("dropping judge ${priciest.id} (estimate ${usd(estimate(priciest))}) to stay under ${usd(cfg.budgetUsd)}")
+            specs = specs - priciest
+        }
+        log("rejudge: ${specs.sumOf { pending.getValue(it).size }} judge calls, estimate ${usd(specs.sumOf { estimate(it) })}, ledger ${usd(ledger.totalUsd)} of cap ${usd(cfg.budgetUsd)}")
+
+        val aborted = AtomicBoolean(false)
+        val sem = Semaphore(cfg.parallelism)
+        specs.flatMap { spec -> val judge = Judge(api, spec, cfg.judges); pending.getValue(spec).map { judge to it } }.map { (judge, r) ->
+            async(Dispatchers.IO) {
+                sem.withPermit {
+                    if (aborted.get()) return@withPermit
+                    val score = judge.score(bySample.getValue(r.sampleId), bibles.getValue(r.sampleId), r.output.text, r.modelId, r.runId)
+                    store.save(score)
+                    if (score.error?.contains("budget cap") == true) aborted.set(true)
+                    log("judge ${judge.model.id} → ${r.modelId} / ${r.sampleId}: ${score.error ?: "%.2f".format(Locale.US, score.average)} · ${usd(score.usd)}")
+                }
+            }
+        }.awaitAll()
+        if (aborted.get()) notes.add("Rejudge stopped early: budget cap reached; re-run to fill the remaining cells.")
+        notes.add("Judging-only run (rejudge): no translation or bible calls.")
+        val adjustments = specs.associate { "${it.id} (judge)" to api.stateFor(it).adjustments.toList() }
+        mergedReport(env, base, cfg, samples, bibles, adjustments, notes, runDir, runId, ledger)
+    }
+
+    /** LLM judges for this run: `judge.model` (from `models`) plus `judges.panel`, filtered by -Dbench.judges. */
+    private fun panelJudgeSpecs(env: BenchEnv, cfg: BenchConfig): List<ModelSpec> {
+        if (!cfg.judge.enabled || !cfg.judges.enabled) return emptyList()
+        val all = (listOfNotNull(cfg.model(cfg.judge.model)) + cfg.judges.panel).distinctBy { it.id }
+        val wanted = env.setting("judges")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+        wanted?.forEach { w -> require(all.any { it.id == w }) { "Unknown judge '$w' (add it to judges.panel)" } }
+        return all.filter { wanted == null || it.id in wanted }
+    }
+
+    private fun flag(env: BenchEnv, name: String): Boolean = env.setting(name)?.let { it == "1" || it.toBoolean() } == true
 
     private fun writeReport(
         cfg: BenchConfig, samples: List<Sample>, bibles: Map<String, Bible>, results: List<PairResult>,
         adjustments: Map<String, List<String>>, notes: List<String>, runDir: File, runId: String,
-        ledger: CostLedger, dryRun: Boolean,
+        ledger: CostLedger, dryRun: Boolean, board: JudgeBoard? = null,
     ) {
-        val report = ReportBuilder(cfg, samples, bibles, results, adjustments, notes)
+        val report = ReportBuilder(cfg, samples, bibles, results, adjustments, notes, board)
         report.write(runDir, runId, ledger.runUsd, ledger.totalUsd, dryRun)
         File(runDir.parentFile, "LATEST").writeText(runDir.name)
         println()
@@ -258,14 +350,15 @@ class TranslationBench {
         writeReport(cfg, samples, bibles, results, emptyMap(), notes, runDir, "dry-run-${runDir.name}", ledger, dryRun = true)
     }
 
-    /** Pre-phase estimate for one model over all samples, incl. its judge calls. */
-    private fun estimateModelUsd(m: ModelSpec, samples: List<Sample>, cfg: BenchConfig, judgeModel: ModelSpec): Double =
+    /** Pre-phase estimate for one model over all samples, incl. its panel judge calls. */
+    private fun estimateModelUsd(m: ModelSpec, samples: List<Sample>, cfg: BenchConfig, judges: List<ModelSpec>): Double =
         samples.sumOf { s ->
             val chunks = (s.chars / 2000) + 1
             val prompt = (s.chars * 1.0 + 900 * chunks).toLong()
             val reasoning = TokenEstimate.reasoningAllowance(effortLabel(m, null)?.takeIf { it != "off" }) * chunks
             val completion = (s.chars * 1.2).toLong() + reasoning
-            val judge = if (cfg.judge.enabled) judgeModel.costUsd(s.chars * 2L + 600, 150) else 0.0
+            val judge = judges.filterNot { isSelfJudgment(it.id, m.id) }
+                .sumOf { it.costUsd(s.chars * 2L + cfg.judges.promptOverheadTokens, cfg.judges.maxCompletionTokens.toLong()) }
             m.costUsd(prompt, completion) + judge
         }
 
