@@ -68,18 +68,15 @@ class PixivNovelProvider : MainAPI() {
         "In tag: oldest" to "tag:date",
     )
 
+    /** Genre tags. Romance (恋愛, and 悪役令嬢, a romance genre), BL and 百合 are left out on purpose. */
     override val tags = listOf(
         "Original (オリジナル)" to "オリジナル",
         "Isekai (異世界)" to "異世界",
         "Isekai reincarnation (異世界転生)" to "異世界転生",
         "Fantasy (ファンタジー)" to "ファンタジー",
-        "Romance (恋愛)" to "恋愛",
-        "Villainess (悪役令嬢)" to "悪役令嬢",
         "Sci-fi (SF)" to "SF",
         "Mystery (ミステリー)" to "ミステリー",
         "Horror (ホラー)" to "ホラー",
-        "Boys' love (BL)" to "BL",
-        "Girls' love (百合)" to "百合",
     )
 
     private val headers = mapOf(

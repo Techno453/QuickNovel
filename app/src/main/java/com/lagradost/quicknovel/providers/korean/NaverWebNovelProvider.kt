@@ -62,11 +62,10 @@ class NaverWebNovelProvider : MainAPI() {
         "Challenge league: latest updates" to "genre|challenge|Update",
     )
 
+    /** Genres. Romance (로맨스) and romance fantasy (로판) are left out on purpose. */
     override val tags = listOf(
         "Fantasy (판타지)" to "102",
         "Modern fantasy (현판)" to "110",
-        "Romance (로맨스)" to "101",
-        "Romance fantasy (로판)" to "109",
         "Martial arts (무협)" to "103",
         "Mystery (미스터리)" to "104",
         "Light novel (라이트노벨)" to "106",

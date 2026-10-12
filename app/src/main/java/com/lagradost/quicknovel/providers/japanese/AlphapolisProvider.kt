@@ -59,10 +59,10 @@ class AlphapolisProvider : MainAPI() {
         "New works" to "recent",
     )
 
+    /** Categories. Romance (恋愛) and BL are left out on purpose. */
     override val tags = listOf(
         "All" to "",
         "Fantasy (ファンタジー)" to "110400",
-        "Romance (恋愛)" to "110500",
         "Mystery (ミステリー)" to "110100",
         "Horror (ホラー)" to "110200",
         "Sci-fi (SF)" to "110300",
@@ -73,7 +73,6 @@ class AlphapolisProvider : MainAPI() {
         "Popular fiction (大衆娯楽)" to "110800",
         "Historical (歴史・時代)" to "111100",
         "Children (児童書・童話)" to "111200",
-        "BL" to "119000",
         "Essay (エッセイ・ノンフィクション)" to "111600",
     )
 

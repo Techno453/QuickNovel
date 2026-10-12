@@ -86,8 +86,8 @@ class BrowseListingsTest {
         )
         assertNull("a Top 100 has one page", novelpia.listingUrl("top100:all/weekly", "", 2))
         assertEquals(
-            "https://novelpia.com/freestory/all/view/3/all?main_genre=6",
-            novelpia.listingUrl("free:view", "6", 3)
+            "https://novelpia.com/freestory/all/view/3/all?main_genre=1",
+            novelpia.listingUrl("free:view", "1", 3)
         )
     }
 

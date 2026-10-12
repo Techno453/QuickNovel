@@ -110,10 +110,6 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="www.fanmtl.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
                     android:host="fenrirealm.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
@@ -154,27 +150,7 @@
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
-                    android:host="lnmtl.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="meionovels.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="mtlnovel.me"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="www.nobadnovel.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
                     android:host="novelbin.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="novelbuddy.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -191,10 +167,6 @@
                     android:scheme="https" />
                 <data
                     android:host="novlove.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="pawread.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
                 <data
@@ -235,22 +207,6 @@
                     android:scheme="https" />
                 <data
                     android:host="www.skynovels.net"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="www.sonicmtl.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="wtr-lab.com"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="wuxia.click"
-                    android:pathPrefix="/"
-                    android:scheme="https" />
-                <data
-                    android:host="www.wuxiabox.com"
                     android:pathPrefix="/"
                     android:scheme="https" />
             </intent-filter>

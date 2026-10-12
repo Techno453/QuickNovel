@@ -191,9 +191,9 @@ class BrowseLogicTest {
 
     @Test
     fun railLabelSkipsBareAllAxes() {
-        // JJWXC: status axis defaults to "All", the ranking lives in orderBys.
-        val jjwxc = Source("JJWXC", "zh", mainCategories = listOf("All", "Completed (完结)"), orderBys = listOf("Popular (积分)", "Newest"))
-        assertEquals("Popular (积分)", BrowseCatalog.defaultRailLabel(jjwxc))
+        // A status axis that defaults to "All", with the ranking in orderBys.
+        val statusFirst = Source("Example", "zh", mainCategories = listOf("All", "Completed (完结)"), orderBys = listOf("Popular (积分)", "Newest"))
+        assertEquals("Popular (积分)", BrowseCatalog.defaultRailLabel(statusFirst))
         // 69shuba: the ranking is the first main category.
         val shuba = Source("69shuba", "zh", mainCategories = listOf("Popular, monthly (人气榜)", "Latest"))
         assertEquals("Popular, monthly (人气榜)", BrowseCatalog.defaultRailLabel(shuba))

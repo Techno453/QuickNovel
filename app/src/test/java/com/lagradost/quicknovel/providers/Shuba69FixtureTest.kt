@@ -59,16 +59,16 @@ class Shuba69FixtureTest {
             "https://www.69shuba.com/novels/monthvisit_0_0_1.htm",
             api.mainPageUrl(1, api.mainCategories.first().second, api.orderBys.firstOrNull()?.second, api.tags.first().second),
         )
-        // Listings carry ranking and status: weekly popularity, romance (3), page 2.
-        assertEquals("https://www.69shuba.com/novels/weekvisit_3_0_2.htm", api.mainPageUrl(2, "weekvisit|0", null, "3"))
+        // Listings carry ranking and status: weekly popularity, urban (9), page 2.
+        assertEquals("https://www.69shuba.com/novels/weekvisit_9_0_2.htm", api.mainPageUrl(2, "weekvisit|0", null, "9"))
         assertEquals("https://www.69shuba.com/novels/allvote_0_1_1.htm", api.mainPageUrl(0, "allvote|1", null, ""))
         assertEquals("https://www.69shuba.com/novels/monthvisit_0_2_1.htm", api.mainPageUrl(1, "monthvisit|2", null, null))
-        // The old shape (status in mainCategory, ranking in orderBy) still works: romance (3),
-        // ongoing (2), weekly popularity, page 2 (verified live: 50 ongoing romance works).
-        assertEquals("https://www.69shuba.com/novels/weekvisit_3_2_2.htm", api.mainPageUrl(2, "2", "weekvisit", "3"))
+        // The old shape (status in mainCategory, ranking in orderBy) still works: urban (9),
+        // ongoing (2), weekly popularity, page 2.
+        assertEquals("https://www.69shuba.com/novels/weekvisit_9_2_2.htm", api.mainPageUrl(2, "2", "weekvisit", "9"))
         // Latest updates is a single page that ignores genre and status.
-        assertEquals("https://www.69shuba.com/last.html", api.mainPageUrl(1, BiqugeProvider.LATEST, null, "3"))
-        assertEquals("https://www.69shuba.com/last.html", api.mainPageUrl(1, "1", BiqugeProvider.LATEST, "3"))
+        assertEquals("https://www.69shuba.com/last.html", api.mainPageUrl(1, BiqugeProvider.LATEST, null, "9"))
+        assertEquals("https://www.69shuba.com/last.html", api.mainPageUrl(1, "1", BiqugeProvider.LATEST, "9"))
         // No dead URL shapes from before the redesign.
         for (c in api.mainCategories) for (t in api.tags) {
             val url = api.mainPageUrl(2, c.second, null, t.second)

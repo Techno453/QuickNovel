@@ -4,6 +4,10 @@ import com.lagradost.quicknovel.*
 import org.jsoup.nodes.Document
 import java.util.Locale
 
+/**
+ * Not registered since 2026-10-12: meionovels.com serves machine-translated (MTL) chapters, and the
+ * fork reads raw CJK sources itself. Kept as the base class of [ArNoProvider] and [NovLoveProvider].
+ */
 open class MeioNovelProvider : MainAPI() {
     override val name = "MeioNovel"
     override val mainUrl = "https://meionovels.com"

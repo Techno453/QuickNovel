@@ -75,12 +75,12 @@ class NovelpiaProvider : MainAPI() {
         "Free works: latest updates" to "free:date",
     )
 
+    /** Genres (`main_genre`). Romance (로맨스, 6) is left out on purpose. */
     override val tags = listOf(
         "All" to "",
         "Fantasy (판타지)" to "1",
         "Martial arts (무협)" to "2",
         "Modern (현대)" to "3",
-        "Romance (로맨스)" to "6",
         "Modern fantasy (현대판타지)" to "12",
         "Light novel (라이트노벨)" to "13",
         "Horror (공포)" to "14",

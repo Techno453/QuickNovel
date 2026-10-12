@@ -54,7 +54,7 @@ class BrowseListingsLiveTest(private val case: Case) {
                 shuba.default("latest updates", main = BiqugeProvider.LATEST, paged = false),
                 shuba.default("completed", main = "monthvisit|1"),
                 shuba.default("ongoing", main = "monthvisit|2"),
-                shuba.default("romance genre", tag = "3"),
+                shuba.default("urban genre", tag = "9"),
 
                 quanben.default("default (recommended)", paged = false),
                 quanben.default("xuanhuan genre", tag = "xuanhuan"),

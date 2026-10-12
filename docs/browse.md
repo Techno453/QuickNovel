@@ -25,6 +25,10 @@ Rules every provider in the Browse tab follows:
   and the All sources "Popular" feed load `(mainCategories[0], orderBys[0], tags[0])`, page 1.
 - Labels are English; genres keep the original name in brackets so a reader of the raws
   recognises them, e.g. `Fantasy (판타지)`.
+- Romance listings are deliberately not offered: no romance, BL / danmei, GL / yuri / 百合,
+  "no romance" (无CP) or sexual-orientation option on any axis, and no romance-focused source
+  (JJWXC and Wattpad were removed). The per-source list is in [sources.md](sources.md#romance-listings-not-offered);
+  `NoRomanceListingsTest` keeps it that way.
 - A listing value may encode several site parameters (`"popular|completed"`); the provider's
   `listingUrl(...)` (internal, unit-tested in `BrowseListingsTest`) turns it into the URL.
 
@@ -43,7 +47,7 @@ Listings of the CJK providers (verified against the live sites, 2026-10):
 Pixiv's popular-by-bookmarks search needs Premium, so its popularity listings are the public
 rankings; the overall rankings are mostly fan fiction, so the original-works ranking is first.
 Novelpia PLUS works in the Top 100 only show their free episodes (the free Top 100 comes first).
-69shuba, Quanben, Syosetu, JJWXC and czbooks follow the same rules (their listings are maintained
+69shuba, Quanben, Syosetu and czbooks follow the same rules (their listings are maintained
 with those providers).
 
 ## Browse home
@@ -53,7 +57,7 @@ with those providers).
   set or comma-separated; absent = no preference), then the remaining CJK languages in the order
   Chinese, Japanese, Korean, then every other language in one "Other sources" group, collapsed.
 - Each source card: name, language chip, the name of its default listing, and a horizontal
-  "Popular" rail with the first 12 entries. The label under the source name is the provider's default listing: the first label of the first axis that is not a bare "All" (JJWXC's status axis defaults to "All", so its ranking "Popular (积分)" is shown instead), or "Popular" when there is none. Tapping a poster opens the result page
+  "Popular" rail with the first 12 entries. The label under the source name is the provider's default listing: the first label of the first axis that is not a bare "All" (a status axis that defaults to "All" is skipped, so a ranking on the next axis is shown instead), or "Popular" when there is none. Tapping a poster opens the result page
   (`loadResult`), a long press the preview sheet; the card title or "See all" opens the
   source page.
 - Layout: full-width cards on phones and the Fold cover screen, two cards per row from 840 dp

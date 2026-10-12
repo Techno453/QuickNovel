@@ -87,9 +87,9 @@ class BiqugeProvider : MainAPI() {
     )
 
     // Category ids as used by the site's own filters (same ids as /novels/class/{id}.htm).
+    // Romance (言情, 3) is left out on purpose.
     override val tags = listOf(
         "All genres"                  to "0",
-        "Romance (言情)"              to "3",
         "Fantasy & magic (玄幻魔法)"   to "1",
         "Xianxia & wuxia (修真武侠)"   to "2",
         "Time travel (穿越时空)"       to "11",
@@ -178,7 +178,7 @@ class BiqugeProvider : MainAPI() {
     }
 
     /**
-     * Browse URL: a ranking page such as `/novels/monthvisit_3_2_1.htm` (romance, ongoing,
+     * Browse URL: a ranking page such as `/novels/monthvisit_9_2_1.htm` (urban, ongoing,
      * page 1), or `/last.html` for the latest updates. [mainCategory] is a [mainCategories]
      * value ("ranking|status" or [LATEST]); a bare status with the ranking in [orderBy] (the
      * shape before 2026-10-12) is still accepted.
@@ -490,7 +490,7 @@ class BiqugeProvider : MainAPI() {
 
         /**
          * Extracts chapter text as reader HTML: one `<p>` per paragraph (the same shape other
-         * providers such as WtrLab return), paragraphs separated by a blank line so plain-text
+         * providers return), paragraphs separated by a blank line so plain-text
          * consumers can still split on "\n\n". Pure, so it is covered by a JVM unit test.
          */
         fun parseChapterHtml(html: String, url: String): String? {
