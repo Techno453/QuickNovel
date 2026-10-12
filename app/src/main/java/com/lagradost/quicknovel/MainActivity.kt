@@ -884,8 +884,9 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         if (d is StreamResponse) {
-                            resultviewPreviewMetaChapters.text =
-                                "${d.data.size} ${getString(R.string.chapter_sort)}"
+                            resultviewPreviewMetaChapters.text = resources.getQuantityString(
+                                R.plurals.result_chapter_count, d.data.size, d.data.size
+                            )
                             resultviewPreviewMetaChapters.isVisible = d.data.isNotEmpty()
                             resultviewPreviewMetaChapters.setOnClickListener {
                                 loadResult(d.url, viewModel.apiName)
