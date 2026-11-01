@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The gaze build's copy of the app, told apart from the real QuickNovel on the home screen
+         (docs/gaze-test.md). Only the default language: es, ru and tr still show QuickNovel. -->
+    <string name="app_name" translatable="false">QN Follow</string>
+</resources>

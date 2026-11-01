@@ -16,6 +16,7 @@ view model delegates to.
 | `ui/reader/ReaderTtsController` | TTS buttons, status, sleep timer, media actions; forwards the line being read to the active display |
 | `ui/reader/ReaderSettingsSheet` | The settings bottom sheet |
 | `ui/reader/ReaderGlossaryController`, `GlossaryLookup`, `GlossaryLookupSheet` | Long-press / selection glossary lookup |
+| `ui/reader/ReaderFollow`, `gaze/GazeFollower` | Follow mode: the front camera counts the lines read; scroll mode glides, paged mode turns ([gaze-follow.md](gaze-follow.md)) |
 | `ReaderBooks.kt` | `AbstractBook`, `QuickBook` (streamed / downloaded), `RegularBook` (epub) |
 | `ReaderPreferences.kt`, `ReaderPreferenceDelegates.kt` | Reader preferences and their LiveData |
 | `MlChapterTranslator` | ML Kit on-device chapter translation with a file cache |

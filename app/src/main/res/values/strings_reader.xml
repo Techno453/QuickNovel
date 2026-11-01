@@ -48,4 +48,25 @@
     <string name="reader_preview_reason">Preview · %s</string>
     <string name="reader_preview_not_yet">Preview · translated when you reach this chapter</string>
     <string name="reader_preview_note">Preview: each chapter is translated when you open it, one at a time, without the glossary and without read ahead.</string>
+
+    <!-- Follow mode: the front camera follows the reading (docs/gaze-follow.md) -->
+    <string name="reader_follow">Follow</string>
+    <string name="follow_start">Start following</string>
+    <string name="follow_stop">Stop following</string>
+    <string name="follow_recalibrate">Recalibrate</string>
+    <string name="follow_switch_camera">Switch camera</string>
+    <string name="follow_share_logs">Share follow logs</string>
+    <string name="follow_no_logs">No follow logs yet</string>
+    <string name="follow_needs_camera">Following needs the camera</string>
+    <string name="follow_looking">Looking for your face…</string>
+    <string name="follow_look_at_dot">Look at the dot</string>
+    <string name="follow_calibrated">Calibrated (SNR %s)</string>
+    <string name="follow_calibration_failed">Calibration failed (%s). Hold the phone as you read and start again.</string>
+    <string name="follow_calibration_kept">Calibration failed (%s); kept the earlier one</string>
+    <string name="follow_no_steady_face">no steady face</string>
+    <string name="follow_too_noisy">too noisy, SNR %s</string>
+    <string name="follow_camera_n">Front camera %1$d of %2$d</string>
+    <string name="follow_model_failed">Face model failed: %s</string>
+    <string name="follow_camera_failed">Camera failed: %s</string>
+    <string name="follow_no_front_camera">No front camera found</string>
 </resources>

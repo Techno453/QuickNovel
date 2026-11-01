@@ -54,6 +54,7 @@ import com.lagradost.quicknovel.ui.TextConfig
 import com.lagradost.quicknovel.ui.TextInteraction
 import com.lagradost.quicknovel.ui.reader.GlossaryLookup
 import com.lagradost.quicknovel.ui.reader.OriginalNotice
+import com.lagradost.quicknovel.ui.reader.ReaderFollow
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.UIHelper
 import io.noties.markwon.image.AsyncDrawableSpan
@@ -130,15 +131,20 @@ class PagedReaderController(
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrollStateChanged(state: Int) {
                 if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
+                    if (!userDragging) onUserDrag?.invoke(true)
                     userDragging = true
                     pinnedPage = -1
                 }
-                if (state == ViewPager2.SCROLL_STATE_IDLE) userDragging = false
+                if (state == ViewPager2.SCROLL_STATE_IDLE) {
+                    if (userDragging) onUserDrag?.invoke(false)
+                    userDragging = false
+                }
             }
 
             override fun onPageSelected(position: Int) {
                 if (position != selectionPage) clearSelection()
                 updatePageNumber(position)
+                onPageChanged?.invoke(position)
                 if (userDragging) {
                     report(position)
                 } else if (pinnedPage >= 0 && position != pinnedPage) {
@@ -188,6 +194,19 @@ class PagedReaderController(
     }
 
     // ============================== navigation ==============================
+
+    /** Follow mode (ReaderFollow): the current page's text lines, none on a title or image page. */
+    fun followLines(): List<ReaderFollow.Line> {
+        val list = pager.getChildAt(0) as? RecyclerView ?: return emptyList()
+        val holder = list.findViewHolderForAdapterPosition(pager.currentItem) as? PageHolder ?: return emptyList()
+        return (holder.root.getChildAt(0) as? PageTextView)?.followLines().orEmpty()
+    }
+
+    /** Called with the new page whenever the shown page changes. */
+    var onPageChanged: ((Int) -> Unit)? = null
+
+    /** Called with true when the user starts dragging a page, false once the pager is at rest. */
+    var onUserDrag: ((Boolean) -> Unit)? = null
 
     fun nextPage() = turnTo(pager.currentItem + 1)
 

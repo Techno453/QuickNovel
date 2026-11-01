@@ -10,6 +10,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Follow mode in the reader (docs/gaze-follow.md), asked for when it is first started -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.front"
+        android:required="false" />
+
+    <!-- MediaPipe Tasks declare minSdk 24; ReaderFollow.create offers follow mode from 24 on. -->
+    <uses-sdk tools:overrideLibrary="com.google.mediapipe.tasks.vision,com.google.mediapipe.tasks.core" />
 
     <queries>
         <intent>

@@ -8,6 +8,8 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
 import androidx.activity.viewModels
@@ -33,6 +35,7 @@ import com.lagradost.quicknovel.ui.TextInteraction
 import com.lagradost.quicknovel.ui.UiText
 import com.lagradost.quicknovel.ui.reader.ReaderChromeController
 import com.lagradost.quicknovel.ui.reader.ReaderGlossaryController
+import com.lagradost.quicknovel.ui.reader.ReaderFollow
 import com.lagradost.quicknovel.ui.reader.ReaderLayoutController
 import com.lagradost.quicknovel.ui.reader.ReaderScrollController
 import com.lagradost.quicknovel.ui.reader.ReaderSettingsSheet
@@ -52,6 +55,7 @@ import java.lang.ref.WeakReference
  * - [ReaderSettingsSheet]: the settings bottom sheet
  * - [ReaderGlossaryController]: long-press / selection glossary lookup
  * - [PagedReaderController]: the page-flip reading mode, shown instead of the scrolling list
+ * - [ReaderFollow]: eye-tracked following, the text moving on as you read (docs/gaze-follow.md)
  */
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayoutController.Host {
     companion object {
@@ -73,6 +77,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
     private lateinit var settingsSheet: ReaderSettingsSheet
     private lateinit var glossary: ReaderGlossaryController
     private lateinit var paged: PagedReaderController
+
+    /** Eye-tracked following; only the gaze test build has one ([ReaderFollow.create]). */
+    private var follow: ReaderFollow? = null
 
     /** Reading mode "Pages": the paged display replaces the scrolling list. */
     private val isPaged: Boolean get() = paged.isActive
@@ -99,6 +106,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
 
         val down = keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
         if (tts.onVolumeKey(down)) return true
+        if (follow?.onVolumeKey(down) == true) return true
         if (viewModel.scrollWithVolume) {
             if (isPaged) {
                 if (down) paged.nextPage() else paged.previousPage()
@@ -176,6 +184,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
     }
 
     override fun onDestroy() {
+        follow?.onDestroy()
         tts.onDestroy()
         chrome.onDestroy()
         super.onDestroy()
@@ -259,10 +268,53 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener, ReaderLayo
         //here inserted novel chapter text into recyclerview
         observe(viewModel.chapter) { chapter ->
             if (isPaged) paged.submit(chapter) else scroll.submit(chapter)
+            if (chapter.seekToDesired) follow?.onUserMoved()
         }
+        bindFollow()
 
         binding.readActionSettings.setOnClickListener {
             settingsSheet.show()
+        }
+    }
+
+    /** Eye-tracked following (docs/gaze-follow.md): a Follow button in the toolbar. */
+    private fun bindFollow() {
+        val follower = ReaderFollow.create(object : ReaderFollow.Host {
+            override val activity: AppCompatActivity get() = this@ReadActivity2
+
+            override val continuous: Boolean get() = !isPaged
+
+            override fun lines() = if (isPaged) paged.followLines() else scroll.followLines()
+
+            override fun textArea(): IntRange = if (isPaged) {
+                val location = IntArray(2)
+                binding.readPages.getLocationInWindow(location)
+                location[1]..location[1] + binding.readPages.height
+            } else {
+                scroll.followArea()
+            }
+
+            override fun scrollBy(dy: Int) {
+                if (!isPaged) scroll.followScrollBy(dy)
+            }
+
+            override fun turnPage(last: ReaderFollow.Line) {
+                if (isPaged) paged.nextPage()
+            }
+        }) ?: return
+        follow = follower
+        scroll.onUserScroll = { active ->
+            follower.onUserScroll(active)
+            if (!active) follower.onUserMoved()
+        }
+        paged.onUserDrag = { active -> follower.onUserScroll(active) }
+        paged.onPageChanged = { follower.onUserMoved() }
+        binding.readToolbar.menu.add(Menu.NONE, R.id.read_follow, Menu.NONE, R.string.reader_follow).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                follower.onMenu(binding.readToolbar.findViewById(R.id.read_follow) ?: binding.readToolbar)
+                true
+            }
         }
     }
 

@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.TTSHelper
 import com.lagradost.quicknovel.TextSpan
+import com.lagradost.quicknovel.ui.reader.ReaderFollow
 import com.lagradost.quicknovel.ui.reader.paged.PageSelection.Handle
 import kotlin.math.abs
 
@@ -134,6 +135,27 @@ class PageTextView(context: Context, private val ttsLine: () -> TTSHelper.TTSLin
 
     private fun lineBottomOnPage(slice: Slice, layout: StaticLayout, line: Int): Int =
         areaTop + slice.y + layout.getLineBottom(line) - layout.getLineTop(slice.firstLine)
+
+    /** Follow mode (ReaderFollow): the page's text lines in window pixels, top to bottom. */
+    fun followLines(): List<ReaderFollow.Line> {
+        val page = page ?: return emptyList()
+        val location = IntArray(2)
+        getLocationInWindow(location)
+        val (x, y) = location
+        return page.slices.flatMap { slice ->
+            val layout = slice.layout ?: return@flatMap emptyList()
+            (slice.firstLine until slice.endLine).map { line ->
+                val left = x + areaLeft + layout.getLineLeft(line).toInt()
+                ReaderFollow.Line(
+                    key = ReaderFollow.Line.key(slice.span.index, slice.span.start + layout.getLineStart(line)),
+                    left = left,
+                    top = y + lineTopOnPage(slice, layout, line),
+                    right = left + layout.getLineMax(line).toInt(),
+                    bottom = y + lineBottomOnPage(slice, layout, line),
+                )
+            }
+        }
+    }
 
     /** The paragraph and character (relative to the paragraph) under ([x], [y]), or null. */
     fun hit(x: Float, y: Float): Pair<Slice, Int>? {

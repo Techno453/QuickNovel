@@ -74,6 +74,17 @@ android {
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+        // Gaze test screen (docs/gaze-test.md): the release app, shrunk by R8 like a release (so
+        // it also shows that follow mode's MediaPipe survives R8), plus the front-camera test
+        // screen in src/gaze with its own launcher icon. Installed next to the release and debug
+        // apps; CI and the pre-release workflow do not build it.
+        gaze {
+            initWith release
+            signingConfig signingConfigs.debug
+            applicationIdSuffix ".gaze"
+            versionNameSuffix '-GAZE'
+            matchingFallbacks = ['release']
+        }
     }
 
     // Release: one APK per ABI (most of an APK is ML Kit's libtranslate_jni.so, 11-17 MB per
@@ -116,14 +127,22 @@ android {
 // `splits` applies to every build type. Debug builds (CI artifact, pre-release, emulator
 // installs) keep today's single universal APK at app/build/outputs/apk/debug/app-debug.apk:
 // drop their per-ABI outputs and give the universal one its usual name (outputFileName is only
-// exposed by AGP's VariantOutputImpl).
+// exposed by AGP's VariantOutputImpl). The gaze build likewise is one app-gaze.apk.
 androidComponents {
-    onVariants(selector().withBuildType("debug")) { variant ->
-        variant.outputs.each { output ->
-            if (output.filters.any { it.filterType.name() == "ABI" }) {
-                output.enabled.set(false)
-            } else {
-                output.outputFileName.set("app-debug.apk")
+    // AGP 9 makes unit test tasks for the tested build type (debug) only; the gaze test's pure
+    // classes are tested from src/testGaze by testGazeUnitTest.
+    beforeVariants(selector().withBuildType("gaze")) { variantBuilder ->
+        variantBuilder.hostTests.get(com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE).enable = true
+    }
+
+    ["debug", "gaze"].each { type ->
+        onVariants(selector().withBuildType(type)) { variant ->
+            variant.outputs.each { output ->
+                if (output.filters.any { it.filterType.name() == "ABI" }) {
+                    output.enabled.set(false)
+                } else {
+                    output.outputFileName.set("app-${type}.apk")
+                }
             }
         }
     }
@@ -216,6 +235,14 @@ dependencies {
 
     // Encrypted prefs for OpenAI API key
     implementation(libs.security.crypto)
+
+    // Follow mode in the reader (docs/gaze-follow.md): front camera frames and face/iris
+    // landmarks. MediaPipe adds about 10 MB of native code per ABI.
+    implementation 'androidx.camera:camera-camera2:1.6.2'
+    implementation 'androidx.camera:camera-lifecycle:1.6.2'
+    implementation 'com.google.mediapipe:tasks-vision:0.10.35'
+    // The gaze test screen's camera preview (docs/gaze-test.md)
+    gazeImplementation 'androidx.camera:camera-view:1.6.2'
 }
 
 // Translation benchmark (app/src/test/.../bench/TranslationBench, docs/translation-bench.md) and

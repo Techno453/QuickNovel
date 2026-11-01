@@ -2,6 +2,7 @@ package com.lagradost.quicknovel.ui.reader
 
 import android.annotation.SuppressLint
 import android.content.res.Resources
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -266,6 +267,37 @@ class ReaderScrollController(
         binding.realText.scrollBy(0, line.top - getTopY())
     }
 
+    /** Follow mode (ReaderFollow): the text lines wholly on screen. */
+    fun followLines(): List<ReaderFollow.Line> {
+        val topY = getTopY()
+        val bottomY = getBottomY()
+        return getAllLines().filter { it.right > it.left && it.top >= topY && it.bottom <= bottomY }.map {
+            ReaderFollow.Line(ReaderFollow.Line.key(it.index, it.startChar), it.left, it.top, it.right, it.bottom)
+        }
+    }
+
+    /** Follow mode: the text area on screen (window y). */
+    fun followArea(): IntRange = getTopY()..getBottomY()
+
+    private var followSavedAt = 0L
+
+    /**
+     * Follow mode: moves the text up by [dy] pixels, a few at a time. A scroll from code does not
+     * record the reading position (only drags and flings do), so it is recorded every half second.
+     */
+    fun followScrollBy(dy: Int) {
+        binding.realText.scrollBy(0, dy)
+        val now = SystemClock.uptimeMillis()
+        if (now - followSavedAt >= FOLLOW_SAVE_MS) {
+            followSavedAt = now
+            onScroll()
+        }
+    }
+
+    /** Called with true when the user starts dragging the text, false once it came to rest. */
+    var onUserScroll: ((Boolean) -> Unit)? = null
+    private var dragged = false
+
     /** Volume up: scroll back one screen, aligned to a whole line. */
     fun pageUp() {
         binding.realText.scrollBy(0, getTopY() - getBottomY())
@@ -306,6 +338,9 @@ class ReaderScrollController(
     private companion object {
         /** Frames to wait for the list to lay out the seek target (about half a second). */
         const val SEEK_ATTEMPTS = 30
+
+        /** While follow mode glides the text, the reading position is recorded this often. */
+        const val FOLLOW_SAVE_MS = 500L
     }
 
     // ===================== overscroll to change chapter (OVERSCROLL_SCROLL) =====================
@@ -437,6 +472,14 @@ class ReaderScrollController(
                     super.onScrollStateChanged(recyclerView, newState)
                     if (newState == RecyclerView.SCROLL_STATE_SETTLING || newState == RecyclerView.SCROLL_STATE_IDLE) {
                         onScroll()
+                    }
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING && !dragged) {
+                        dragged = true
+                        onUserScroll?.invoke(true)
+                    }
+                    if (newState == RecyclerView.SCROLL_STATE_IDLE && dragged) {
+                        dragged = false
+                        onUserScroll?.invoke(false)
                     }
                 }
             })
