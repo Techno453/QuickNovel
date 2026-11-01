@@ -3,4 +3,6 @@
     <item name="reader_glossary_action" type="id" />
     <item name="reader_touch_x" type="id" />
     <item name="reader_touch_y" type="id" />
+    <!-- Follow button (ReaderFollow, gaze test build only) -->
+    <item name="read_follow" type="id" />
 </resources>

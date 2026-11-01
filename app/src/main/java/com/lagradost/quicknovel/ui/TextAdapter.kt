@@ -121,6 +121,10 @@ data class TextVisualLine(
 
     val top: Int,
     val bottom: Int,
+
+    // where the text of the line starts and ends (window x), for the follow mode; 0 for images
+    val left: Int = 0,
+    val right: Int = 0,
 )
 
 fun TextVisualLine.toScroll(): ScrollIndex {
@@ -464,6 +468,7 @@ class TextAdapter(
                 val outLocation = IntArray(2)
                 binding.root.getLocationInWindow(outLocation)
                 val y = outLocation[1] + binding.root.paddingTop
+                val x = outLocation[0] + binding.root.totalPaddingLeft
 
                 val list = arrayListOf<TextVisualLine>()
                 binding.root.layout?.apply {
@@ -475,7 +480,9 @@ class TextAdapter(
                                 innerIndex = item.innerIndex,
                                 index = item.index,
                                 top = getLineTop(i) + y,
-                                bottom = getLineBottom(i) + y
+                                bottom = getLineBottom(i) + y,
+                                left = x + getLineLeft(i).toInt(),
+                                right = x + (getLineLeft(i) + getLineMax(i)).toInt(),
                             )
                         )
                     }

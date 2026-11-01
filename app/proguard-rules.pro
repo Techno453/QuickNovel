@@ -81,3 +81,19 @@
 -keepclassmembers class androidx.recyclerview.widget.RecyclerView {
     private int mTouchSlop;
 }
+
+# ---------------------------------------------------------------------------------------------
+# MediaPipe (follow mode's face landmarks, docs/gaze-follow.md) ships no consumer rules: its
+# native code calls back into its Java classes and reads its option protos by name. Its logger,
+# Flogger, finds the calling class by walking the stack for its own class names; renamed, the
+# graph's static init throws "no caller found on the stack" and no face model loads.
+-keep class com.google.mediapipe.** { *; }
+-dontwarn com.google.mediapipe.**
+-keep class com.google.common.flogger.** { *; }
+-dontwarn com.google.common.flogger.**
+# MediaPipe's protos (and the protobuf.Any inside its graph config) are protobuf-lite messages,
+# whose runtime finds each field by its name ("Field typeUrl_ for com.google.protobuf.Any not
+# found" otherwise).
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
+    <fields>;
+}
