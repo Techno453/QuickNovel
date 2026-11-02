@@ -1,11 +1,11 @@
-# Daily live smoke test of the CJK providers against the real sites (one search, one novel,
+# Weekly live smoke test of the CJK providers against the real sites (one search, one novel,
 # one chapter each). A provider that breaks fails the job, and GitHub emails the owner about the
 # failed scheduled run. See docs/ci.md.
-name: Nightly live provider check
+name: Weekly live provider check
 
 on:
   schedule:
-    - cron: '17 3 * * *' # 03:17 UTC daily
+    - cron: '17 3 * * 1' # 03:17 UTC Mondays
   workflow_dispatch:
     inputs:
       provider:

@@ -5,7 +5,7 @@
 | Workflow | File | Runs on | Does |
 |---|---|---|---|
 | **CI** | `ci.yml` | push to `master`, every pull request, manual | `./gradlew :app:testDebugUnitTest :app:assembleDebug`; uploads the debug APK (`QuickNovel-debug-<sha>`) and the unit-test report (`unit-test-report`) as artifacts, kept 14 days |
-| **Nightly live provider check** | `nightly-live.yml` | daily 03:17 UTC, manual (optional provider filter) | runs `CjkProvidersLiveSmokeTest` with `-Dlive=1`: one search, one novel page and one chapter per CJK provider. A broken provider fails the job. The job summary lists each provider's result; the report is uploaded as `live-test-report` |
+| **Weekly live provider check** | `nightly-live.yml` | Mondays 03:17 UTC, manual (optional provider filter) | runs `CjkProvidersLiveSmokeTest` with `-Dlive=1`: one search, one novel page and one chapter per CJK provider. A broken provider fails the job. The job summary lists each provider's result; the report is uploaded as `live-test-report` |
 | **Release** | `release.yml` | push of a tag `v*`, manual (with a tag) | checks the tag is `v<versionName>`, runs the unit tests, builds the release APKs (R8-shrunk, one per ABI plus a universal one; signed with the release key if the secrets exist, otherwise with a throwaway debug key and a warning in the notes), publishes a GitHub release titled `QuickNovel <versionName>` with `QuickNovel-<versionName>-{arm64-v8a,armeabi-v7a,x86_64,universal}.apk` and `QuickNovel-<versionName>-mapping.txt.gz` attached (see [Release APKs](#release-apks-shrinking-and-crash-traces)) |
 | **Pre-release** | `pre-release.yml` | after a green CI run of a push to `master`, manual | rebuilds the debug APK of that commit and replaces the rolling `pre-release` GitHub release (marked pre-release) with `QuickNovel-<versionName>-pre.<run>.apk` |
 
@@ -21,7 +21,7 @@ read by the translation bench test at run time, which is skipped unless `-Dbench
 **Failure emails.** GitHub emails failed runs of a *scheduled* workflow to the user who last
 changed its `cron` line (with the default notification settings: *Settings → Notifications →
 Actions*). GitHub disables scheduled workflows after 60 days without repository activity; re-enable
-the nightly check in the Actions tab if that happens.
+the weekly check in the Actions tab if that happens.
 
 ## Signing secrets
 
@@ -176,7 +176,7 @@ every registered provider that looks CJK declares `zh`, `ja` or `ko` (translated
 on-demand translation depend on it). The fixtures contain no copyrighted prose: see
 `app/src/test/resources/providers/README.md`.
 
-### Live smoke test (nightly, or by hand)
+### Live smoke test (weekly, or by hand)
 
 ```
 ./gradlew :app:testDebugUnitTest --tests '*CjkProvidersLiveSmokeTest*' -Dlive=1
