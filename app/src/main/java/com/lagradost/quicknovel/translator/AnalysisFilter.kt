@@ -1,10 +1,12 @@
 package com.lagradost.quicknovel.translator
 
+import com.lagradost.quicknovel.imported.TxtChapterSplitter
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
 
 /**
- * Deterministic clean-up of an "Analyze novel" extraction before it is saved. The analysis
- * prompt asks for proper nouns and setting-specific terms only; this is the safety net for what
+ * Deterministic clean-up of the terms a model reports, before they reach the Story Bible: an
+ * "Analyze novel" extraction, and the `===TERMS===` tail of every translated passage. The
+ * prompts ask for proper nouns and setting-specific terms only; this is the safety net for what
  * models still return (see docs/translation-pipeline.md). In order:
  *
  * 1. Protected terms: an entry whose source (or alias) is already in the Story Bible passes
@@ -19,17 +21,32 @@ import com.lagradost.quicknovel.translator.db.GlossaryTerm
  *    has low confidence (< [SHORT_TERM_MIN_CONFIDENCE]) or an all-lowercase English rendering
  *    (毒 "poison", 麦畑 "wheat fields", 신 "god", 低级 "low level"); or any non-character entry
  *    the model rendered as one lowercase English word ([isPlainWord]: 두루마리 "scroll",
- *    비둘기 "pigeon", 환생 "reincarnation").
- * 5. [Reason.AUTHOR_NOTE]: the source occurs only inside author's-note blocks of the excerpt
- *    ([AuthorNotes]), e.g. the pen name in "土豆求月票".
- * 6. [Reason.MERGED]: entries with the same source are merged (highest confidence wins), then
+ *    비둘기 "pigeon", 환생 "reincarnation"); in translation ([From.TRANSLATION]) any
+ *    non-character entry rendered all in lowercase ("fish knife", "city guards", "black bread"):
+ *    the model itself treated it as ordinary English.
+ * 5. [Reason.PHRASE]: a saying or a list rather than a term: the source has clause punctuation
+ *    (印堂發黑，必有血光之災; 詭異，邪惡異形).
+ * 6. [Reason.CHAPTER_TITLE]: the source is a chapter heading itself (第16章 好奇) or occurs only
+ *    in the chapter heading lines of the excerpt (霧氣 from "第3章 霧氣").
+ * 7. [Reason.AUTHOR_NOTE]: the source occurs only inside author's-note blocks of the excerpt
+ *    ([AuthorNotes]), e.g. the pen name in "土豆求月票", a reader thanked for a reward.
+ * 8. [Reason.MERGED]: entries with the same source are merged (highest confidence wins), then
  *    entries of the same category with the same English rendering (case, whitespace, hyphens
- *    and a leading "the" ignored) are merged into one entry whose aliases hold the other forms.
+ *    and a leading "the" ignored) become one entry: the analysis keeps the other forms as
+ *    aliases; translation drops them, because a form one passage used for an entity can be an
+ *    ordinary word elsewhere (黃金 "Gold" for the 金之民 people).
  *
  * Confidence keeps its meaning (the model's own value; a merged entry takes the maximum).
  */
 object AnalysisFilter {
-    enum class Reason { NOT_PROPER, GENERIC_ROLE, COMMON_NOUN, AUTHOR_NOTE, MERGED }
+    enum class Reason { NOT_PROPER, GENERIC_ROLE, COMMON_NOUN, PHRASE, CHAPTER_TITLE, AUTHOR_NOTE, MERGED }
+
+    /**
+     * Where the terms come from. [TRANSLATION] (a passage's `===TERMS===` tail) is stricter than
+     * the [ANALYSIS] pre-pass, whose prompt sees whole chapters and asks for names only: it drops
+     * all-lowercase renderings and same-English duplicates instead of merging them as aliases.
+     */
+    enum class From { ANALYSIS, TRANSLATION }
 
     /** A removed entry; [into] is the source of the entry it was merged into ([Reason.MERGED]). */
     data class Dropped(val term: DiscoveredTerm, val reason: Reason, val into: String? = null)
@@ -129,16 +146,23 @@ object AnalysisFilter {
             .replace(Regex("""['’`]"""), "")
             .trim()
 
+    /** Clause punctuation: a source containing it is a saying or a list, not a term. */
+    private val CLAUSE_PUNCTUATION = Regex("""[，。！？；,!?;]""")
+
+    /** True if [source] is a sentence, saying or list rather than a single term ([Reason.PHRASE]). */
+    fun isPhrase(source: String): Boolean = CLAUSE_PUNCTUATION.containsMatchIn(source)
+
     /**
      * @param chapterTexts the raw plain text of each chapter in the excerpt (with author's notes,
-     *   if any); only used for the author's-note check, which is done per chapter because a note
-     *   block runs to the end of its chapter
+     *   if any); used for the author's-note check, which is done per chapter because a note
+     *   block runs to the end of its chapter, and for the chapter-title check
      * @param protectedSources every source form already in the Story Bible
      */
     fun filter(
         terms: List<DiscoveredTerm>,
         chapterTexts: List<String>,
         protectedSources: Set<String> = emptySet(),
+        from: From = From.ANALYSIS,
     ): Result {
         val dropped = mutableListOf<Dropped>()
         val kept = mutableListOf<DiscoveredTerm>()
@@ -146,6 +170,9 @@ object AnalysisFilter {
         val splits = chapterTexts.map { AuthorNotes.split(it) }
         val noteText = splits.map { it.notes }.filter { it.isNotEmpty() }.joinToString(PARAGRAPH_BREAK)
         val storyText = splits.joinToString(PARAGRAPH_BREAK) { it.story }
+        val (headingText, bodyText) = storyText.split(PARAGRAPH_BREAK)
+            .partition { TxtChapterSplitter.isHeading(it) }
+            .let { (h, b) -> h.joinToString(PARAGRAPH_BREAK) to b.joinToString(PARAGRAPH_BREAK) }
 
         for (raw in terms) {
             val t = raw.copy(source = raw.source.trim(), english = raw.english.trim())
@@ -161,26 +188,84 @@ object AnalysisFilter {
                 category != GlossaryTerm.CATEGORY_CHARACTER && isVeryShort(t.source) && !looksProper(t.source) &&
                     (t.confidence < SHORT_TERM_MIN_CONFIDENCE || isAllLowercase(t.english)) -> Reason.COMMON_NOUN
                 category != GlossaryTerm.CATEGORY_CHARACTER && isPlainWord(t.english) -> Reason.COMMON_NOUN
-                noteText.isNotEmpty() && isOnlyInNotes(t, noteText, storyText) -> Reason.AUTHOR_NOTE
+                from == From.TRANSLATION && category != GlossaryTerm.CATEGORY_CHARACTER && isAllLowercase(t.english) ->
+                    Reason.COMMON_NOUN
+                isPhrase(t.source) -> Reason.PHRASE
+                TxtChapterSplitter.isHeading(t.source) -> Reason.CHAPTER_TITLE
+                headingText.isNotEmpty() && isOnlyIn(t, headingText, bodyText) -> Reason.CHAPTER_TITLE
+                noteText.isNotEmpty() && isOnlyIn(t, noteText, storyText) -> Reason.AUTHOR_NOTE
                 else -> null
             }
             if (reason != null) dropped += Dropped(raw, reason) else kept += t
         }
 
-        val merged = mergeDuplicates(kept, dropped)
+        val merged = mergeDuplicates(kept, dropped, sameEnglishAsAlias = from == From.ANALYSIS)
         return Result(protectedTerms + merged, dropped)
     }
 
     /** [filter] for a single-chapter (or already joined) excerpt. */
-    fun filter(terms: List<DiscoveredTerm>, excerpt: String, protectedSources: Set<String> = emptySet()): Result =
-        filter(terms, listOf(excerpt), protectedSources)
+    fun filter(
+        terms: List<DiscoveredTerm>,
+        excerpt: String,
+        protectedSources: Set<String> = emptySet(),
+        from: From = From.ANALYSIS,
+    ): Result = filter(terms, listOf(excerpt), protectedSources, from)
 
-    private fun isOnlyInNotes(t: DiscoveredTerm, noteText: String, storyText: String): Boolean {
+    /** True if some form of [t] occurs in [inText] and none occurs in [elsewhere]. */
+    private fun isOnlyIn(t: DiscoveredTerm, inText: String, elsewhere: String): Boolean {
         val forms = (listOf(t.source) + t.aliases).map { it.trim() }.filter { it.isNotEmpty() }
-        return forms.any { noteText.contains(it) } && forms.none { storyText.contains(it) }
+        return forms.any { inText.contains(it) } && forms.none { elsewhere.contains(it) }
     }
 
-    private fun mergeDuplicates(terms: List<DiscoveredTerm>, dropped: MutableList<Dropped>): List<DiscoveredTerm> {
+    private val WORD_SEPARATORS = Regex("""[\s\-‐–_]+""")
+    private val POSSESSIVE = Regex("""['’]s?$""")
+
+    private fun englishWords(english: String): List<String> =
+        english.trim().replace(ARTICLE, "").split(WORD_SEPARATORS).filter { it.isNotEmpty() }
+
+    private fun sameWord(a: String, b: String): Boolean {
+        val x = a.lowercase().replace(POSSESSIVE, "")
+        val y = b.lowercase().replace(POSSESSIVE, "")
+        return x == y || x == y + "s" || x == y + "es" || y == x + "s" || y == x + "es"
+    }
+
+    /**
+     * True if [english] is [base] with only ordinary (lowercase) words added: "redwood marsh",
+     * "Redwood people" over "Redwood"; "old Viscount Grant" over "Viscount Grant"; "fifth energy
+     * level" over "energy level"; "the Viscount" over "viscount". A capitalised addition makes a
+     * new name ("Redwood Forest", "Ascendant Bloodline", "Viscount Grant" over "Grant").
+     */
+    fun addsOnlyOrdinaryWords(english: String, base: String): Boolean {
+        val words = englishWords(english)
+        val baseWords = englishWords(base)
+        if (baseWords.isEmpty() || baseWords.size > words.size) return false
+        for (i in 0..words.size - baseWords.size) {
+            if (baseWords.indices.all { sameWord(words[i + it], baseWords[it]) }) {
+                val rest = words.subList(0, i) + words.subList(i + baseWords.size, words.size)
+                return rest.all { it == it.lowercase() }
+            }
+        }
+        return false
+    }
+
+    /**
+     * The entry of [known] that [source] / [english] merely extends: [source] contains one of its
+     * forms (a shorter one) and [english] is its rendering plus ordinary words
+     * ([addsOnlyOrdinaryWords]): 紅杉沼澤 "redwood marsh" over 紅杉 → Redwood, 黑菇提取物
+     * "Black Mushroom extract" over 黑菇 → Black Mushroom. Such a term needs no entry of its own:
+     * the known part is in the prompt whenever the longer one occurs. null when there is none.
+     */
+    fun compoundOf(source: String, english: String, known: List<GlossaryTerm>): GlossaryTerm? =
+        known.firstOrNull { k ->
+            TermAliases.formsOf(k).any { it.length < source.length && source.contains(it) } &&
+                addsOnlyOrdinaryWords(english, k.english)
+        }
+
+    private fun mergeDuplicates(
+        terms: List<DiscoveredTerm>,
+        dropped: MutableList<Dropped>,
+        sameEnglishAsAlias: Boolean,
+    ): List<DiscoveredTerm> {
         // 1. Same source: keep the most confident entry, fill in what it lacks from the others.
         val bySource = LinkedHashMap<String, DiscoveredTerm>()
         for (t in terms) {
@@ -194,7 +279,7 @@ object AnalysisFilter {
             dropped += Dropped(loser, Reason.MERGED, into = winner.source)
         }
 
-        // 2. Same category and English rendering: one entry, the other sources become aliases.
+        // 2. Same category and English rendering: one entry, the other sources become aliases (or are dropped).
         val groups = LinkedHashMap<Pair<String, String>, MutableList<DiscoveredTerm>>()
         for (t in bySource.values) {
             val key = GlossaryTerm.normalizeCategory(t.category) to englishKey(t.english)
@@ -206,7 +291,7 @@ object AnalysisFilter {
             val ordered = group.sortedWith(compareByDescending<DiscoveredTerm> { it.confidence }.thenByDescending { it.source.length })
             var primary = ordered.first()
             for (other in ordered.drop(1)) {
-                primary = absorb(primary, other, addSourceAsAlias = true)
+                if (sameEnglishAsAlias) primary = absorb(primary, other, addSourceAsAlias = true)
                 dropped += Dropped(other, Reason.MERGED, into = primary.source)
             }
             primary

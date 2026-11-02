@@ -2,6 +2,7 @@ package com.lagradost.quicknovel.translator
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
+import com.lagradost.quicknovel.translator.db.TermCandidate
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -100,12 +101,59 @@ class TranslationEngineStoryBibleTest {
         // Continuity: premise and the previous chunk's English go to the second chunk.
         assertTrue(fake.prompts[1].contains("A cold story."))
         assertTrue(fake.prompts[1].contains("Su Wan looked into the distance."))
-        val added = result.autoAddedTerms.single()
-        assertEquals(0L, added.id)
-        assertEquals(4, added.firstChapter)
-        assertTrue(added.autoAdded)
+        // Seen in one chapter so far: a candidate, not a glossary entry.
+        assertTrue(result.autoAddedTerms.isEmpty())
+        val candidate = result.newCandidates.single()
+        assertEquals("苏婉", candidate.source)
+        assertEquals(4, candidate.chapterNum)
         assertTrue(result.pendingTerms.isEmpty())
         assertEquals("Su Wan watches. She leaves.", result.chapterSummary)
+    }
+
+    @Test
+    fun aCandidateFromAnotherChapterIsAddedWhenItRecurs() = runBlocking {
+        val fake = FakeLlm(listOf("Su Wan smiled.\n===TERMS===\n[]\n===SUMMARY===\nShe smiles.\nCharacters: 苏婉"))
+        val suWan = TermCandidate(
+            novelId = "n", source = "苏婉", english = "Su Wan", category = "character", gender = "female",
+            chapterNum = 2, confidence = 0.9f,
+        )
+        val unsure = TermCandidate(novelId = "n", source = "黑风寨", english = "Black Wind Fort", category = "location", chapterNum = 1, confidence = 0.3f)
+        val elsewhere = TermCandidate(novelId = "n", source = "青云宗", english = "Azure Cloud Sect", category = "sect", chapterNum = 1, confidence = 0.9f)
+        val result = engine(fake).translateChapter(
+            "苏婉在黑风寨笑了。", "n", 6, emptyList(),
+            options = TranslationOptions(strictMode = false),
+            candidates = listOf(suWan, unsure, elsewhere),
+        )
+        // Recurs and is confident: in the prompt from the first chunk, added with its first chapter.
+        assertTrue(fake.prompts[0].contains("苏婉 → Su Wan (female)"))
+        val added = result.autoAddedTerms.single()
+        assertEquals("苏婉", added.source)
+        assertEquals(2, added.firstChapter)
+        assertTrue(added.autoAdded)
+        // Recurs but not confident: review, not the prompt.
+        assertFalse(fake.prompts[0].contains("黑风寨 →"))
+        assertEquals("黑风寨", result.pendingTerms.single().source)
+        // Not in this chapter: stays a candidate.
+        assertTrue(result.newCandidates.isEmpty())
+    }
+
+    @Test
+    fun termsFromChapterTitlesAndAuthorsNotesAreDropped() = runBlocking {
+        val source = "第3章 視界\n\n伊恩睜開眼睛，看見了霧。\n\n感謝沐風之歌的盟主打賞！"
+        val fake = FakeLlm(
+            listOf(
+                "Chapter 3: Sight\n\nIan opened his eyes and saw the mist.\n\nThanks to Mu Feng Zhi Ge for the League Master reward!\n" +
+                    "===TERMS===\n[" +
+                    "{\"source\":\"視界\",\"english\":\"Sight\",\"category\":\"other\",\"confidence\":0.9}," +
+                    "{\"source\":\"伊恩\",\"english\":\"Ian\",\"category\":\"character\",\"gender\":\"male\",\"confidence\":0.9}," +
+                    "{\"source\":\"沐風之歌\",\"english\":\"Mu Feng Zhi Ge\",\"category\":\"character\",\"confidence\":0.8}," +
+                    "{\"source\":\"盟主\",\"english\":\"League Master\",\"category\":\"title\",\"confidence\":0.8}]\n" +
+                    "===SUMMARY===\nIan wakes.\nCharacters: 伊恩",
+            )
+        )
+        val result = engine(fake).translateChapter(source, "n", 2, emptyList(), options = TranslationOptions(strictMode = false))
+        assertEquals(listOf("伊恩"), result.newCandidates.map { it.source })
+        assertTrue(result.pendingTerms.isEmpty())
     }
 
     @Test
@@ -148,6 +196,7 @@ class TranslationEngineStoryBibleTest {
         // The term reported by chunk 1 is not folded into chunk 2's prompt, nor kept anywhere.
         assertFalse(fake.prompts[1].contains("苏婉 → Su Wan"))
         assertTrue(result.autoAddedTerms.isEmpty())
+        assertTrue(result.newCandidates.isEmpty())
         assertTrue(result.updatedTerms.isEmpty())
         assertTrue(result.pendingTerms.isEmpty())
         // No story context, and the previous chunk's English is not carried either.

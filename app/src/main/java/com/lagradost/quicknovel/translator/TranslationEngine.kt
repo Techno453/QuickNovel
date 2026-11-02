@@ -3,6 +3,7 @@ package com.lagradost.quicknovel.translator
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
 import com.lagradost.quicknovel.translator.db.PendingTerm
+import com.lagradost.quicknovel.translator.db.TermCandidate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,11 +34,16 @@ import kotlin.math.min
 data class TranslationResult(
     /** Chapter HTML (<p> per paragraph). */
     val englishText: String,
-    /** Terms for manual review: low confidence, conflicts, or auto-add disabled. */
+    /** Terms for manual review: conflicts, possible aliases, recurring candidates not confident enough to add. */
     val pendingTerms: List<PendingTerm>,
     val chunkCount: Int,
-    /** Confident new terms (auto_added = true, id = 0); already used for the rest of this chapter. */
+    /**
+     * Candidates from earlier chapters that recur in this one (auto_added = true, id = 0,
+     * firstChapter = the chapter they were first reported in); already used in this chapter.
+     */
     val autoAddedTerms: List<GlossaryTerm> = emptyList(),
+    /** Terms reported for the first time in this chapter: stored as [TermCandidate]s. */
+    val newCandidates: List<TermCandidate> = emptyList(),
     /** Existing unlocked auto-added terms that gained a gender / notes (keep their ids). */
     val updatedTerms: List<GlossaryTerm> = emptyList(),
     /** Chapter summary for the next chapter's context ("" if the model gave none). */
@@ -186,6 +192,13 @@ class TranslationEngine(
         private const val MAX_RECENT_CHARACTERS = 20
         private const val SUMMARY_MERGE_THRESHOLD = 900
         private const val MAX_SUMMARY_CHARS = 1000
+
+        /** About 200 characters of [text] around the first occurrence of [term] (review context). */
+        internal fun contextAround(text: String, term: String): String {
+            val at = text.indexOf(term).coerceAtLeast(0)
+            val start = (at - 80).coerceAtLeast(0)
+            return text.substring(start, minOf(text.length, start + 200)).trim()
+        }
 
         /** Bible entries for the prompt: terms in this chunk, plus recently present characters (pronoun context). */
         internal fun selectPromptTerms(
@@ -542,6 +555,7 @@ class TranslationEngine(
      * @param glossaryTerms the Story Bible (all terms of the novel)
      * @param context continuity context and translation style
      * @param options strict-mode retries, auto-add, carry-context switches
+     * @param candidates terms reported in one earlier chapter only ([TermCandidates])
      * @param onProgress fraction of chunks done, 0..1
      */
     suspend fun translateChapter(
@@ -551,11 +565,12 @@ class TranslationEngine(
         glossaryTerms: List<GlossaryTerm>,
         context: StoryContext = StoryContext(),
         options: TranslationOptions = TranslationOptions(),
+        candidates: List<TermCandidate> = emptyList(),
         onProgress: (Float) -> Unit = {}
     ): TranslationResult = withContext(Dispatchers.IO) {
         val plainSource = htmlToPlainText(sourceText)
         val chunks = splitIntoChunks(plainSource, chunkSizeFor(sourceLang))
-        assembleChapter(chunks, novelId, chapterNum, glossaryTerms, context, options, onProgress) { request ->
+        assembleChapter(chunks, novelId, chapterNum, glossaryTerms, context, options, candidates, onProgress) { request ->
             translateChunkLive(request, options)
         }
     }
@@ -573,9 +588,11 @@ class TranslationEngine(
     )
 
     /**
-     * The chapter loop shared by live translation and Batch API results: for each chunk, select
-     * the bible entries, get the chunk's output from [produce], fold discovered terms into the
-     * in-memory bible (so later chunks see them), then build the [TranslationResult].
+     * The chapter loop shared by live translation and Batch API results: promote the [candidates]
+     * that recur in this chapter, then for each chunk select the bible entries, get the chunk's
+     * output from [produce], clean the reported terms ([AnalysisFilter]) and fold them in
+     * ([BibleMerger]: new ones become candidates, used by later chunks when confident), then
+     * build the [TranslationResult].
      */
     internal suspend fun assembleChapter(
         chunks: List<String>,
@@ -584,6 +601,7 @@ class TranslationEngine(
         glossaryTerms: List<GlossaryTerm>,
         context: StoryContext,
         options: TranslationOptions,
+        candidates: List<TermCandidate> = emptyList(),
         onProgress: (Float) -> Unit = {},
         produce: suspend (ChunkRequest) -> ChunkOutput,
     ): TranslationResult {
@@ -591,12 +609,38 @@ class TranslationEngine(
         val chunkContext = if (options.carryStoryContext) context else StoryContext(style = context.style)
 
         val bible = glossaryTerms.toMutableList()
-        val autoAdded = LinkedHashMap<Long, GlossaryTerm>() // temporary negative id → new term
+        val autoAdded = LinkedHashMap<Long, GlossaryTerm>() // temporary negative id → promoted candidate
         val updated = LinkedHashMap<Long, GlossaryTerm>() // existing DB id → updated term
         val pending = mutableListOf<PendingTerm>()
+        val knownCandidates = mutableListOf<TermCandidate>()
+        val newCandidates = LinkedHashMap<String, TermCandidate>() // source → reported in this chapter
+        val candidateIds = HashMap<Long, String>() // temporary negative id → candidate source
         var nextTempId = -1L
 
         val recentCharacters = LinkedHashSet(chunkContext.recentCharacters)
+
+        if (options.collectTerms) {
+            val bibleForms = bible.flatMapTo(HashSet()) { TermAliases.formsOf(it) }
+            knownCandidates += candidates.filter { it.source !in bibleForms }
+            val storyText = AuthorNotes.strip(plainSource)
+            val sightings = TermCandidates.sightings(knownCandidates, chapterNum, storyText)
+            for (c in sightings.recurring) {
+                if (TermCandidates.confident(c, options)) {
+                    val term = TermCandidates.toTerm(c, nextTempId--)
+                    bible += term
+                    autoAdded[term.id] = term
+                    if (term.isCharacter) recentCharacters += term.source
+                } else {
+                    pending += TermCandidates.toPending(c, contextAround(storyText, c.source))
+                }
+            }
+            for (c in sightings.sameChapter) {
+                if (!TermCandidates.confident(c, options)) continue
+                val term = TermCandidates.toTerm(c, nextTempId--)
+                bible += term
+                candidateIds[term.id] = c.source
+            }
+        }
         var preceding = chunkContext.previousEnglishTail
         val parts = mutableListOf<String>()
         val summaries = mutableListOf<String>()
@@ -616,22 +660,32 @@ class TranslationEngine(
             val promptTerms = selectPromptTerms(inChunk, bible, recentCharacters)
             val out = produce(ChunkRequest(index, chunk, promptTerms, inChunk, chunkContext, preceding))
 
-            // Fold discovered terms into the in-memory bible so the next chunk already uses them.
+            // Fold reported terms in; confident new ones are used by the next chunks of this chapter.
             val decisions = if (options.collectTerms) {
-                BibleMerger.decide(out.terms, bible, novelId, chapterNum, chunk, options)
+                val bibleForms = bible.flatMapTo(HashSet()) { TermAliases.formsOf(it) }
+                val reported = AnalysisFilter.filter(out.terms, plainSource, bibleForms, AnalysisFilter.From.TRANSLATION).terms
+                BibleMerger.decide(reported, bible, novelId, chapterNum, chunk, options, knownCandidates + newCandidates.values)
             } else {
                 TermDecisions() // preview: reported terms are discarded
             }
-            for (term in decisions.autoAdd) {
-                val withId = term.copy(id = nextTempId--)
-                bible += withId
-                autoAdded[withId.id] = withId
-                if (withId.isCharacter) recentCharacters += withId.source
+            for (c in decisions.candidates) {
+                newCandidates[c.source] = c
+                if (!TermCandidates.confident(c, options)) continue
+                val term = TermCandidates.toTerm(c, nextTempId--)
+                bible += term
+                candidateIds[term.id] = c.source
+                if (term.isCharacter) recentCharacters += term.source
             }
             for (term in decisions.updates) {
                 val i = bible.indexOfFirst { it.id == term.id }
                 if (i >= 0) bible[i] = term
-                if (term.id < 0) autoAdded[term.id] = term else updated[term.id] = term
+                when {
+                    term.id >= 0 -> updated[term.id] = term
+                    term.id in autoAdded -> autoAdded[term.id] = term
+                    else -> candidateIds[term.id]?.let { source ->
+                        newCandidates[source]?.let { newCandidates[source] = it.copy(gender = term.gender, notes = term.notes) }
+                    }
+                }
             }
             pending += decisions.pending
             inChunk.filter { it.isCharacter }.forEach { recentCharacters += it.source }
@@ -659,6 +713,7 @@ class TranslationEngine(
             pendingTerms = pending.distinctBy { it.source to it.suggestedEnglish.lowercase() },
             chunkCount = chunks.size,
             autoAddedTerms = autoAdded.values.map { it.copy(id = 0) },
+            newCandidates = newCandidates.values.toList(),
             updatedTerms = updated.values.toList(),
             chapterSummary = summary,
             charactersPresent = present,

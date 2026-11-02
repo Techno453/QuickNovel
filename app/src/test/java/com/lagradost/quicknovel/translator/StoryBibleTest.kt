@@ -2,6 +2,7 @@ package com.lagradost.quicknovel.translator
 
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
 import com.lagradost.quicknovel.translator.db.NovelContext
+import com.lagradost.quicknovel.translator.db.TermCandidate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -185,24 +186,86 @@ class StoryBibleTest {
     // ---------------- merging discovered terms ----------------
 
     @Test
-    fun confidentNewTermsAreAutoAddedOthersPending() {
-        val chunk = "苏婉和黑风寨"
+    fun newTermsBecomeCandidatesNotGlossaryEntries() {
+        val chunk = "苏婉和黑风寨，还有刀"
         val d = BibleMerger.decide(
             listOf(
                 DiscoveredTerm("苏婉", "Su Wan", "character", "female", "senior sister", 0.9f),
                 DiscoveredTerm("黑风寨", "Black Wind Fort", "location", confidence = 0.4f),
-                DiscoveredTerm("不存在", "Ghost Term", confidence = 0.95f), // not in the chunk
+                DiscoveredTerm("不存在", "Ghost Term", confidence = 0.95f), // not in the chunk: never matchable
                 DiscoveredTerm("Su Wan", "Su Wan", confidence = 0.95f), // not source-language text
+                DiscoveredTerm("刀", "Blade", "artifact", confidence = 0.95f), // one character: never checked
             ),
             bible = emptyList(), novelId = "n", chapterNum = 3, sourceChunk = chunk
         )
-        val added = d.autoAdd.single()
-        assertEquals("Su Wan", added.english)
-        assertEquals("female", added.gender)
-        assertTrue(added.autoAdded)
-        assertFalse(added.locked)
-        assertEquals(3, added.firstChapter)
-        assertEquals(setOf("黑风寨", "不存在"), d.pending.map { it.source }.toSet())
+        assertEquals(listOf("苏婉", "黑风寨"), d.candidates.map { it.source })
+        val suWan = d.candidates.first()
+        assertEquals("Su Wan", suWan.english)
+        assertEquals("female", suWan.gender)
+        assertEquals("senior sister", suWan.notes)
+        assertEquals(3, suWan.chapterNum)
+        assertEquals(0.4f, d.candidates[1].confidence)
+        assertTrue(d.pending.isEmpty())
+
+        // Only a confident candidate is used for the rest of its chapter (and auto-added when it recurs).
+        assertTrue(TermCandidates.confident(suWan, TranslationOptions()))
+        assertFalse(TermCandidates.confident(d.candidates[1], TranslationOptions()))
+        assertFalse(TermCandidates.confident(suWan, TranslationOptions(autoAddTerms = false)))
+        val asTerm = TermCandidates.toTerm(suWan)
+        assertTrue(asTerm.autoAdded)
+        assertFalse(asTerm.locked)
+        assertEquals(3, asTerm.firstChapter)
+    }
+
+    @Test
+    fun aKnownCandidateIsNotReportedAgain() {
+        val stored = TermCandidate(novelId = "n", source = "苏婉", english = "Su Wan", chapterNum = 1, confidence = 0.9f)
+        val d = BibleMerger.decide(
+            listOf(DiscoveredTerm("苏婉", "Su Wan-er", "character", confidence = 0.9f)),
+            emptyList(), "n", 3, "苏婉笑了", candidates = listOf(stored)
+        )
+        assertTrue(d.candidates.isEmpty() && d.pending.isEmpty())
+    }
+
+    @Test
+    fun aKnownTermWithOrdinaryWordsAddedIsDropped() {
+        val bible = listOf(term("紅杉", "Redwood", "other", id = 1))
+        val title = TermCandidate(novelId = "n", source = "格蘭特子爵", english = "Viscount Grant", category = "title", chapterNum = 2)
+        val d = BibleMerger.decide(
+            listOf(
+                DiscoveredTerm("紅杉沼澤", "redwood marsh", "location", confidence = 0.9f),
+                DiscoveredTerm("紅杉人", "Redwood people", "other", confidence = 0.9f),
+                DiscoveredTerm("紅杉林", "Redwood Forest", "location", confidence = 0.9f), // a new name
+                DiscoveredTerm("老格蘭特子爵", "old Viscount Grant", "title", confidence = 0.9f),
+            ),
+            bible, "n", 5, "紅杉沼澤裡的紅杉人走出紅杉林，老格蘭特子爵", candidates = listOf(title)
+        )
+        assertEquals(listOf("紅杉林"), d.candidates.map { it.source })
+    }
+
+    @Test
+    fun sameEnglishAsAStoredEntryIsReviewedAsANewDuplicateIsDropped() {
+        val bible = listOf(term("金之民", "Gold", "other", id = 7))
+        val d = BibleMerger.decide(
+            listOf(
+                DiscoveredTerm("黃金", "Gold", "other", confidence = 0.9f),
+                DiscoveredTerm("赤之民", "Redblood", "other", confidence = 0.9f),
+                DiscoveredTerm("赤血", "the Redblood", "other", confidence = 0.8f),
+            ),
+            bible, "n", 69, "黃金、赤之民與赤血"
+        )
+        assertEquals("same English as existing 金之民 (alias?)", d.pending.single().notes)
+        assertEquals(listOf("赤之民"), d.candidates.map { it.source })
+    }
+
+    @Test
+    fun candidatesRecurOnlyInAnotherChapter() {
+        fun c(source: String, chapter: Int, aliases: List<String> = emptyList()) =
+            TermCandidate(novelId = "n", source = source, english = source, chapterNum = chapter, aliases = TermAliases.encode(aliases))
+        val candidates = listOf(c("苏婉", 2), c("黑风寨", 5), c("林小雨", 1, aliases = listOf("小雨")), c("青云宗", 3))
+        val s = TermCandidates.sightings(candidates, chapterNum = 5, storyText = "苏婉和小雨来到黑风寨。")
+        assertEquals(listOf("苏婉", "林小雨"), s.recurring.map { it.source })
+        assertEquals(listOf("黑风寨"), s.sameChapter.map { it.source })
     }
 
     @Test
@@ -214,7 +277,7 @@ class StoryBibleTest {
             ),
             bible = listOf(locked), novelId = "n", chapterNum = 0, sourceChunk = "林风"
         )
-        assertTrue(d.autoAdd.isEmpty())
+        assertTrue(d.candidates.isEmpty())
         assertTrue(d.updates.isEmpty())
         assertEquals("conflicts with existing Lin Feng", d.pending.single().notes)
 
@@ -229,14 +292,15 @@ class StoryBibleTest {
     fun aliasMatchesAndAutoAddCanBeDisabled() {
         val bible = listOf(term("林风", "Lin Feng", aliases = listOf("小风")))
         val alias = BibleMerger.decide(listOf(DiscoveredTerm("小风", "Lin Feng", confidence = 0.9f)), bible, "n", 0, "小风")
-        assertTrue(alias.autoAdd.isEmpty() && alias.pending.isEmpty())
+        assertTrue(alias.candidates.isEmpty() && alias.pending.isEmpty())
 
+        // Auto-add off: still a candidate (it goes to review when it recurs, not now).
         val off = BibleMerger.decide(
             listOf(DiscoveredTerm("苏婉", "Su Wan", confidence = 0.9f)), emptyList(), "n", 0, "苏婉",
             TranslationOptions(autoAddTerms = false)
         )
-        assertTrue(off.autoAdd.isEmpty())
-        assertEquals("苏婉", off.pending.single().source)
+        assertEquals("苏婉", off.candidates.single().source)
+        assertTrue(off.pending.isEmpty())
     }
 
     // ---------------- rename ----------------

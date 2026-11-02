@@ -3,6 +3,7 @@ package com.lagradost.quicknovel.translator
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
 import com.lagradost.quicknovel.translator.db.PendingTerm
+import com.lagradost.quicknovel.translator.db.TermCandidate
 
 /**
  * Continuity context for one chapter. Everything is optional; the engine only renders what is
@@ -25,7 +26,10 @@ data class StoryContext(
 data class TranslationOptions(
     /** Re-request a chunk once when the adherence / leak / paragraph checks fail. */
     val strictMode: Boolean = true,
-    /** Insert confident new terms into the bible immediately (otherwise everything goes to pending). */
+    /**
+     * Terms that recur in a later chapter go into the bible (and confident new terms are used for
+     * the rest of their chapter); off = recurring terms go to pending review instead.
+     */
     val autoAddTerms: Boolean = true,
     /** Send premise, previous chapter summary and previous English tail with every chunk. */
     val carryStoryContext: Boolean = true,
@@ -38,8 +42,8 @@ data class TranslationOptions(
      */
     val promptProfile: String? = null,
     /**
-     * Fold the terms the model reports into the bible (auto-added, updated or pending).
-     * Off = the reported terms are discarded: no auto-added, updated or pending terms at all.
+     * Fold the terms the model reports into the bible (candidates, auto-added, updated or pending).
+     * Off = the reported terms are discarded: no candidates, auto-added, updated or pending terms.
      */
     val collectTerms: Boolean = true,
 ) {
@@ -122,31 +126,41 @@ object NameReplacer {
 
 /** What to do with the terms a chunk reported. */
 data class TermDecisions(
-    /** New terms to insert as auto_added = true, locked = false. */
-    val autoAdd: List<GlossaryTerm> = emptyList(),
+    /** Terms reported for the first time: candidates ([TermCandidates]), not glossary entries yet. */
+    val candidates: List<TermCandidate> = emptyList(),
     /** Existing unlocked auto-added terms that gained information (gender / notes). */
     val updates: List<GlossaryTerm> = emptyList(),
-    /** Terms for manual review (low confidence, conflicts, auto-add disabled). */
+    /** Terms for manual review (conflicts, a possible alias of an existing entry). */
     val pending: List<PendingTerm> = emptyList(),
 )
 
 /**
- * Decides how discovered terms enter the Story Bible.
+ * Decides what the terms a passage reported (already cleaned by [AnalysisFilter]) do to the
+ * Story Bible.
  *
- * - Unknown source term, confidence >= threshold, auto-add on, and the source really occurs in
- *   the chunk → auto-added (auto_added = true, locked = false) so later chunks/chapters use it.
- * - Unknown source term otherwise → pending.
  * - Known source term (or alias) with a different English rendering → pending with notes
  *   "conflicts with existing X". The existing term is never overwritten.
  * - Known source term with the same rendering → ignored, except that an unlocked auto-added
  *   term with unknown gender takes a confident gender (and notes if it had none).
- * - A new source term whose English equals an existing term's English → pending (probably an alias).
+ * - Already a candidate → ignored (its first rendering stands).
+ * - Dropped: a source shorter than [QualityChecks.MIN_CHECKED_SOURCE_LENGTH] or not in the
+ *   passage (it could never be matched), and a known term plus ordinary words
+ *   ([AnalysisFilter.compoundOf]: "redwood marsh" when Redwood is known).
+ * - Same English as an existing glossary entry → pending (probably an alias); as a candidate or
+ *   another new term of this chapter → dropped.
+ * - Otherwise → a new [TermCandidate]: used for the rest of the chapter when confident, and
+ *   added to the bible only when it turns up in another chapter ([TermCandidates]).
  */
 object BibleMerger {
     private val CJK = Regex("""[\p{IsHan}\p{IsHiragana}\p{IsKatakana}\p{IsHangul}]""")
 
     fun containsCjk(text: String): Boolean = CJK.containsMatchIn(text)
 
+    /**
+     * @param bible the entries in use for this chapter: the glossary, plus (negative ids)
+     *   promoted and in-chapter candidates
+     * @param candidates every candidate known so far (stored and reported earlier in this chapter)
+     */
     fun decide(
         discovered: List<DiscoveredTerm>,
         bible: List<GlossaryTerm>,
@@ -154,23 +168,28 @@ object BibleMerger {
         chapterNum: Int,
         sourceChunk: String,
         options: TranslationOptions = TranslationOptions(),
+        candidates: List<TermCandidate> = emptyList(),
     ): TermDecisions {
         val bySource = HashMap<String, GlossaryTerm>()
         for (term in bible) for (form in TermAliases.formsOf(term)) bySource.putIfAbsent(form, term)
-        val byEnglish = bible.associateBy { it.english.trim().lowercase() }
+        val byEnglish = HashMap<String, GlossaryTerm>()
+        for (term in bible) byEnglish.putIfAbsent(AnalysisFilter.englishKey(term.english), term)
+        val candidateSources = candidates.mapTo(HashSet()) { it.source }
+        val candidateEnglish = candidates.mapTo(HashSet()) { AnalysisFilter.englishKey(it.english) }
+        val known = (bible + candidates.map { TermCandidates.toTerm(it) }).toMutableList()
 
-        val autoAdd = mutableListOf<GlossaryTerm>()
+        val newCandidates = mutableListOf<TermCandidate>()
         val updates = LinkedHashMap<Long, GlossaryTerm>()
         val pending = mutableListOf<PendingTerm>()
         val context = sourceChunk.take(200)
 
-        val candidates = discovered
+        val reported = discovered
             .map { it.copy(source = it.source.trim(), english = it.english.trim()) }
             .filter { isPlausible(it) }
             .sortedByDescending { it.confidence }
             .distinctBy { it.source }
 
-        for (d in candidates) {
+        for (d in reported) {
             fun toPending(notes: String) = PendingTerm(
                 novelId = novelId,
                 source = d.source,
@@ -194,45 +213,105 @@ object BibleMerger {
                         val base = updates[existing.id] ?: existing
                         updates[existing.id] = base.copy(gender = gender, notes = base.notes.ifBlank { d.notes.trim() })
                     }
-                } else {
+                } else if (existing.id >= 0) { // stored entries only: a term of this chapter keeps its first rendering
                     val note = "conflicts with existing ${existing.english}" +
                         (if (d.notes.isNotBlank()) "; ${d.notes.trim()}" else "")
                     pending += toPending(note)
                 }
                 continue
             }
+            if (d.source in candidateSources) continue
+            if (d.source.length < QualityChecks.MIN_CHECKED_SOURCE_LENGTH || !sourceChunk.contains(d.source)) continue
+            if (AnalysisFilter.compoundOf(d.source, d.english, known) != null) continue
 
-            val sameEnglish = byEnglish[d.english.lowercase()]
-            if (sameEnglish != null) {
+            val key = AnalysisFilter.englishKey(d.english)
+            val sameEnglish = byEnglish[key]
+            if (sameEnglish != null && sameEnglish.id >= 0) { // a stored entry (in-chapter ones have negative ids)
                 pending += toPending(
                     "same English as existing ${sameEnglish.source} (alias?)" +
                         (if (d.notes.isNotBlank()) "; ${d.notes.trim()}" else "")
                 )
                 continue
             }
+            if (sameEnglish != null || key in candidateEnglish) continue
 
-            if (options.autoAddTerms && d.confidence >= options.autoAddMinConfidence && sourceChunk.contains(d.source)) {
-                autoAdd += GlossaryTerm(
-                    novelId = novelId,
-                    source = d.source,
-                    english = d.english,
-                    category = GlossaryTerm.normalizeCategory(d.category),
-                    gender = GlossaryTerm.normalizeGender(d.gender),
-                    notes = d.notes.trim(),
-                    aliases = TermAliases.encode(d.aliases.filter { it != d.source }),
-                    firstChapter = chapterNum,
-                    autoAdded = true,
-                    locked = false,
-                )
-            } else {
-                pending += toPending(d.notes.trim())
-            }
+            val candidate = TermCandidate(
+                novelId = novelId,
+                source = d.source,
+                english = d.english,
+                category = GlossaryTerm.normalizeCategory(d.category),
+                gender = GlossaryTerm.normalizeGender(d.gender),
+                notes = d.notes.trim(),
+                aliases = TermAliases.encode(d.aliases.filter { it != d.source }),
+                chapterNum = chapterNum,
+                confidence = d.confidence,
+            )
+            newCandidates += candidate
+            known += TermCandidates.toTerm(candidate)
+            candidateSources += d.source
+            candidateEnglish += key
         }
-        return TermDecisions(autoAdd, updates.values.toList(), pending)
+        return TermDecisions(newCandidates, updates.values.toList(), pending)
     }
 
     private fun isPlausible(d: DiscoveredTerm): Boolean =
         d.source.isNotEmpty() && d.english.isNotEmpty() &&
             d.source.length <= 40 && d.english.length <= 80 &&
             containsCjk(d.source) && !containsCjk(d.english)
+}
+
+/**
+ * Terms found while translating (docs/translation-pipeline.md): a term the model reports is only
+ * a [TermCandidate] at first. The glossary exists to keep a name the same across chapters, so a
+ * candidate becomes a glossary entry when its source turns up in another chapter, with the
+ * rendering it was first given (the earlier chapter already uses it). Terms seen in one chapter
+ * only, most of what models report, never reach the glossary.
+ */
+object TermCandidates {
+    /** True if [c] is used in the prompt for the rest of its own chapter, and auto-added when it recurs. */
+    fun confident(c: TermCandidate, options: TranslationOptions): Boolean =
+        options.autoAddTerms && c.confidence >= options.autoAddMinConfidence
+
+    /** [c] as an auto-added, unlocked bible entry first seen in its chapter. */
+    fun toTerm(c: TermCandidate, id: Long = 0): GlossaryTerm = GlossaryTerm(
+        id = id,
+        novelId = c.novelId,
+        source = c.source,
+        english = c.english,
+        category = c.category,
+        gender = c.gender,
+        notes = c.notes,
+        aliases = c.aliases,
+        firstChapter = c.chapterNum,
+        autoAdded = true,
+        locked = false,
+    )
+
+    /** [c] for review (low confidence or auto-add off), with [context] from the chapter it recurred in. */
+    fun toPending(c: TermCandidate, context: String): PendingTerm = PendingTerm(
+        novelId = c.novelId,
+        source = c.source,
+        suggestedEnglish = c.english,
+        category = c.category,
+        context = context,
+        chapterNum = c.chapterNum,
+        gender = c.gender,
+        notes = c.notes,
+        confidence = c.confidence,
+    )
+
+    /** Candidates whose source occurs in a chapter, split by where they were first reported. */
+    data class Sightings(
+        /** First reported in another chapter: they recur, so they are promoted. */
+        val recurring: List<TermCandidate>,
+        /** First reported in this chapter (it is being translated again): reused, still candidates. */
+        val sameChapter: List<TermCandidate>,
+    )
+
+    /** [candidates] whose source or an alias occurs in [storyText] (the chapter without author's notes). */
+    fun sightings(candidates: List<TermCandidate>, chapterNum: Int, storyText: String): Sightings {
+        val seen = candidates.filter { c -> TermAliases.formsOf(toTerm(c)).any { storyText.contains(it) } }
+        val (same, other) = seen.partition { it.chapterNum == chapterNum }
+        return Sightings(recurring = other, sameChapter = same)
+    }
 }

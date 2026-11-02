@@ -244,6 +244,89 @@ class AnalysisFilterTest {
         assertFalse(AnalysisFilter.englishKey("Fittoa Territory") == AnalysisFilter.englishKey("Fittoa Region"))
     }
 
+    /** Cases from the glossary of 高天之上 (482 entries after 56 translated chapters, 2026-11-01). */
+    @Test
+    fun chapterTitlesSayingsAndRewardThanksAreDropped() {
+        val chapter = """
+            第3章 霧氣
+
+            伊恩閉上眼睛。他想起前世的一句話：印堂發黑，必有血光之災。
+
+            第72章 山潮之靈
+
+            感謝以下書友的打賞：
+            天堂之T羽
+            奇跡革新
+        """.trimIndent()
+        val r = AnalysisFilter.filter(
+            listOf(
+                t("霧氣", "Mist", "other"),                                // only in the heading
+                t("第72章 山潮之靈", "Chapter 72: Spirit of the Mountain Tide", "other"),
+                t("印堂發黑，必有血光之災", "A darkened brow foretells a bloody disaster", "other"),
+                t("天堂之T羽", "T-Yu of Heaven", "other"),                 // a username under the thanks line
+                t("伊恩", "Ian", "character"),
+            ),
+            chapter,
+        )
+        assertEquals(listOf("伊恩"), r.terms.map { it.source })
+        assertEquals(listOf("霧氣", "第72章 山潮之靈"), r.droppedFor(Reason.CHAPTER_TITLE).map { it.source })
+        assertEquals(listOf("印堂發黑，必有血光之災"), r.droppedFor(Reason.PHRASE).map { it.source })
+        assertEquals(listOf("天堂之T羽"), r.droppedFor(Reason.AUTHOR_NOTE).map { it.source })
+    }
+
+    @Test
+    fun translationDropsSameEnglishDuplicatesInsteadOfMakingAliases() {
+        val terms = listOf(
+            t("金之民", "Gold", "other", 0.9f),
+            t("黃金", "Gold", "other", 0.8f), // "gold" the metal elsewhere: must not become an alias
+        )
+        val r = AnalysisFilter.filter(terms, "", from = AnalysisFilter.From.TRANSLATION)
+        assertEquals(listOf("金之民"), r.terms.map { it.source })
+        assertTrue(r.terms.single().aliases.isEmpty())
+        assertEquals("金之民", r.dropped.single { it.reason == Reason.MERGED }.into)
+        // The analysis still merges them into one entry.
+        assertEquals(listOf("黃金"), AnalysisFilter.filter(terms, "").terms.single().aliases)
+    }
+
+    @Test
+    fun translationDropsLowercaseRenderings() {
+        val terms = listOf(
+            t("分魚刀", "fish knife", "artifact"),
+            t("城衛兵", "city guards", "title"),
+            t("預知視界", "Precognitive Sight", "technique"),
+        )
+        val r = AnalysisFilter.filter(terms, "", from = AnalysisFilter.From.TRANSLATION)
+        assertEquals(listOf("預知視界"), r.terms.map { it.source })
+        assertEquals(listOf("分魚刀", "城衛兵"), r.droppedFor(Reason.COMMON_NOUN).map { it.source })
+        // The analysis keeps longer lowercase renderings.
+        assertEquals(3, AnalysisFilter.filter(terms, "").terms.size)
+    }
+
+    @Test
+    fun aKnownTermPlusOrdinaryWordsIsACompound() {
+        assertTrue(AnalysisFilter.addsOnlyOrdinaryWords("redwood marsh", "Redwood"))
+        assertTrue(AnalysisFilter.addsOnlyOrdinaryWords("Redwood people", "redwood"))
+        assertTrue(AnalysisFilter.addsOnlyOrdinaryWords("old Viscount Grant", "Viscount Grant"))
+        assertTrue(AnalysisFilter.addsOnlyOrdinaryWords("fifth energy level", "energy level"))
+        assertTrue(AnalysisFilter.addsOnlyOrdinaryWords("the Viscount", "viscount"))
+        assertTrue(AnalysisFilter.addsOnlyOrdinaryWords("Source Essence gems", "Source Essence"))
+        assertTrue(AnalysisFilter.addsOnlyOrdinaryWords("small silver coins", "silver coin"))
+        assertFalse(AnalysisFilter.addsOnlyOrdinaryWords("Redwood Forest", "Redwood"))
+        assertFalse(AnalysisFilter.addsOnlyOrdinaryWords("Ascendant Bloodline", "Bloodline"))
+        assertFalse(AnalysisFilter.addsOnlyOrdinaryWords("Viscount Grant", "Grant"))
+        assertFalse(AnalysisFilter.addsOnlyOrdinaryWords("Source Seed heart", "Source Essence"))
+        assertFalse(AnalysisFilter.addsOnlyOrdinaryWords("Redwoods", "Redwood Forest"))
+
+        val known = listOf(
+            com.lagradost.quicknovel.translator.db.GlossaryTerm(source = "紅杉", english = "Redwood"),
+            com.lagradost.quicknovel.translator.db.GlossaryTerm(source = "源質", english = "Source Essence"),
+        )
+        assertEquals("紅杉", AnalysisFilter.compoundOf("紅杉沼澤", "redwood marsh", known)?.source)
+        assertNull(AnalysisFilter.compoundOf("紅杉林", "Redwood Forest", known))
+        assertNull(AnalysisFilter.compoundOf("源質心臟", "Source Seed heart", known))
+        assertNull(AnalysisFilter.compoundOf("紅杉", "redwood", known)) // the same source is not a compound
+    }
+
     @Test
     fun genericRoleHeuristics() {
         assertTrue(AnalysisFilter.isGenericRole("那个老头", "Old Man"))

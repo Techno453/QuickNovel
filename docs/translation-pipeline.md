@@ -45,24 +45,35 @@ Flow (`NovelAnalyzer` → `AnalysisRunner`):
 
 ### Author's notes (`AuthorNotes`)
 
-Detected per chapter, used only for analysis (translation input is never stripped):
+Detected per chapter, used by the analysis (the excerpt leaves them out, terms only found there
+are dropped) and by translation (terms the model reports only from them are dropped; see
+[Terms found while translating](#terms-found-while-translating)). Translation input is never
+stripped. Chinese markers are matched in Simplified and Traditional forms (Taiwanese sites serve
+the same books in Traditional characters):
 
-- block markers that start a note running to the end of the chapter: 作者的话, 作者有话说,
-  作者有话要说, 作者感言, 作者留言, 作者按, あとがき, 後書き, 作者コメント, 作者より,
-  작가의 말, 작가 후기 (near the start of a paragraph, after brackets or dashes);
+- block markers that start a note running to the end of the chapter: 作者的话 / 作者的話,
+  作者有话说 / 作者有話說, 作者有话要说 / 作者有話要說, 作者感言, 作者留言, 作者按, あとがき,
+  後書き, 作者コメント, 作者より, 작가의 말, 작가 후기 (near the start of a paragraph, after
+  brackets or dashes);
 - single-paragraph notes: `PS:` / `ps：` / `P.S.` at the start; 求月票, 求推荐, 求收藏, 求订阅,
-  求打赏, 推荐票, 月票, 票票, 书友 anywhere; Korean donation thanks (후원 at the start,
+  求打赏, 推荐票, 月票, 票票, 书友 (and their Traditional forms) anywhere; thanks for readers'
+  rewards (感谢 / 感謝 … 打赏 / 打賞 / 万赏 / 萬賞, or … 的盟主 / 的舵主 / 的堂主 / 的白银: a bare
+  盟主 is also the wuxia "alliance leader") and 加更 (a bonus chapter for a reader); plugs for
+  other books (推荐 / 推薦 / 新书 / 新書 … 《); Korean donation thanks (후원 at the start,
   후원 감사, 후원해 주신; not the in-story 후원자 "sponsor");
+- a note line ending in a colon ("感謝以下書友的打賞：") also takes the short paragraphs right
+  after it (at most 20 characters each: the usernames it lists);
 - a paragraph that opens with a round bracket `（` / `(` and mentions 书友, 新书, 收藏, 票票,
-  推荐票, 月票, 求票, 码字, 打赏 or 订阅 is a note up to its closing bracket, even across
-  paragraphs. This is how 斗破苍穹 chapter 1 ends (the pen name 土豆, 四川 and the previous book
-  剑圣). `【…】` is not treated this way because system messages use it.
+  推荐票, 月票, 求票, 码字, 打赏, 订阅, 加更 (or their Traditional forms) is a note up to its
+  closing bracket, even across paragraphs. This is how 斗破苍穹 chapter 1 ends (the pen name 土豆,
+  四川 and the previous book 剑圣). `【…】` is not treated this way because system messages use it.
 
 Pen names cannot be known in advance; they are caught because they sit inside such a note.
 
 ### Filter rules (`AnalysisFilter`)
 
-Applied to every extraction before saving, in this order:
+Applied to every extraction before saving, and to the terms each translated passage reports
+(`From.TRANSLATION`, stricter where noted), in this order:
 
 1. **Protected:** an entry whose source or alias is already in the bible (locked or not) passes
    through untouched and is never merged.
@@ -79,13 +90,21 @@ Applied to every extraction before saving, in this order:
      rendering (毒 "poison", 麦畑 "wheat fields", 低级 "low level", 天才 "prodigy", 신 "god",
      차원 "dimension"), or
    - that the model rendered as a single lowercase English word ("scroll", "pigeon",
-     "reincarnation", "adventurer").
-5. **Author's note only:** every form of the entry occurs only inside author's notes of the
-   excerpt (土豆, 四川, 剑圣 above).
-6. **Merge:** entries with the same source are merged (the most confident wins; gender, notes
+     "reincarnation", "adventurer"), or, in translation, entirely in lowercase ("fish knife",
+     "city guards", "black bread": the model itself treated it as ordinary English).
+5. **Phrase:** the source has clause punctuation (，。！？；), so it is a saying or a list
+   (印堂發黑，必有血光之災).
+6. **Chapter title:** the source is a chapter heading itself (第16章 好奇) or occurs only in the
+   heading lines of the excerpt (霧氣 from "第3章 霧氣"). Headings are what
+   `TxtChapterSplitter.isHeading` recognises.
+7. **Author's note only:** every form of the entry occurs only inside author's notes of the
+   excerpt (土豆, 四川, 剑圣 above; reader usernames, recommended books, Qidian).
+8. **Merge:** entries with the same source are merged (the most confident wins; gender, notes
    and aliases are filled in from the others), then entries of the same category with the same
    English rendering (case, spacing, hyphens, apostrophes and a leading "the" ignored) become one
    entry; the other sources become aliases. The fuller (longer) source wins a confidence tie.
+   Translation drops the other entries instead of making them aliases: a form one passage used
+   for an entity can be an ordinary word elsewhere (黃金 "Gold" for the 金之民 people).
 
 Confidence keeps its meaning (the model's value; a merged entry takes the maximum). The lists
 are deliberately small; the prompt does most of the work. What is still left to the prompt:
@@ -117,6 +136,51 @@ removed. The new prompt itself has not been benchmarked yet.
 - DB: `novel_context.analyzed_at` (epoch ms, 0 = never) and `analysis_chapters`, added in
   `TranslatorDatabase` v5 (`MIGRATION_4_5`). Novels that already had a premise when upgrading
   count as analyzed. The state is not part of the Story Bible JSON export.
+
+## Terms found while translating
+
+Every translated passage ends with a `===TERMS===` list of names the model met that are not in
+the Story Bible. Until 2026-11-01 every confident entry went straight into the glossary, and it
+grew by about eight entries a chapter: the glossary of 高天之上 had 482 entries after 56
+translated chapters (2026-11-01 export), and half of them never appeared in a second chapter
+(木杓 "wooden spoon", reader usernames, chapter titles). A glossary entry only helps when the name
+comes back, so now:
+
+1. **Prompt** (`PromptTemplates` output protocol): list only names and the story's own terms that
+   another translator could render differently; never ordinary words (knife, salmon, wooden
+   spoon), plain titles and roles, a bible term with ordinary words added, chapter titles,
+   sayings, author's notes or thanks to readers; most passages add nothing.
+2. **Filter** (`AnalysisFilter`, `From.TRANSLATION`): the [filter rules](#filter-rules-analysisfilter)
+   with the whole chapter as the excerpt, so chapter titles and author's notes are recognised.
+3. **Merge** (`BibleMerger.decide`): a known source with a different rendering goes to review
+   ("conflicts with existing X"); the same English as a stored entry goes to review ("alias?");
+   dropped: a source of one character or not in the passage (it could never be matched), a known
+   term plus ordinary words (`AnalysisFilter.compoundOf`: 紅杉沼澤 "redwood marsh" when 紅杉 →
+   Redwood is known; a capitalised addition such as "Redwood Forest" is a new name), and the same
+   English as a candidate or another new term of the chapter (赤之民 / 赤血 both "Redblood").
+4. **Candidate** (`TermCandidates`, table `term_candidates`, DB v10): what is left is stored as a
+   candidate, not a glossary entry. A confident one (≥ 0.6 and "Add discovered names
+   automatically" on) is used for the rest of its own chapter, so the chapter stays consistent.
+5. **Promotion:** before a chapter is translated, every candidate whose source or alias occurs in
+   it (author's notes left out) and that was first reported in *another* chapter recurs: it is
+   added to the glossary (auto-added, unlocked, first chapter = where it was first reported, the
+   rendering it was first given, so the earlier chapter matches) and is in the prompt from the
+   first passage on; when it is not confident, or auto-add is off, it goes to review instead.
+   Either way it leaves the candidates. Two chapters translated at the same time that both report
+   a new name promote it when the second one is saved (`StoryBibleRepository.addCandidates`).
+   Re-translating the chapter a candidate came from uses it but does not count as recurring.
+
+Candidates are never shown, exported or used by a preview; deleting a novel deletes them. Manual
+entries, locked entries and the Analyze novel pre-pass are unchanged (the pre-pass reads several
+chapters at once and still adds its terms directly).
+
+Replaying the 高天之上 export through these rules (the export plus the app's translated EPUB to
+count chapters, with the same rules in a throwaway unit test; no API calls) kept 122 of 482: 206
+were ordinary words, 135 appeared in one chapter only, 14 were compounds of a kept term, 4 were
+chapter titles or sayings and 1 a duplicate rendering. About a dozen of the 122 are chapter
+titles and reward thanks that the replay could not recognise without the source text; live
+translation drops them. The new prompt itself has not been benchmarked yet. The glossary that
+already exists is not changed.
 
 ## Read ahead
 
@@ -174,7 +238,7 @@ sources that are not translated read exactly as with the old Stream Read.
   an empty term list, no premise / previous summary / previous English tail, only the novel's
   name style, and `TranslationOptions.preview()` (the user's strict mode and prompt profile; no
   auto-add, no story context, `collectTerms = false` so the terms the model reports are dropped:
-  no auto-added, updated or pending terms). Same engine, model, fallback, spend tag, per-chapter
+  no candidates, auto-added, updated or pending terms). Same engine, model, fallback, spend tag, per-chapter
   lock and quality checks (CJK leaks, paragraphs; glossary violations do not apply).
 - **A preview is a throwaway:** the chapter row goes to `translated_chapters` with
   `preview = 1` (DB v9, `MIGRATION_8_9`; `glossary_violations` NULL, no summary, no terms). The
@@ -367,8 +431,9 @@ so.
    `message.refusal` without content and HTTP errors are failures; absent lines are missing). Then, **in chapter order** and under the per-chapter
    lock, each PENDING chapter goes through `BatchChapterProcessor`, which runs the live chapter
    loop (`TranslationEngine.assembleChapter`) with the batch replies: the `===TERMS===` tail is
-   parsed and merged into the **live** bible with BibleMerger (so later chapters see names found
-   in earlier ones, as far as the post-processing goes), and QualityChecks run per chunk.
+   parsed and merged into the **live** bible and term candidates with BibleMerger (so a name
+   reported by one chapter is promoted when a later one contains it, as far as the
+   post-processing goes), and QualityChecks run per chunk.
    - a missing / failed / cut-off / blocked / refused chunk is re-translated live (full live path
      with the fallback model, at the normal price, tagged `translate` with the batch id); a live
      re-do sees the previous chunk's English;
@@ -551,6 +616,11 @@ The details and the limits are in [search.md](search.md).
   `spend_entries` (+ index on timestamp), `batch_jobs`, `batch_chapters`.
 - DB v9 (`MIGRATION_8_9`, additive): `translated_chapters.preview` INTEGER NOT NULL DEFAULT 0
   (rows made by the result page's [Preview](#preview); existing rows are normal translations).
+- DB v10 (`MIGRATION_9_10`, additive): `term_candidates` (unique on novel id + source), the
+  [terms found while translating](#terms-found-while-translating) in one chapter only.
+- `translator/StoryBible.kt` (`BibleMerger`, `TermCandidates`), `translator/db/TermCandidate.kt`:
+  terms found while translating. Tests: `StoryBibleTest`, `TranslationEngineStoryBibleTest`,
+  `AnalysisFilterTest`, `AuthorNotesTest`, `BatchTest`.
 - Tests: `SpendCapsTest`, `SpendLedgerTest`, `PowerPolicyTest`, `SourceHashTest`, `BatchTest`,
   `TranslatorDatabaseMigrationTest` (also compares the migration with Room's generated schema).
 - `translator/AuthorNotes.kt`, `AnalysisFilter.kt`, `AnalysisRunner.kt`: pure analysis logic.

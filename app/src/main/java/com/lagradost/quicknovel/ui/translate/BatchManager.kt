@@ -316,7 +316,9 @@ object BatchManager {
                 }
                 val inputs = StoryBibleRepository.loadChapterInputs(ctx, job.novelId, row.chapterNum, job.sourceLang)
                 val outcome = withContext(SpendTag(SpendKind.TRANSLATE, job.novelId, row.chapterNum, job.id, meter)) {
-                    processor.process(job.novelId, row.chapterNum, chapterBuilt.chunks, chapter.outcomes, inputs.bible, inputs.context)
+                    processor.process(
+                        job.novelId, row.chapterNum, chapterBuilt.chunks, chapter.outcomes, inputs.bible, inputs.context, inputs.candidates,
+                    )
                 }
                 val result = outcome.result
                 if (result == null) {

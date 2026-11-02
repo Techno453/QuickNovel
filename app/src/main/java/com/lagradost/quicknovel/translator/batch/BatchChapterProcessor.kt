@@ -6,12 +6,14 @@ import com.lagradost.quicknovel.translator.TranslationEngine
 import com.lagradost.quicknovel.translator.TranslationOptions
 import com.lagradost.quicknovel.translator.TranslationResult
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
+import com.lagradost.quicknovel.translator.db.TermCandidate
 import kotlinx.coroutines.CancellationException
 
 /**
  * Post-processing of one chapter of batch results, in chunk order, with the same code as live
  * translation ([TranslationEngine.assembleChapter]): the `===TERMS===` tail is parsed, discovered
- * terms go through BibleMerger against the live bible, and QualityChecks run on every chunk.
+ * terms go through BibleMerger against the live bible and term candidates, and QualityChecks run
+ * on every chunk.
  *
  * A chunk goes to the live path when
  * - it is missing, failed, cut off or blocked → full live translation (with the fallback model);
@@ -46,12 +48,13 @@ class BatchChapterProcessor(
         outcomes: List<ChunkOutcome>,
         bible: List<GlossaryTerm>,
         context: StoryContext,
+        candidates: List<TermCandidate> = emptyList(),
     ): Outcome {
         require(chunks.size == outcomes.size) { "chunks and outcomes differ in size" }
         var liveChunks = 0
         var strictRetries = 0
         return try {
-            val result = engine.assembleChapter(chunks, novelId, chapterNum, bible, context, options) { request ->
+            val result = engine.assembleChapter(chunks, novelId, chapterNum, bible, context, options, candidates) { request ->
                 val outcome = outcomes[request.index]
                 val batchOut = (outcome as? ChunkOutcome.Ok)?.let { engine.evaluateReply(request.chunk, it.content, request.checkTerms) }
                 val unusable = batchOut == null || batchOut.translation.isBlank() ||

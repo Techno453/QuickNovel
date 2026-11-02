@@ -6,6 +6,7 @@ import com.lagradost.quicknovel.translator.db.ChapterSummary
 import com.lagradost.quicknovel.translator.db.GlossaryTerm
 import com.lagradost.quicknovel.translator.db.NovelContext
 import com.lagradost.quicknovel.translator.db.PendingTerm
+import com.lagradost.quicknovel.translator.db.TermCandidate
 import com.lagradost.quicknovel.translator.db.TranslatedChapter
 import com.lagradost.quicknovel.translator.db.TranslatorDatabase
 import kotlinx.coroutines.sync.Mutex
@@ -31,6 +32,8 @@ object StoryBibleRepository {
         val bible: List<GlossaryTerm>,
         val context: StoryContext,
         val options: TranslationOptions,
+        /** Terms reported in one chapter so far ([TermCandidates]); none in a preview. */
+        val candidates: List<TermCandidate> = emptyList(),
     ) {
         companion object {
             /**
@@ -65,9 +68,10 @@ object StoryBibleRepository {
         val db = TranslatorDatabase.getInstance(ctx)
         val options = SecurePrefs.translationOptions(ctx)
         val bible = db.glossaryDao().getAllTermsSync(novelId)
+        val candidates = if (options.collectTerms) db.termCandidateDao().getAll(novelId) else emptyList()
         val style = loadStyle(ctx, novelId, lang)
         if (!options.carryStoryContext) {
-            return ChapterInputs(bible, StoryContext(style = style), options)
+            return ChapterInputs(bible, StoryContext(style = style), options, candidates)
         }
 
         val premise = db.novelContextDao().get(novelId)?.premise.orEmpty()
@@ -88,11 +92,14 @@ object StoryBibleRepository {
                 style = style,
             ),
             options = options,
+            candidates = candidates,
         )
     }
 
     /**
      * Stores the translation and everything it discovered. Never overwrites a locked term.
+     * Promoted candidates (auto-added, or pending review) leave the candidate table; new ones join
+     * it ([addCandidates]).
      * A [preview] translation stores only the chapter row, marked `preview` (served only inside a
      * preview, see [chapterRow]); no summary, no terms. A normal translation replaces a preview row.
      */
@@ -120,10 +127,45 @@ object StoryBibleRepository {
                 )
             )
         }
-        val added = addAutoTerms(ctx, novelId, result.autoAddedTerms)
+        var added = addAutoTerms(ctx, novelId, result.autoAddedTerms)
         applyUpdates(ctx, novelId, result.updatedTerms)
-        val pending = addPending(ctx, novelId, result.pendingTerms)
+        var pending = addPending(ctx, novelId, result.pendingTerms)
+        val resolved = (result.autoAddedTerms.map { it.source } + result.pendingTerms.map { it.source }).distinct()
+        if (resolved.isNotEmpty()) db.termCandidateDao().deleteSources(novelId, resolved)
+        val promoted = addCandidates(ctx, novelId, result.newCandidates)
+        added += promoted.autoAdded
+        pending += promoted.pending
         return PersistOutcome(added, pending)
+    }
+
+    /**
+     * Stores [candidates] reported for the first time by one chapter. A candidate already stored
+     * from another chapter (two chapters translated at the same time) has recurred: it is
+     * promoted with its stored rendering (auto-added, or pending when not confident). Returns
+     * what was promoted.
+     */
+    suspend fun addCandidates(ctx: Context, novelId: String, candidates: List<TermCandidate>): PersistOutcome {
+        if (candidates.isEmpty()) return PersistOutcome(0, 0)
+        val db = TranslatorDatabase.getInstance(ctx)
+        val options = SecurePrefs.translationOptions(ctx)
+        val recurring = mutableListOf<TermCandidate>()
+        lockFor(novelId).withLock {
+            val known = db.glossaryDao().getAllTermsSync(novelId).flatMap { TermAliases.formsOf(it) }.toHashSet()
+            for (c in candidates) {
+                if (c.source in known) continue
+                val stored = db.termCandidateDao().getBySource(novelId, c.source)
+                when {
+                    stored == null -> db.termCandidateDao().insert(c.copy(id = 0, novelId = novelId))
+                    stored.chapterNum != c.chapterNum -> recurring += stored
+                }
+            }
+            if (recurring.isNotEmpty()) db.termCandidateDao().deleteSources(novelId, recurring.map { it.source })
+        }
+        val (confident, unsure) = recurring.partition { TermCandidates.confident(it, options) }
+        return PersistOutcome(
+            autoAdded = addAutoTerms(ctx, novelId, confident.map { TermCandidates.toTerm(it) }),
+            pending = addPending(ctx, novelId, unsure.map { TermCandidates.toPending(it, context = "") }),
+        )
     }
 
     /**
