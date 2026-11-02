@@ -75,7 +75,7 @@
     <string name="tr_analysis_model_needs_key">%1$s · needs a %2$s API key; the translation model is used until then</string>
     <string name="tr_analysis_model_dialog_note">Model for Analyze novel, which builds the glossary (names, genders, places, terms) and the premise from the first chapters. It runs once per novel, so a stronger model costs little. Cost shown for %1$d Chinese chapters.</string>
     <string name="tr_auto_add">Add discovered names automatically</string>
-    <string name="tr_auto_add_desc">Confident new names found while translating go into the glossary right away instead of waiting for review</string>
+    <string name="tr_auto_add_desc">Confident names found while translating go into the glossary once they turn up in a second chapter, instead of waiting for review</string>
 
     <!-- Spending and limits -->
     <string name="tr_spending">Spending</string>

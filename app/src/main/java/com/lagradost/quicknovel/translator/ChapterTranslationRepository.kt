@@ -109,6 +109,7 @@ object ChapterTranslationRepository {
                     glossaryTerms = inputs.bible,
                     context = inputs.context,
                     options = inputs.options,
+                    candidates = inputs.candidates,
                     onProgress = onProgress,
                 )
             }

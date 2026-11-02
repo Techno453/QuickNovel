@@ -33,7 +33,9 @@ ${TranslationProtocol.SUMMARY_MARKER}
 <2-4 sentences summarizing what happens in this passage>
 Characters: <source-language names of the characters present, comma-separated>
 
-In ${TranslationProtocol.TERMS_MARKER} list only names and recurring terms (people, places, sects, ranks, techniques, items, creatures, titles) that appear in this passage and are NOT already in the Story Bible; write [] if there are none. confidence (0-1) is how sure you are of the rendering and the gender.
+In ${TranslationProtocol.TERMS_MARKER} list only names and this story's own terms that appear in this passage, are NOT in the Story Bible, and that another translator could render differently: personal names, named places and organizations, and this world's own ranks, techniques, creatures, items and titles.
+Never list: ordinary words, even important ones (knife, salmon, fisherman, ritual, wooden spoon, brown bear); plain titles and roles (viscount, elder, prince, the shaman); a Story Bible term with ordinary words added (Redwood is listed, so not "redwood marsh"); chapter titles; sayings; anything from author's notes or thanks to readers (usernames, other books, websites).
+Most passages add nothing new: then write []. confidence (0-1) is how sure you are of the rendering and the gender.
 """.trim()
 
     private fun system(intro: String, conventions: String, languageName: String) =

@@ -360,8 +360,20 @@ class BatchTest {
         assertEquals(0, fake.requests.size)
         val result = outcome.result!!
         assertEquals("<p>Xiao Yan stood up.</p>", result.englishText)
-        assertEquals(listOf("萧炎"), result.autoAddedTerms.map { it.source })
+        // First seen here: a candidate (the glossary gets it when it recurs in another chapter).
+        assertTrue(result.autoAddedTerms.isEmpty())
+        assertEquals(listOf("萧炎"), result.newCandidates.map { it.source })
         assertEquals(listOf("萧炎"), result.charactersPresent)
+
+        // A candidate from an earlier chapter that occurs in this one is added.
+        val earlier = com.lagradost.quicknovel.translator.db.TermCandidate(
+            novelId = novelId, source = "萧炎", english = "Xiao Yan", category = "character", chapterNum = 2, confidence = 0.9f,
+        )
+        val again = processor.process(
+            novelId, 5, listOf("萧炎站了起来。"), listOf(ChunkOutcome.Ok(reply, "stop")), emptyList(), StoryContext(), listOf(earlier),
+        ).result!!
+        assertEquals(listOf(2), again.autoAddedTerms.map { it.firstChapter })
+        assertTrue(again.newCandidates.isEmpty())
     }
 
     @Test

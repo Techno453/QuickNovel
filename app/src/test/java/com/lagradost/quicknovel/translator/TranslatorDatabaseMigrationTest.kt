@@ -37,7 +37,31 @@ class TranslatorDatabaseMigrationTest {
         val migrations = TranslatorDatabase.ALL_MIGRATIONS
         assertEquals(1, migrations.first().startVersion)
         migrations.toList().zipWithNext().forEach { (a, b) -> assertEquals(a.endVersion, b.startVersion) }
-        assertEquals(9, migrations.last().endVersion)
+        assertEquals(10, migrations.last().endVersion)
+    }
+
+    @Test
+    fun migration9To10OnlyCreatesTheCandidateTable() {
+        val statements = mutableListOf<String>()
+        TranslatorDatabase.MIGRATION_9_10.migrate(recordingDb(statements))
+        assertEquals(TranslatorDatabase.MIGRATION_9_10_SQL, statements)
+        assertEquals(2, statements.size)
+        assertTrue(statements[0].startsWith("CREATE TABLE IF NOT EXISTS `term_candidates`"))
+        assertTrue(statements[1].startsWith("CREATE UNIQUE INDEX IF NOT EXISTS `index_term_candidates_novel_id_source`"))
+    }
+
+    /** The v10 table and its unique index are exactly what Room creates for a fresh install. */
+    @Test
+    fun migration9To10MatchesRoomsGeneratedSchema() {
+        val generated = listOf(
+            "build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+            "app/build/generated/ksp/debug/kotlin/com/lagradost/quicknovel/translator/db/TranslatorDatabase_Impl.kt",
+        ).map { java.io.File(it) }.firstOrNull { it.isFile }
+        org.junit.Assume.assumeTrue("KSP output not found", generated != null)
+        val impl = generated!!.readText()
+        for (sql in TranslatorDatabase.MIGRATION_9_10_SQL) {
+            assertTrue("Room creates a different schema than:\n$sql", impl.contains(sql))
+        }
     }
 
     @Test

@@ -79,6 +79,36 @@ class AuthorNotesTest {
     }
 
     @Test
+    fun traditionalChineseNotesRewardThanksAndBookPlugs() {
+        assertTrue(AuthorNotes.startsBlock("作者的話：今天兩更。"))
+        assertTrue(AuthorNotes.isNoteLine("求推薦票，求訂閱！"))
+        assertTrue(AuthorNotes.isNoteLine("感謝沐風之歌的盟主打賞！"))
+        assertTrue(AuthorNotes.isNoteLine("感謝不離南山的盟主！"))
+        assertTrue(AuthorNotes.isNoteLine("今天為佐伯伽椰子加更。"))
+        assertTrue(AuthorNotes.isNoteLine("推薦一本朋友的新書《天啟預報》，非常好看。"))
+        // In-story uses of the same words are not notes.
+        assertFalse(AuthorNotes.isNoteLine("林风感谢武林盟主的救命之恩。"))
+        assertFalse(AuthorNotes.isNoteLine("盟主站在高台上，俯视众人。"))
+        assertFalse(AuthorNotes.isNoteLine("他推开门，桌上放着一本《论语》。"))
+    }
+
+    @Test
+    fun aThanksLineEndingInAColonTakesTheUsernameListAfterIt() {
+        val chapter = """
+            伊恩走出屋子。
+
+            感謝以下書友的打賞：
+            天堂之T羽
+            奇跡革新
+            汪喵之蒼
+            第二天清晨，伊恩又來到了碼頭，海風帶著鹹味吹過港口。
+        """.trimIndent()
+        val split = AuthorNotes.split(chapter)
+        assertEquals("伊恩走出屋子。\n\n第二天清晨，伊恩又來到了碼頭，海風帶著鹹味吹過港口。", split.story)
+        assertTrue(split.notes.contains("奇跡革新") && split.notes.contains("汪喵之蒼"))
+    }
+
+    @Test
     fun textWithoutNotesIsUnchanged() {
         val text = "第一段。\n\n第二段。"
         val split = AuthorNotes.split(text)

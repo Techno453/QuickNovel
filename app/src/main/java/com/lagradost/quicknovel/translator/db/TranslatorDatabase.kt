@@ -20,8 +20,9 @@ import com.lagradost.quicknovel.translator.batch.BatchStatus
         BatchJob::class,
         BatchChapter::class,
         NovelMetadataTranslation::class,
+        TermCandidate::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class TranslatorDatabase : RoomDatabase() {
@@ -33,11 +34,12 @@ abstract class TranslatorDatabase : RoomDatabase() {
     abstract fun spendDao(): SpendDao
     abstract fun batchDao(): BatchDao
     abstract fun novelMetadataDao(): NovelMetadataDao
+    abstract fun termCandidateDao(): TermCandidateDao
 
     /**
      * Removes everything stored for [novelId]: translated chapters, Story Bible terms, pending
-     * terms, novel context, chapter summaries and finished batch jobs. Every "delete this novel"
-     * path must use this so new per-novel tables cannot be forgotten.
+     * terms, term candidates, novel context, chapter summaries and finished batch jobs. Every
+     * "delete this novel" path must use this so new per-novel tables cannot be forgotten.
      *
      * Kept on purpose: the spend ledger (money already spent), batch jobs still running at
      * OpenAI (so their cost is recorded when they finish), and the translated title/synopsis
@@ -48,6 +50,7 @@ abstract class TranslatorDatabase : RoomDatabase() {
         translationDao().deleteAllForNovel(novelId)
         glossaryDao().deleteAllForNovel(novelId)
         pendingTermDao().deleteAll(novelId)
+        termCandidateDao().deleteAll(novelId)
         novelContextDao().deleteForNovel(novelId)
         chapterSummaryDao().deleteForNovel(novelId)
         val finished = BatchStatus.FINISHED_NAMES
@@ -217,11 +220,31 @@ abstract class TranslatorDatabase : RoomDatabase() {
             }
         }
 
+        /** SQL of [MIGRATION_9_10] (kept separate so a JVM unit test can check it). */
+        val MIGRATION_9_10_SQL = listOf(
+            "CREATE TABLE IF NOT EXISTS `term_candidates` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`novel_id` TEXT NOT NULL, `source` TEXT NOT NULL, `english` TEXT NOT NULL, `category` TEXT NOT NULL, " +
+                "`gender` TEXT NOT NULL, `notes` TEXT NOT NULL, `aliases` TEXT NOT NULL, `chapter_num` INTEGER NOT NULL, " +
+                "`confidence` REAL NOT NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_term_candidates_novel_id_source` ON `term_candidates` (`novel_id`, `source`)",
+        )
+
+        /**
+         * v10 (additive): term_candidates, the terms translation reported in one chapter only,
+         * held back from the glossary until they turn up in another chapter
+         * (docs/translation-pipeline.md "Terms found while translating").
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_9_10_SQL.forEach { db.execSQL(it) }
+            }
+        }
+
         /** Every migration, oldest first; all registered in [getInstance]. */
         val ALL_MIGRATIONS: Array<Migration>
             get() = arrayOf(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-                MIGRATION_7_8, MIGRATION_8_9,
+                MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
             )
 
         fun getInstance(context: Context): TranslatorDatabase {
