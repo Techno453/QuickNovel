@@ -124,6 +124,31 @@ class FollowEngineTest {
     }
 
     @Test
+    fun sweepFromALineThatEndedOnTimeIsNotCountedAgain() {
+        val r = Reader()
+        r.frame(0f, 0f, 1f, false)
+        // a 0.3 line ends on time (after 0.3 * 2000 * 1.6 ms) with the eyes at its end...
+        assertEquals(listOf(Event.NEXT_LINE), r.idle(1100, width = 0.3f))
+        assertEquals(FollowEngine.Cause.TIMEOUT, r.engine.lastCause)
+        // ...so their way back to the start of the next line is still that line's sweep
+        val events = (0 until 4).mapNotNull { r.frame(-0.15f, 0f, 1f, false) }
+        assertEquals(emptyList<Event>(), events)
+        assertEquals(listOf(Event.NEXT_LINE), r.line(1f, 2000))
+    }
+
+    @Test
+    fun lessSensitiveNeedsABiggerDrop() {
+        val normal = Reader()
+        normal.frame(0f, 0f, 1f, false)
+        // a 0.45 drop ends a full line at the start (0.40 needed)...
+        assertEquals(listOf(Event.NEXT_LINE), normal.swing(0.25f, 0.7f, 1500))
+        val less = Reader(FollowEngine().apply { dropScale = FollowEngine.SENSITIVITIES[0] })
+        less.frame(0f, 0f, 1f, false)
+        // ...but not at the less sensitive setting (0.50 needed)
+        assertEquals(emptyList<Event>(), less.swing(0.25f, 0.7f, 1500))
+    }
+
+    @Test
     fun settleCountsNothing() {
         val r = Reader()
         r.frame(0f, 0f, 1f, false)

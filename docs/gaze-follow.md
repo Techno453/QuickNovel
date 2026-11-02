@@ -21,10 +21,23 @@ release app from 3.9.5 (2026-11-01), still experimental.
     least 0.18; under 35% of the width (a short line of dialogue) it ends after the time it
     should take;
   - nothing counts in the first 1.5 s after starting (the eyes come back from the menu: the first
-    session counted two lines there) or 0.8 s after a jump.
+    session counted two lines there) or 0.8 s after a jump;
+  - a drop within 0.9 s of a line end (0.45 s on a short line) belongs to it and is used up, also
+    after a short line that ended on time. Before, it waited in the window and counted the moment
+    the interval ran out, and a short line that ended on time while still being read had its own
+    sweep end the next line too: in the longest session of 2026-11-01, 5 of 8 lines that ended on
+    time were followed by a counted sweep within 1 s, and 8 sweeps fired just as the interval ran
+    out. Replayed, that session counts 91 lines instead of 98; the marked trial is unchanged;
+  - **Sensitivity** (Follow menu) multiplies every drop needed: Less 1.25, Normal 1, More 0.85.
+    Replayed, Less counts 75 lines in that session (2.0 s a line, held in the hand) with the
+    marked trial still 14/14, but far fewer in the sessions with the phone on a table, where the
+    sweeps are small (6 instead of 15, 23 instead of 32).
 
   Replayed, the first session counts 22 line ends instead of 11; the gaze test's marked trial
-  still finds 14/14 with 1 or 2 extra.
+  still finds 14/14 with 1 or 2 extra. Tried and left out (2026-11-01): ending a line only when the
+  eyes had first moved right across it and the drop came back near its start. It removed a
+  further 15% in the hand-held session and one extra in the marked trial, but with the phone on a
+  table it lost most lines (15 to 6 in one session); without logs that mark the wrong counts it cannot be tuned.
 - **Scroll mode glides.** The line you are on rises to about a third of the way down the text
   area and stays there: the text moves up continuously by the share of the line you should have
   read by now (time on the line against your pace), so the next line arrives at that height as
@@ -59,7 +72,8 @@ release app from 3.9.5 (2026-11-01), still experimental.
    3 s), then calibrates the first time on this screen: look at the orange dot at the start of a
    line, then at its end (2 s each). Folded and unfolded, portrait and landscape each keep their
    own camera and calibration. **Recalibrate** in the same menu redoes it; **Switch camera**
-   picks the other front camera.
+   picks the other front camera; **Sensitivity** trades lines counted that you did not read
+   (Less) against lines missed (More).
 3. Read. The count starts at the first line on screen.
    - **Volume up** moves the counted line back one (a reread was counted).
    - **Volume down** moves it forward one (scroll mode) or turns the page (paged mode).
@@ -83,8 +97,18 @@ Each session writes `follow-*.csv` to the app's files (`Android/data/<package>/f
 **Share follow logs** in the Follow menu sends them. A row per frame while following (`t_ms`,
 `valid`, `iris_norm`, `iris_v_raw`, `openness`, the counted `line` of `lines` on screen, its
 `line_width`, `line_last`, the engine's `event` and its `cause`, SWEEP or TIMEOUT) and a row per
-`ANCHOR`, `BACK`, `FORWARD`, `MANUAL_TURN`, `MOVED`, `REST` and `PICKED_UP`. The header names
-the screen, camera, reading mode and calibration.
+`ANCHOR`, `BACK`, `FORWARD`, `MANUAL_TURN`, `MOVED`, `REST`, `PICKED_UP` and
+`SENSITIVITY_<scale>`. The header names the screen, camera, reading mode, calibration and
+`drop_scale`. Correcting the count with the volume keys while reading marks where it went wrong
+(`BACK`: a line counted too many, `FORWARD`: one missed), which is what tuning needs.
+
+`FollowReplayTest` (src/testGaze) replays a folder of these logs, and gaze-test trials with key
+presses, through `FollowEngine` and prints the lines counted and the signs of double counting;
+it skips unless given the folder:
+
+```
+./gradlew :app:testGazeUnitTest --tests '*FollowReplayTest*' -Dreplay=<dir> [-Dreplay.times=1]
+```
 
 ## Code
 

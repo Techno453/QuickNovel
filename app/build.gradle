@@ -245,14 +245,17 @@ dependencies {
     gazeImplementation 'androidx.camera:camera-view:1.6.2'
 }
 
-// Translation benchmark (app/src/test/.../bench/TranslationBench, docs/translation-bench.md) and
-// the live provider smoke test (providers/CjkProvidersLiveSmokeTest, docs/ci.md): forward
-// -Dbench / -Dbench.* / -Dlive / -Dlive.* to the test JVM, never treat such a run as up to date,
-// and show its console output. Without BENCH=1 / -Dbench=1 (LIVE=1 / -Dlive=1) those tests skip.
+// Translation benchmark (app/src/test/.../bench/TranslationBench, docs/translation-bench.md), the
+// live provider smoke test (providers/CjkProvidersLiveSmokeTest, docs/ci.md) and the follow log
+// replay (src/testGaze/.../gaze/FollowReplayTest, docs/gaze-follow.md): forward -Dbench / -Dlive /
+// -Dreplay (and their .* keys) to the test JVM, never treat such a run as up to date, and show
+// its console output. Without BENCH=1 / -Dbench=1 (LIVE=1 / -Dlive=1, -Dreplay=<dir>) those
+// tests skip.
 tasks.withType(Test).configureEach {
     System.properties.each { k, v ->
         def key = k.toString()
-        if (key == 'bench' || key.startsWith('bench.') || key == 'live' || key.startsWith('live.')) {
+        if (key == 'bench' || key.startsWith('bench.') || key == 'live' || key.startsWith('live.') ||
+                key == 'replay' || key.startsWith('replay.')) {
             systemProperty key, v.toString()
         }
     }
@@ -262,7 +265,8 @@ tasks.withType(Test).configureEach {
     if (System.getenv('LIVE_BATCH') != null) systemProperty 'live.batch', System.getenv('LIVE_BATCH')
     if (System.getProperty('bench') != null || System.getenv('BENCH') != null ||
             System.getProperty('live') != null || System.getenv('LIVE') != null ||
-            System.getProperty('live.batch') != null || System.getenv('LIVE_BATCH') != null) {
+            System.getProperty('live.batch') != null || System.getenv('LIVE_BATCH') != null ||
+            System.getProperty('replay') != null) {
         outputs.upToDateWhen { false }
         testLogging.showStandardStreams = true
     }

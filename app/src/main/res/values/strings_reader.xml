@@ -56,6 +56,10 @@
     <string name="follow_recalibrate">Recalibrate</string>
     <string name="follow_switch_camera">Switch camera</string>
     <string name="follow_share_logs">Share follow logs</string>
+    <string name="follow_sensitivity">Sensitivity</string>
+    <string name="follow_sensitivity_less">Less: fewer lines counted that you did not read</string>
+    <string name="follow_sensitivity_normal">Normal</string>
+    <string name="follow_sensitivity_more">More: fewer lines missed</string>
     <string name="follow_no_logs">No follow logs yet</string>
     <string name="follow_needs_camera">Following needs the camera</string>
     <string name="follow_looking">Looking for your face…</string>
