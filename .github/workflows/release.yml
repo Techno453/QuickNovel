@@ -119,6 +119,16 @@ jobs:
             fi
           } > notes.md
 
+      # Kept with the run too, so a release whose publish step fails (on 2026-11-02 the token got
+      # a 403 creating it) can be finished by hand: gh run download <run id> -n release-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: |
+            dist/
+            notes.md
+          retention-days: 7
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

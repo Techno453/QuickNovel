@@ -91,6 +91,11 @@ first (back up data in *Settings → App settings → Backup data*).
    A tag that does not match `v<versionName>` fails the workflow before building. The workflow
    can also be started by hand (*Actions → Release → Run workflow*, tag `v3.8.1`); the tag is then
    created on the chosen branch's head, and re-running for an existing release replaces its APK.
+5. If the publish step fails (on 2026-11-02 the workflow token got *HTTP 403: Resource not
+   accessible by integration* creating the release, with `contents: write` granted), the APKs,
+   mapping and notes are kept as the run's `release-dist` artifact for 7 days:
+   `gh run download <run id> -n release-dist`, then `gh release create v3.8.1 dist/*
+   --verify-tag --title "QuickNovel 3.8.1" --notes-file notes.md --latest` with your own login.
 
 **Version numbers must stay single-digit per part** (`3.8.9 → 3.9.0 → 4.0.0`): the in-app
 updater keeps upstream's check, which finds `\d.\d.\d` in the asset name and compares it with the
