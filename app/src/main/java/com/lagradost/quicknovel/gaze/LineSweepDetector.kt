@@ -6,7 +6,10 @@ package com.lagradost.quicknovel.gaze
  * ([GazeCalibration]). Pure, unit tested in LineSweepDetectorTest.
  *
  * A sweep is a drop of at least [minDrop] below the highest value of the last [windowMs], at most
- * one per [minIntervalMs]. A saccade is over within a frame or two; the window also bridges a
+ * one per [minIntervalMs]. A drop sooner than that after a line end belongs to it (a corrective
+ * jump, the end of a slow sweep, the sweep from a short line that ended on time) and is used up:
+ * kept in the window it would count the moment the interval ran out, a second line for one
+ * ([lineEnded] starts the interval for a line that ended without a sweep). A saccade is over within a frame or two; the window also bridges a
  * blink at the end of a line (the caller leaves blink frames out). Regressions inside a line are
  * shorter. Only the size and speed of the drop count, not where it starts or lands: the levels
  * drift between calibration and reading (by up to 0.4 in a trial on a phone), while the drop
@@ -59,6 +62,11 @@ class LineSweepDetector(
         descentSinceMs = null
     }
 
+    /** A line ended without a sweep (on time): drops within the interval from now belong to it. */
+    fun lineEnded(timeMs: Long) {
+        lastSweepMs = timeMs
+    }
+
     /**
      * One valid sample (face found, eyes open); returns the event it completes, if any. [drop] and
      * [intervalMs] replace [minDrop] and [minIntervalMs] for this sample: a short line ends in a
@@ -89,7 +97,11 @@ class LineSweepDetector(
         }
         var event: Event? = null
         if (windowValues.isNotEmpty()) {
-            if (windowValues.max() - v >= drop && since(lastSweepMs, timeMs, intervalMs)) {
+            if (windowValues.max() - v >= drop && !since(lastSweepMs, timeMs, intervalMs)) {
+                // too soon after the last line end: part of it
+                windowTimes.clear()
+                windowValues.clear()
+            } else if (windowValues.max() - v >= drop) {
                 event = Event.SWEEP
                 lastSweepMs = timeMs
                 lastPeak = windowValues.max()

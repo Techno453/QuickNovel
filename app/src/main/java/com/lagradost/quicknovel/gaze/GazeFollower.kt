@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
@@ -52,7 +53,7 @@ class GazeFollower(private val host: ReaderFollow.Host) : ReaderFollow {
     private val activity = host.activity
     private val handler = Handler(Looper.getMainLooper())
     private val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val engine = FollowEngine()
+    private val engine = FollowEngine().apply { dropScale = FollowEngine.SENSITIVITIES[sensitivity()] }
     private val overlay = FollowOverlay(activity)
     private val camera = FollowCamera(activity, ::onFrame)
     private val rest = RestDetector(activity, ::onRest)
@@ -153,12 +154,14 @@ class GazeFollower(private val host: ReaderFollow.Host) : ReaderFollow {
             menu.add(0, MENU_TOGGLE, 0, if (state == State.OFF) R.string.follow_start else R.string.follow_stop)
             menu.add(0, MENU_CALIBRATE, 1, R.string.follow_recalibrate)
             if (state != State.OFF && camera.count > 1) menu.add(0, MENU_CAMERA, 2, R.string.follow_switch_camera)
-            menu.add(0, MENU_SHARE, 3, R.string.follow_share_logs)
+            menu.add(0, MENU_SENSITIVITY, 3, R.string.follow_sensitivity)
+            menu.add(0, MENU_SHARE, 4, R.string.follow_share_logs)
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_TOGGLE -> if (state == State.OFF) begin(calibrate = false) else stop()
                     MENU_CALIBRATE -> begin(calibrate = true)
                     MENU_CAMERA -> switchCamera()
+                    MENU_SENSITIVITY -> chooseSensitivity()
                     MENU_SHARE -> shareLogs()
                 }
                 true
@@ -219,6 +222,27 @@ class GazeFollower(private val host: ReaderFollow.Host) : ReaderFollow {
     override fun onDestroy() {
         stop()
         camera.close()
+    }
+
+    /** 0 less, 1 normal, 2 more: an index into [FollowEngine.SENSITIVITIES]. */
+    private fun sensitivity() = prefs.getInt("sensitivity", 1).coerceIn(0, FollowEngine.SENSITIVITIES.lastIndex)
+
+    private fun chooseSensitivity() {
+        val names = arrayOf(
+            activity.getString(R.string.follow_sensitivity_less),
+            activity.getString(R.string.follow_sensitivity_normal),
+            activity.getString(R.string.follow_sensitivity_more),
+        )
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.follow_sensitivity)
+            .setSingleChoiceItems(names, sensitivity()) { dialog, which ->
+                prefs.edit { putInt("sensitivity", which) }
+                engine.dropScale = FollowEngine.SENSITIVITIES[which]
+                log?.event(SystemClock.uptimeMillis(), "SENSITIVITY_${engine.dropScale}")
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     // Starting and stopping
@@ -451,7 +475,8 @@ class GazeFollower(private val host: ReaderFollow.Host) : ReaderFollow {
             listOf(
                 "QuickNovel follow, ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}",
                 "screen=$screen camera=${camera.index} mode=${if (host.continuous) "scroll" else "pages"} " +
-                        "iris_left=${cal?.left} iris_right=${cal?.right} iris_snr=${cal?.snr} blink_below=${cal?.blinkBelow}",
+                        "iris_left=${cal?.left} iris_right=${cal?.right} iris_snr=${cal?.snr} blink_below=${cal?.blinkBelow} " +
+                        "drop_scale=${engine.dropScale}",
             )
         )
         // the eyes come back from the menu or the calibration dot first
@@ -611,6 +636,7 @@ class GazeFollower(private val host: ReaderFollow.Host) : ReaderFollow {
         const val MENU_CALIBRATE = 2
         const val MENU_CAMERA = 3
         const val MENU_SHARE = 4
+        const val MENU_SENSITIVITY = 5
 
         /** Without a face this long, the next front camera is tried. */
         const val FIND_MS = 3000L

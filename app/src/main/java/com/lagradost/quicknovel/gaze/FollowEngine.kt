@@ -19,6 +19,10 @@ import kotlin.math.sign
  *   shrinks with its width, down to [MIN_DROP]; under [SHORT_LINE] of the width the sweep is too
  *   small to see and the line ends after the time it should take. The first moments after a
  *   start or a jump ([startPage]'s settle time) count nothing: the eyes are finding the text.
+ *   A drop within the sweep interval after a line end belongs to it, also after a line that
+ *   ended on time ([LineSweepDetector.lineEnded]): a short line often ends on time while it is
+ *   still being read, and its own sweep then counted the next line too (5 of 8 such lines in a
+ *   session of 2026-11-01). [dropScale] is the reader's sensitivity setting.
  * - The sweep after the **last line on screen** turns the page (paged mode); if none comes, the
  *   page turns after [LAST_LINE_PACES] lines' time. Scroll mode glides the text instead
  *   ([GazeFollower]) and the counted line never reaches the bottom.
@@ -52,6 +56,9 @@ class FollowEngine {
 
     /** Valid time still to wait before counting, after [startPage]. */
     private var settleMs = 0L
+
+    /** Every drop needed is multiplied by this: above 1 less sensitive, below 1 more ([SENSITIVITIES]). */
+    var dropScale = 1f
 
     var paused = true
         private set
@@ -142,6 +149,7 @@ class FollowEngine {
             else -> false
         }
         if (!sweep && !timedOut) return null
+        if (!sweep) detector.lineEnded(timeMs)
         lastCause = if (sweep) Cause.SWEEP else Cause.TIMEOUT
         if (sweep && line.width >= FULL_LINE && lineMs in PACE_MIN_MS..PACE_MAX_MS) {
             paces.addLast(lineMs)
@@ -176,7 +184,7 @@ class FollowEngine {
         }
         val overdue = lineMs / maxOf(SHORT_LINE_MIN_MS.toFloat(), width * paceMs)
         val relax = if (overdue <= 1f) 1f else maxOf(OVERDUE_SHARE, 1f - (1f - OVERDUE_SHARE) * (overdue - 1f))
-        return (usual * minOf(1f, width * SHORT_LINE_SCALE) * relax).coerceAtLeast(MIN_DROP)
+        return (usual * minOf(1f, width * SHORT_LINE_SCALE) * relax).coerceAtLeast(MIN_DROP) * dropScale
     }
 
     /** Follows a full line's sweep down to its lowest point to learn its size. */
@@ -255,6 +263,9 @@ class FollowEngine {
 
         /** A short line needs its width times this, of the drop (full from 2/3 of the width). */
         const val SHORT_LINE_SCALE = 1.5f
+
+        /** [dropScale] for the sensitivity setting: less, normal, more. */
+        val SENSITIVITIES = floatArrayOf(1.25f, 1f, 0.85f)
 
         /** No drop needed is below this (about six times the frame noise at a calibration SNR of 30). */
         const val MIN_DROP = 0.18f

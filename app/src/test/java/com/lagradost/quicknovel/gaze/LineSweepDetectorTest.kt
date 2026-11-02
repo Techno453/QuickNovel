@@ -159,5 +159,27 @@ class LineSweepDetectorTest {
         assertEquals(0.8f, detector.lastPeak, 1e-5f)
     }
 
+    @Test
+    fun dropTooSoonAfterASweepIsUsedUp() {
+        // a sweep at 0.1 s, then a jump right and back within the 900 ms interval: kept in the
+        // 700 ms window it would count as soon as the interval ran out, with no new drop
+        val samples = listOf(0L to 1f, 33L to 1f, 66L to 1f, 99L to 0f, 132L to 0f) +
+                (1..15).map { i -> 132L + 33 * i to 0f } +
+                listOf(700L to 0.6f, 733L to 0.6f, 766L to 0.6f, 800L to 0f, 833L to 0f) +
+                (1..15).map { i -> 833L + 33 * i to 0f }
+        val detector = LineSweepDetector(windowMs = 700)
+        val found = samples.mapNotNull { (t, v) -> detector.add(t, v, drop = 0.4f) }
+        assertEquals(listOf(Event.SWEEP), found.filter { it == Event.SWEEP })
+    }
+
+    @Test
+    fun lineEndedOnTimeStartsTheInterval() {
+        val detector = LineSweepDetector()
+        detector.lineEnded(0L)
+        // the sweep of the line that ended on time, 0.3 s later
+        val samples = listOf(33L to 0.6f, 66L to 0.6f, 99L to 0.6f, 300L to 0f, 333L to 0f, 366L to 0f)
+        assertEquals(emptyList<Event>(), samples.mapNotNull { (t, v) -> detector.add(t, v, drop = 0.4f) })
+    }
+
     private fun <T> List<T>.repeatList(n: Int): List<T> = (1..n).flatMap { this }
 }
